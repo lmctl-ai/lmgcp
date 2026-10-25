@@ -29,6 +29,9 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let dr_kms = gcp.kms_list_keys("us-east1", "dr-ring");
   assert_close(float(pri_kms.len()), 3.0, 0.01);
   assert_close(float(dr_kms.len()), 1.0, 0.01);
+  assert_close(gcp.estimated_cost_usd(), 0.0, 0.00001);
+  let ok_ev = gcp.write_cost_evidence("25_multi_region_dr_readiness", "build/evidence/live-cost-25_multi_region_dr_readiness.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/25_multi_region_dr_readiness.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/25_multi_region_dr_readiness.dslb;
@@ -69,3 +72,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/25_multi_region_dr_readiness_d
 assert(rd.code == 0);
 copy_file("images/25_multi_region_dr_readiness.png", "docs/images/25_multi_region_dr_readiness.png");
 println("ok 25_multi_region_dr_readiness - wrote images/25_multi_region_dr_readiness.png");
+println(split(r.stdout, "\n")[0]);

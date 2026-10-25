@@ -27,5 +27,10 @@ printf '%s\n' "$v" > VERSION
 if [ -d cmd/lmgcp ]; then
   printf '%s\n' "$v" > cmd/lmgcp/VERSION
 fi
+for sf in schema/lmgcp.dsl.json cmd/lmgcp/schema.dsl.json; do
+  if [ -f "$sf" ]; then
+    sed -i.bak -E "s/\"version\": \"[^\"]+\"/\"version\": \"$v\"/" "$sf" && rm -f "$sf.bak"
+  fi
+done
 
 echo "stamped version $v (was $current)"

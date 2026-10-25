@@ -31,6 +31,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   check(ok_t);
   check(ok_d);
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("16_bigquery_dataset_partition_audit", "build/evidence/live-cost-16_bigquery_dataset_partition_audit.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/16_bigquery_dataset_partition_audit.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/16_bigquery_dataset_partition_audit.dslb;
@@ -66,3 +70,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/16_bigquery_dataset_partition_
 assert(rd.code == 0);
 copy_file("images/16_bigquery_dataset_partition_audit.png", "docs/images/16_bigquery_dataset_partition_audit.png");
 println("ok 16_bigquery_dataset_partition_audit - wrote images/16_bigquery_dataset_partition_audit.png");
+println(split(r.stdout, "\n")[0]);

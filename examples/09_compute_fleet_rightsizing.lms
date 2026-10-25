@@ -30,6 +30,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let deleted = gcp.compute_delete_instance("us-central1-a", "lmgcp-rightsize-probe");
   check(deleted);
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("09_compute_fleet_rightsizing", "build/evidence/live-cost-09_compute_fleet_rightsizing.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/09_compute_fleet_rightsizing.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/09_compute_fleet_rightsizing.dslb;
@@ -68,3 +72,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/09_compute_fleet_rightsizing_d
 assert(rd.code == 0);
 copy_file("images/09_compute_fleet_rightsizing.png", "docs/images/09_compute_fleet_rightsizing.png");
 println("ok 09_compute_fleet_rightsizing - wrote images/09_compute_fleet_rightsizing.png");
+println(split(r.stdout, "\n")[0]);

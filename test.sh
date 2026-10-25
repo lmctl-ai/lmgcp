@@ -153,9 +153,13 @@ shopt -s nullglob
 example_files=(examples/*.lms)
 [ "${#example_files[@]}" -ge 25 ] || fail "expected at least 25 examples, found ${#example_files[@]}"
 for f in "${example_files[@]}"; do
+  base="$(basename "$f" .lms)"
   out="$("$LMSCRIPT" "$f" 2>&1)" || { echo "$out" >&2; fail "$f failed"; }
   echo "$out" | grep -q "^ok " || { echo "$out" >&2; fail "$f printed no ok line"; }
-  ok "$f"
+  cost_line="$(echo "$out" | grep -E '^estimated cost: \$0\.(00|[0-9]{4})' || true)"
+  [ -n "$cost_line" ] || { echo "$out" >&2; fail "$f missing 'estimated cost: \$0.00xx' line"; }
+  [ -s "build/evidence/live-cost-${base}.json" ] || fail "$f did not write build/evidence/live-cost-${base}.json"
+  ok "$f ($cost_line)"
 done
 
 # 11. Verify gallery images in docs/images/ exist and have valid PNG magic bytes

@@ -44,7 +44,9 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
     + "Cloud SQL," + str(n_sql) + "\n"
     + "GKE Clusters," + str(n_gke) + "\n";
   file_write("build/examples/01_inventory.csv", csv);
-  print("project=" + proj + " mode=" + mode + " total_vms=" + str(n_vm));
+  assert_close(gcp.estimated_cost_usd(), 0.0, 0.00001);
+  let ok_ev = gcp.write_cost_evidence("01_project_inventory_overview", "build/evidence/live-cost-01_project_inventory_overview.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/01_project_inventory_overview.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/01_project_inventory_overview.dslb;
@@ -82,3 +84,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/01_project_inventory_overview_
 assert(rd.code == 0);
 copy_file("images/01_project_inventory_overview.png", "docs/images/01_project_inventory_overview.png");
 println("ok 01_project_inventory_overview - wrote images/01_project_inventory_overview.png");
+println(split(r.stdout, "\n")[0]);

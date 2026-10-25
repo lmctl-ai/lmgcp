@@ -27,6 +27,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   check(dr.immutable_tags());
   check(gcp.ar_delete_repository("us-central1", "lmgcp-containers"));
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("20_artifact_registry_supply_chain", "build/evidence/live-cost-20_artifact_registry_supply_chain.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/20_artifact_registry_supply_chain.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/20_artifact_registry_supply_chain.dslb;
@@ -66,3 +70,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/20_artifact_registry_supply_ch
 assert(rd.code == 0);
 copy_file("images/20_artifact_registry_supply_chain.png", "docs/images/20_artifact_registry_supply_chain.png");
 println("ok 20_artifact_registry_supply_chain - wrote images/20_artifact_registry_supply_chain.png");
+println(split(r.stdout, "\n")[0]);

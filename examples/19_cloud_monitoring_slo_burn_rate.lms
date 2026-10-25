@@ -24,6 +24,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
 
   check(gcp.monitoring_delete_alert_policy("lmgcp-slo-latency-alert"));
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("19_cloud_monitoring_slo_burn_rate", "build/evidence/live-cost-19_cloud_monitoring_slo_burn_rate.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/19_cloud_monitoring_slo_burn_rate.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/19_cloud_monitoring_slo_burn_rate.dslb;
@@ -77,3 +81,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/19_cloud_monitoring_slo_burn_r
 assert(rd.code == 0);
 copy_file("images/19_cloud_monitoring_slo_burn_rate.png", "docs/images/19_cloud_monitoring_slo_burn_rate.png");
 println("ok 19_cloud_monitoring_slo_burn_rate - wrote images/19_cloud_monitoring_slo_burn_rate.png");
+println(split(r.stdout, "\n")[0]);

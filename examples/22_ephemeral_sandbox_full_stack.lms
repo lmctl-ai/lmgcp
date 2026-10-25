@@ -22,6 +22,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let cleaned = gcp.cleanup_ledger();
   assert_close(float(cleaned), 7.0, 0.01);
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("22_ephemeral_sandbox_full_stack", "build/evidence/live-cost-22_ephemeral_sandbox_full_stack.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/22_ephemeral_sandbox_full_stack.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/22_ephemeral_sandbox_full_stack.dslb;
@@ -58,3 +62,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/22_ephemeral_sandbox_full_stac
 assert(rd.code == 0);
 copy_file("images/22_ephemeral_sandbox_full_stack.png", "docs/images/22_ephemeral_sandbox_full_stack.png");
 println("ok 22_ephemeral_sandbox_full_stack - wrote images/22_ephemeral_sandbox_full_stack.png");
+println(split(r.stdout, "\n")[0]);

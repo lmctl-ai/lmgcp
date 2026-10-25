@@ -27,6 +27,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let del_count = gcp.cleanup_ledger();
   assert_close(float(del_count), 1.0, 0.01);
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("04_gcs_bucket_lifecycle_ephemeral", "build/evidence/live-cost-04_gcs_bucket_lifecycle_ephemeral.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/04_gcs_bucket_lifecycle_ephemeral.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/04_gcs_bucket_lifecycle_ephemeral.dslb;
@@ -75,3 +79,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/04_gcs_bucket_lifecycle_epheme
 assert(rd.code == 0);
 copy_file("images/04_gcs_bucket_lifecycle_ephemeral.png", "docs/images/04_gcs_bucket_lifecycle_ephemeral.png");
 println("ok 04_gcs_bucket_lifecycle_ephemeral - wrote images/04_gcs_bucket_lifecycle_ephemeral.png");
+println(split(r.stdout, "\n")[0]);

@@ -26,6 +26,9 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   check(!c3.autopilot());
   check(!c3.private_nodes());
   check(!c3.binary_auth());
+  assert_close(gcp.estimated_cost_usd(), 0.0, 0.00001);
+  let ok_ev = gcp.write_cost_evidence("12_gke_cluster_hardening_matrix", "build/evidence/live-cost-12_gke_cluster_hardening_matrix.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/12_gke_cluster_hardening_matrix.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/12_gke_cluster_hardening_matrix.dslb;
@@ -69,3 +72,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/12_gke_cluster_hardening_matri
 assert(rd.code == 0);
 copy_file("images/12_gke_cluster_hardening_matrix.png", "docs/images/12_gke_cluster_hardening_matrix.png");
 println("ok 12_gke_cluster_hardening_matrix - wrote images/12_gke_cluster_hardening_matrix.png");
+println(split(r.stdout, "\n")[0]);

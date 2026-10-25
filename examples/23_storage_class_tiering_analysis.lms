@@ -23,6 +23,9 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   check(b4.storage_class() == "COLDLINE");
   check(!b5.uniform_access());
   assert_close(float(b5.lifecycle_delete_days()), 0.0, 0.01);
+  assert_close(gcp.estimated_cost_usd(), 0.0, 0.00001);
+  let ok_ev = gcp.write_cost_evidence("23_storage_class_tiering_analysis", "build/evidence/live-cost-23_storage_class_tiering_analysis.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/23_storage_class_tiering_analysis.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/23_storage_class_tiering_analysis.dslb;
@@ -58,3 +61,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/23_storage_class_tiering_analy
 assert(rd.code == 0);
 copy_file("images/23_storage_class_tiering_analysis.png", "docs/images/23_storage_class_tiering_analysis.png");
 println("ok 23_storage_class_tiering_analysis - wrote images/23_storage_class_tiering_analysis.png");
+println(split(r.stdout, "\n")[0]);

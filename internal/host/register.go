@@ -122,6 +122,31 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
+	if err := m("Gcp", "cost_cap_usd", nil, "float", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+		return lmcode.Float(self.(*Host).CostCapUSD()), nil
+	}); err != nil {
+		return err
+	}
+	if err := m("Gcp", "set_cost_cap_usd", []string{"float"}, "bool", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+		return lmcode.Bool(self.(*Host).SetCostCapUSD(a[0].Float)), nil
+	}); err != nil {
+		return err
+	}
+	if err := m("Gcp", "estimated_cost_usd", nil, "float", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+		return lmcode.Float(self.(*Host).EstimatedCostUSD()), nil
+	}); err != nil {
+		return err
+	}
+	if err := m("Gcp", "cost_report", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+		return lmcode.Str(self.(*Host).CostReport()), nil
+	}); err != nil {
+		return err
+	}
+	if err := m("Gcp", "write_cost_evidence", []string{"string", "string"}, "bool", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+		return lmcode.Bool(self.(*Host).WriteCostEvidence(a[0].Str, a[1].Str)), nil
+	}); err != nil {
+		return err
+	}
 	if err := m("Gcp", "cleanup_ledger", nil, "int", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(self.(*Host).CleanupLedger()), nil
 	}); err != nil {

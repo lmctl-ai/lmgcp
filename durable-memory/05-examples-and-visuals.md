@@ -27,4 +27,4 @@ All 26 self-executing `.lms` examples live in `examples/` and render PNGs to `im
 23. `23_storage_class_tiering_analysis.lms` — GCS storage class tiering (`STANDARD`, `NEARLINE`, `COLDLINE`, `ARCHIVE`) & CMEK.
 24. `24_serverless_event_driven_mesh.lms` — End-to-end serverless mesh (`GCS -> Pub/Sub -> Cloud Run -> BigQuery`).
 25. `25_multi_region_dr_readiness.lms` — Primary (`us-central1`) vs Recovery (`us-east1`) DR readiness scorecard.
-26. `26_safety_guardrails_verification.lms` — Verification suite testing all 7 binding Cloud Safety Guardrails.
+26. `26_safety_guardrails_verification.lms` — Verification suite testing all 8 binding Cloud Safety & Cost Guardrails.

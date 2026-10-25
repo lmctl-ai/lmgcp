@@ -22,6 +22,9 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let def_sa = gcp.iam_get_service_account("000000000000-compute@developer.gserviceaccount.com");
   check(def_sa.is_default_compute());
   assert_close(float(def_sa.key_max_age_days()), 310.0, 0.01);
+  assert_close(gcp.estimated_cost_usd(), 0.0, 0.00001);
+  let ok_ev = gcp.write_cost_evidence("10_iam_least_privilege_review", "build/evidence/live-cost-10_iam_least_privilege_review.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/10_iam_least_privilege_review.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/10_iam_least_privilege_review.dslb;
@@ -55,3 +58,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/10_iam_least_privilege_review_
 assert(rd.code == 0);
 copy_file("images/10_iam_least_privilege_review.png", "docs/images/10_iam_least_privilege_review.png");
 println("ok 10_iam_least_privilege_review - wrote images/10_iam_least_privilege_review.png");
+println(split(r.stdout, "\n")[0]);

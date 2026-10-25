@@ -28,6 +28,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let ok_del = gcp.sql_delete_instance("lmgcp-sql-demo");
   check(ok_del);
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("11_cloud_sql_ha_backup_posture", "build/evidence/live-cost-11_cloud_sql_ha_backup_posture.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/11_cloud_sql_ha_backup_posture.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/11_cloud_sql_ha_backup_posture.dslb;
@@ -73,3 +77,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/11_cloud_sql_ha_backup_posture
 assert(rd.code == 0);
 copy_file("images/11_cloud_sql_ha_backup_posture.png", "docs/images/11_cloud_sql_ha_backup_posture.png");
 println("ok 11_cloud_sql_ha_backup_posture - wrote images/11_cloud_sql_ha_backup_posture.png");
+println(split(r.stdout, "\n")[0]);

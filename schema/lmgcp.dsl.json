@@ -1101,6 +1101,18 @@
             "returns": "bool"
           }
         ],
+        "cost_cap_usd": [
+          {
+            "params": [],
+            "returns": "float"
+          }
+        ],
+        "cost_report": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
         "dns_add_record": [
           {
             "params": [
@@ -1168,6 +1180,12 @@
           {
             "params": [],
             "returns": "string"
+          }
+        ],
+        "estimated_cost_usd": [
+          {
+            "params": [],
+            "returns": "float"
           }
         ],
         "firestore_delete_doc": [
@@ -1769,6 +1787,14 @@
             "returns": "Gcp"
           }
         ],
+        "set_cost_cap_usd": [
+          {
+            "params": [
+              "float"
+            ],
+            "returns": "bool"
+          }
+        ],
         "set_project": [
           {
             "params": [
@@ -1965,6 +1991,15 @@
               "int"
             ],
             "returns": "StrList"
+          }
+        ],
+        "write_cost_evidence": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
           }
         ],
         "zone": [

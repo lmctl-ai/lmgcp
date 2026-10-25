@@ -3,7 +3,9 @@
 package safety
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"sync"
@@ -11,10 +13,12 @@ import (
 )
 
 const (
-	PrefixUnderscore = "lmgcp_"
-	PrefixHyphen     = "lmgcp-"
-	TestLabelKey     = "lmgcp_test"
-	CreatedAtKey     = "lmgcp_created_at"
+	PrefixUnderscore         = "lmgcp_"
+	PrefixHyphen             = "lmgcp-"
+	TestLabelKey             = "lmgcp_test"
+	CreatedAtKey             = "lmgcp_created_at"
+	DefaultExampleCostCapUSD = 0.05
+	HardRunCostCeilingUSD    = 0.25
 )
 
 var (
@@ -112,6 +116,104 @@ func ValidateSqlTier(tier string) error {
 	return nil
 }
 
+// PriceQuote describes the unit pricing and default test lifetime for a resource/operation kind.
+type PriceQuote struct {
+	UnitPriceUSD   float64
+	DefaultMinutes int64
+	EstimatedUSD   float64
+}
+
+// LookupPrice returns the price table entry for a given resource kind and subtype (us-central1 public list pricing).
+func LookupPrice(kind, subtype string) PriceQuote {
+	st := strings.TrimSpace(subtype)
+	if idx := strings.LastIndex(st, "/"); idx >= 0 {
+		st = st[idx+1:]
+	}
+	switch kind {
+	case "compute_instance":
+		switch st {
+		case "f1-micro":
+			return PriceQuote{UnitPriceUSD: 0.0076, DefaultMinutes: 5, EstimatedUSD: 0.0008}
+		case "e2-micro":
+			return PriceQuote{UnitPriceUSD: 0.0084, DefaultMinutes: 5, EstimatedUSD: 0.0009}
+		case "e2-small":
+			return PriceQuote{UnitPriceUSD: 0.0168, DefaultMinutes: 5, EstimatedUSD: 0.0016}
+		case "g1-small":
+			return PriceQuote{UnitPriceUSD: 0.0257, DefaultMinutes: 5, EstimatedUSD: 0.0023}
+		case "e2-medium":
+			return PriceQuote{UnitPriceUSD: 0.0335, DefaultMinutes: 5, EstimatedUSD: 0.0030}
+		case "n1-standard-1":
+			return PriceQuote{UnitPriceUSD: 0.0475, DefaultMinutes: 5, EstimatedUSD: 0.0042}
+		default:
+			return PriceQuote{UnitPriceUSD: 0.0084, DefaultMinutes: 5, EstimatedUSD: 0.0009}
+		}
+	case "sql_instance":
+		switch st {
+		case "db-f1-micro":
+			return PriceQuote{UnitPriceUSD: 0.0150, DefaultMinutes: 10, EstimatedUSD: 0.0027}
+		case "db-g1-small":
+			return PriceQuote{UnitPriceUSD: 0.0500, DefaultMinutes: 10, EstimatedUSD: 0.0085}
+		case "db-custom-1-3840":
+			return PriceQuote{UnitPriceUSD: 0.0620, DefaultMinutes: 10, EstimatedUSD: 0.0105}
+		default:
+			return PriceQuote{UnitPriceUSD: 0.0150, DefaultMinutes: 10, EstimatedUSD: 0.0027}
+		}
+	case "cloud_run":
+		return PriceQuote{UnitPriceUSD: 0.0002, DefaultMinutes: 2, EstimatedUSD: 0.0004}
+	case "bucket":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 2, EstimatedUSD: 0.0001}
+	case "storage_object":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 1, EstimatedUSD: 0.0001}
+	case "pubsub_topic":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 2, EstimatedUSD: 0.0001}
+	case "pubsub_sub":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 2, EstimatedUSD: 0.0001}
+	case "pubsub_msg":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 1, EstimatedUSD: 0.0001}
+	case "bq_dataset":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 2, EstimatedUSD: 0.0001}
+	case "bq_table":
+		return PriceQuote{UnitPriceUSD: 0.0002, DefaultMinutes: 2, EstimatedUSD: 0.0002}
+	case "firestore_doc":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 1, EstimatedUSD: 0.0001}
+	case "secret":
+		return PriceQuote{UnitPriceUSD: 0.0002, DefaultMinutes: 2, EstimatedUSD: 0.0002}
+	case "kms_key":
+		return PriceQuote{UnitPriceUSD: 0.0010, DefaultMinutes: 5, EstimatedUSD: 0.0010}
+	case "artifact_repo":
+		return PriceQuote{UnitPriceUSD: 0.0002, DefaultMinutes: 2, EstimatedUSD: 0.0002}
+	case "dns_zone":
+		return PriceQuote{UnitPriceUSD: 0.0007, DefaultMinutes: 5, EstimatedUSD: 0.0007}
+	case "dns_record":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 1, EstimatedUSD: 0.0001}
+	case "log_sink":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 2, EstimatedUSD: 0.0001}
+	case "log_entry":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 1, EstimatedUSD: 0.0001}
+	case "alert_policy":
+		return PriceQuote{UnitPriceUSD: 0.0002, DefaultMinutes: 2, EstimatedUSD: 0.0002}
+	case "vpc":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 2, EstimatedUSD: 0.0001}
+	case "subnet":
+		return PriceQuote{UnitPriceUSD: 0.0002, DefaultMinutes: 2, EstimatedUSD: 0.0002}
+	case "firewall":
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 2, EstimatedUSD: 0.0001}
+	default:
+		return PriceQuote{UnitPriceUSD: 0.0001, DefaultMinutes: 1, EstimatedUSD: 0.0001}
+	}
+}
+
+// CostItem records a billable resource or write operation in the run's cost ledger.
+type CostItem struct {
+	Kind         string  `json:"kind"`
+	Subtype      string  `json:"subtype,omitempty"`
+	Name         string  `json:"name"`
+	UnitPriceUSD float64 `json:"unit_price_usd"`
+	MinutesAlive int64   `json:"minutes_alive"`
+	Requests     int64   `json:"requests"`
+	CostUSD      float64 `json:"cost_usd"`
+}
+
 // LedgerEntry records a resource created during the current host run.
 type LedgerEntry struct {
 	Kind          string
@@ -125,23 +227,144 @@ func (e LedgerEntry) Key() string {
 	return fmt.Sprintf("%s:%s:%s", e.Kind, e.Location, e.Name)
 }
 
-// RunLedger tracks all resources created by the current run so only run-owned resources can be modified/deleted.
+// RunLedger tracks all resources created by the current run so only run-owned resources can be modified/deleted,
+// and enforces per-example ($0.05 default) and per-run ($0.25 hard ceiling) cost caps.
 type RunLedger struct {
-	mu      sync.Mutex
-	runID   string
-	entries []LedgerEntry
-	byKey   map[string]LedgerEntry
+	mu            sync.Mutex
+	runID         string
+	entries       []LedgerEntry
+	byKey         map[string]LedgerEntry
+	costCapUSD    float64
+	totalCostUSD  float64
+	totalRequests int64
+	costItems     []CostItem
 }
 
-// NewRunLedger creates a new RunLedger for a run ID.
+// NewRunLedger creates a new RunLedger for a run ID with the default $0.05 example cap.
 func NewRunLedger(runID string) *RunLedger {
 	if runID == "" {
 		runID = fmt.Sprintf("run-%d", time.Now().UnixNano()%1000000)
 	}
 	return &RunLedger{
-		runID: runID,
-		byKey: make(map[string]LedgerEntry),
+		runID:      runID,
+		byKey:      make(map[string]LedgerEntry),
+		costCapUSD: DefaultExampleCostCapUSD,
 	}
+}
+
+func round6(v float64) float64 {
+	return math.Round(v*1e6) / 1e6
+}
+
+// CostCapUSD returns the current run cost cap in USD.
+func (l *RunLedger) CostCapUSD() float64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.costCapUSD
+}
+
+// SetCostCapUSD sets the example cost cap in USD, enforcing the $0.25 hard ceiling.
+func (l *RunLedger) SetCostCapUSD(capUSD float64) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if capUSD <= 0 || capUSD > HardRunCostCeilingUSD {
+		return fmt.Errorf("safety policy violation: cost cap $%.4f must be in (0.00, $%.2f] (hard ceiling $%.2f)", capUSD, HardRunCostCeilingUSD, HardRunCostCeilingUSD)
+	}
+	l.costCapUSD = round6(capUSD)
+	return nil
+}
+
+// EstimatedCostUSD returns the cumulative estimated cost in USD for the current run.
+func (l *RunLedger) EstimatedCostUSD() float64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return round6(l.totalCostUSD)
+}
+
+// ChargeResource verifies that creating/mutating the resource will not exceed the run's cost cap
+// (default $0.05, hard ceiling $0.25) and records the cost item in the ledger.
+func (l *RunLedger) ChargeResource(kind, subtype, name string, requests int64) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	q := LookupPrice(kind, subtype)
+	if requests <= 0 {
+		requests = 1
+	}
+	nextTotal := round6(l.totalCostUSD + q.EstimatedUSD)
+	effectiveCap := l.costCapUSD
+	if effectiveCap > HardRunCostCeilingUSD {
+		effectiveCap = HardRunCostCeilingUSD
+	}
+	if nextTotal > effectiveCap+1e-9 {
+		return fmt.Errorf("safety policy violation: cost cap exceeded creating %s %q ($%.4f would bring run estimate to $%.4f, exceeding cap $%.4f; hard ceiling $%.2f)",
+			kind, name, q.EstimatedUSD, nextTotal, effectiveCap, HardRunCostCeilingUSD)
+	}
+	l.totalCostUSD = nextTotal
+	l.totalRequests += requests
+	l.costItems = append(l.costItems, CostItem{
+		Kind:         kind,
+		Subtype:      subtype,
+		Name:         name,
+		UnitPriceUSD: q.UnitPriceUSD,
+		MinutesAlive: q.DefaultMinutes,
+		Requests:     requests,
+		CostUSD:      q.EstimatedUSD,
+	})
+	return nil
+}
+
+// FormatCostReport returns the canonical cost estimate line required at the end of every example.
+func (l *RunLedger) FormatCostReport() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.costItems) == 0 || l.totalCostUSD == 0 {
+		return "estimated cost: $0.00 (read-only; resources=0, minutes_alive=0, requests=0)"
+	}
+	var maxMin int64
+	for _, item := range l.costItems {
+		if item.MinutesAlive > maxMin {
+			maxMin = item.MinutesAlive
+		}
+	}
+	capStr := fmt.Sprintf("$%.2f", l.costCapUSD)
+	if l.costCapUSD < 0.01 {
+		capStr = fmt.Sprintf("$%.4f", l.costCapUSD)
+	}
+	return fmt.Sprintf("estimated cost: $%.4f (resources=%d, minutes_alive=%d, requests=%d, cap=%s)",
+		l.totalCostUSD, len(l.costItems), maxMin, l.totalRequests, capStr)
+}
+
+// CostEvidenceJSON serializes the run's cost ledger and teardown state as JSON evidence.
+func (l *RunLedger) CostEvidenceJSON(exampleName string, liveMode bool) string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	mode := "fake-emulator (estimated from price table, not yet measured live)"
+	if liveMode {
+		mode = "adc-live"
+	}
+	formatted := "$0.00"
+	if l.totalCostUSD > 0 {
+		formatted = fmt.Sprintf("$%.4f", l.totalCostUSD)
+	}
+	items := l.costItems
+	if items == nil {
+		items = []CostItem{}
+	}
+	doc := map[string]any{
+		"example":                  exampleName,
+		"run_id":                   l.runID,
+		"mode":                     mode,
+		"region":                   "us-central1",
+		"estimated_cost_usd":       round6(l.totalCostUSD),
+		"estimated_cost_formatted": formatted,
+		"cost_cap_usd":             l.costCapUSD,
+		"hard_ceiling_usd":         HardRunCostCeilingUSD,
+		"leftover_count":           len(l.entries),
+		"total_requests":           l.totalRequests,
+		"items":                    items,
+	}
+	b, _ := json.MarshalIndent(doc, "", "  ")
+	return string(b) + "\n"
 }
 
 func (l *RunLedger) RunID() string {

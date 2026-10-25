@@ -36,6 +36,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let ok_dz = gcp.dns_delete_zone("lmgcp-dns-zone");
   check(ok_dz);
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("15_cloud_dns_zone_records", "build/evidence/live-cost-15_cloud_dns_zone_records.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/15_cloud_dns_zone_records.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/15_cloud_dns_zone_records.dslb;
@@ -78,3 +82,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/15_cloud_dns_zone_records_draw
 assert(rd.code == 0);
 copy_file("images/15_cloud_dns_zone_records.png", "docs/images/15_cloud_dns_zone_records.png");
 println("ok 15_cloud_dns_zone_records - wrote images/15_cloud_dns_zone_records.png");
+println(split(r.stdout, "\n")[0]);

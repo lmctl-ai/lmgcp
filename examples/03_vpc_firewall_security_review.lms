@@ -28,6 +28,9 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   assert_close(float(ssh_fw.risk_score()), 100.0, 0.01);
   let iap_fw = gcp.network_get_firewall("prod-allow-iap-ssh");
   assert_close(float(iap_fw.risk_score()), 10.0, 0.01);
+  assert_close(gcp.estimated_cost_usd(), 0.0, 0.00001);
+  let ok_ev = gcp.write_cost_evidence("03_vpc_firewall_security_review", "build/evidence/live-cost-03_vpc_firewall_security_review.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/03_vpc_firewall_security_review.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/03_vpc_firewall_security_review.dslb;
@@ -64,3 +67,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/03_vpc_firewall_security_revie
 assert(rd.code == 0);
 copy_file("images/03_vpc_firewall_security_review.png", "docs/images/03_vpc_firewall_security_review.png");
 println("ok 03_vpc_firewall_security_review - wrote images/03_vpc_firewall_security_review.png");
+println(split(r.stdout, "\n")[0]);

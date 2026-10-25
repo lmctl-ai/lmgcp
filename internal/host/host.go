@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -266,6 +267,48 @@ func (h *Host) LedgerEntries() []string {
 
 func (h *Host) LedgerOwns(kind, name string) bool {
 	return h.ledger.Owns(kind, name)
+}
+
+func (h *Host) CostCapUSD() float64 {
+	return h.ledger.CostCapUSD()
+}
+
+func (h *Host) SetCostCapUSD(capUSD float64) bool {
+	if err := h.ledger.SetCostCapUSD(capUSD); err != nil {
+		h.fail(err)
+		return false
+	}
+	h.clearErr()
+	return true
+}
+
+func (h *Host) EstimatedCostUSD() float64 {
+	return h.ledger.EstimatedCostUSD()
+}
+
+func (h *Host) CostReport() string {
+	return h.ledger.FormatCostReport()
+}
+
+func (h *Host) WriteCostEvidence(exampleName, path string) bool {
+	cleanPath := strings.TrimSpace(path)
+	if cleanPath == "" {
+		h.fail(fmt.Errorf("cost evidence path must not be empty"))
+		return false
+	}
+	if dir := filepath.Dir(cleanPath); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			h.fail(err)
+			return false
+		}
+	}
+	payload := h.ledger.CostEvidenceJSON(exampleName, h.liveMode)
+	if err := os.WriteFile(cleanPath, []byte(payload), 0o644); err != nil {
+		h.fail(err)
+		return false
+	}
+	h.clearErr()
+	return true
 }
 
 // CleanupLedger deletes all resources recorded in the current run's ledger in reverse order.
@@ -544,6 +587,10 @@ func (h *Host) ComputeCreateInstance(zone, name, machineType, imageFamily string
 		h.fail(err)
 		return &ComputeInstance{NameVal: name, ZoneVal: zone, StatusVal: "ERROR", LabelsVal: map[string]string{}}
 	}
+	if err := h.ledger.ChargeResource("compute_instance", machineType, name, 1); err != nil {
+		h.fail(err)
+		return &ComputeInstance{NameVal: name, ZoneVal: zone, StatusVal: "ERROR", LabelsVal: map[string]string{}}
+	}
 	labels := h.ledger.EnrichLabels(map[string]string{"image_family": imageFamily}, fakegcp.DefaultEpoch)
 	req := &compute.Instance{
 		Name:        name,
@@ -687,6 +734,10 @@ func (h *Host) NetworkCreateVPC(name string, autoSubnets bool) *VpcNetwork {
 		h.fail(err)
 		return &VpcNetwork{NameVal: name}
 	}
+	if err := h.ledger.ChargeResource("vpc", "global", name, 1); err != nil {
+		h.fail(err)
+		return &VpcNetwork{NameVal: name}
+	}
 	req := &compute.Network{
 		Name:                  name,
 		AutoCreateSubnetworks: autoSubnets,
@@ -759,6 +810,10 @@ func (h *Host) NetworkCreateSubnet(region, name, vpcName, cidr string, privGoogl
 		region = h.region
 	}
 	if err := safety.ValidateResourcePrefix("subnet", name); err != nil {
+		h.fail(err)
+		return &Subnet{NameVal: name, RegionVal: region}
+	}
+	if err := h.ledger.ChargeResource("subnet", region, name, 1); err != nil {
 		h.fail(err)
 		return &Subnet{NameVal: name, RegionVal: region}
 	}
@@ -857,6 +912,10 @@ func (h *Host) NetworkGetFirewall(name string) *FirewallRule {
 
 func (h *Host) NetworkCreateFirewall(name, vpcName, direction string, priority int64, proto, ports, srcCIDR string) *FirewallRule {
 	if err := safety.ValidateResourcePrefix("firewall", name); err != nil {
+		h.fail(err)
+		return &FirewallRule{NameVal: name}
+	}
+	if err := h.ledger.ChargeResource("firewall", direction, name, 1); err != nil {
 		h.fail(err)
 		return &FirewallRule{NameVal: name}
 	}
@@ -983,6 +1042,10 @@ func (h *Host) StorageCreateBucket(name, location, storageClass string) *Storage
 		h.fail(err)
 		return &StorageBucket{NameVal: name, LabelsVal: map[string]string{}}
 	}
+	if err := h.ledger.ChargeResource("bucket", storageClass, name, 1); err != nil {
+		h.fail(err)
+		return &StorageBucket{NameVal: name, LabelsVal: map[string]string{}}
+	}
 	labels := h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch)
 	req := &storage.Bucket{
 		Name:         name,
@@ -1092,6 +1155,10 @@ func (h *Host) StoragePutObject(bucket, objName, content, contentType string) bo
 		return false
 	}
 	if err := membudget.Charge(int64(len(content))); err != nil {
+		h.fail(err)
+		return false
+	}
+	if err := h.ledger.ChargeResource("storage_object", contentType, bucket+"/"+objName, 1); err != nil {
 		h.fail(err)
 		return false
 	}
@@ -1243,6 +1310,10 @@ func (h *Host) PubsubCreateTopic(name string) *PubsubTopic {
 		h.fail(err)
 		return &PubsubTopic{NameVal: name, LabelsVal: map[string]string{}}
 	}
+	if err := h.ledger.ChargeResource("pubsub_topic", "global", name, 1); err != nil {
+		h.fail(err)
+		return &PubsubTopic{NameVal: name, LabelsVal: map[string]string{}}
+	}
 	labels := h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch)
 	t, err := h.pubsubSvc.Projects.Topics.Create(fmt.Sprintf("projects/%s/topics/%s", h.projectID, name), &pubsub.Topic{
 		Labels:                   labels,
@@ -1345,6 +1416,10 @@ func (h *Host) PubsubCreateSubscription(name, topicName string, ackSec int64, dl
 		h.fail(err)
 		return &PubsubSubscription{NameVal: name}
 	}
+	if err := h.ledger.ChargeResource("pubsub_sub", "global", name, 1); err != nil {
+		h.fail(err)
+		return &PubsubSubscription{NameVal: name}
+	}
 	req := &pubsub.Subscription{
 		Topic:              fmt.Sprintf("projects/%s/topics/%s", h.projectID, topicName),
 		AckDeadlineSeconds: ackSec,
@@ -1368,6 +1443,10 @@ func (h *Host) PubsubCreateSubscription(name, topicName string, ackSec int64, dl
 
 func (h *Host) PubsubPublish(topicName, data string, attrs map[string]string) string {
 	if err := h.ledger.ValidateModifyOrDelete("pubsub_topic", topicName); err != nil {
+		h.fail(err)
+		return ""
+	}
+	if err := h.ledger.ChargeResource("pubsub_msg", "publish", topicName, 1); err != nil {
 		h.fail(err)
 		return ""
 	}
@@ -1523,6 +1602,10 @@ func (h *Host) RunDeployService(region, name, image string, cpuMilli, memMB, max
 	}
 	if cpuMilli > 4000 || memMB > 4096 || maxInstances > 25 {
 		h.fail(fmt.Errorf("safety policy violation: Cloud Run limits exceed sandbox cap (cpu<=4000m, mem<=4096Mi, max_instances<=25)"))
+		return &CloudRunService{NameVal: name, RegionVal: region, LabelsVal: map[string]string{}}
+	}
+	if err := h.ledger.ChargeResource("cloud_run", region, name, 1); err != nil {
+		h.fail(err)
 		return &CloudRunService{NameVal: name, RegionVal: region, LabelsVal: map[string]string{}}
 	}
 	parent := fmt.Sprintf("projects/%s/locations/%s", h.projectID, region)
@@ -1697,6 +1780,10 @@ func (h *Host) SQLCreateInstance(name, dbVer, tier, region string, ha bool) *Sql
 		h.fail(err)
 		return &SqlInstance{NameVal: name, LabelsVal: map[string]string{}}
 	}
+	if err := h.ledger.ChargeResource("sql_instance", tier, name, 1); err != nil {
+		h.fail(err)
+		return &SqlInstance{NameVal: name, LabelsVal: map[string]string{}}
+	}
 	avail := "ZONAL"
 	if ha {
 		avail = "REGIONAL"
@@ -1754,6 +1841,10 @@ func (h *Host) FirestoreListCollections() []string {
 
 func (h *Host) FirestorePutDoc(col, docID string, fields map[string]string) bool {
 	if err := safety.ValidateResourcePrefix("firestore_collection", col); err != nil {
+		h.fail(err)
+		return false
+	}
+	if err := h.ledger.ChargeResource("firestore_doc", col, docID, 1); err != nil {
 		h.fail(err)
 		return false
 	}
@@ -1838,6 +1929,10 @@ func (h *Host) BQCreateDataset(dsID, location string) *BqDataset {
 		h.fail(err)
 		return &BqDataset{DatasetIDVal: dsID, LabelsVal: map[string]string{}}
 	}
+	if err := h.ledger.ChargeResource("bq_dataset", location, dsID, 1); err != nil {
+		h.fail(err)
+		return &BqDataset{DatasetIDVal: dsID, LabelsVal: map[string]string{}}
+	}
 	req := &bigquery.Dataset{
 		DatasetReference:         &bigquery.DatasetReference{DatasetId: dsID, ProjectId: h.projectID},
 		Location:                 location,
@@ -1855,6 +1950,10 @@ func (h *Host) BQCreateDataset(dsID, location string) *BqDataset {
 
 func (h *Host) BQCreateTable(dsID, tblID, schemaSpec, partField string) *BqTable {
 	if err := safety.ValidateResourcePrefix("bq_dataset", dsID); err != nil {
+		h.fail(err)
+		return &BqTable{DatasetIDVal: dsID, TableIDVal: tblID}
+	}
+	if err := h.ledger.ChargeResource("bq_table", partField, dsID+"/"+tblID, 1); err != nil {
 		h.fail(err)
 		return &BqTable{DatasetIDVal: dsID, TableIDVal: tblID}
 	}
@@ -2040,6 +2139,10 @@ func (h *Host) SecretsCreateMetadata(name, replPolicy string, rotDays int64, lab
 		h.fail(err)
 		return &SecretMetadata{NameVal: name, LabelsVal: map[string]string{}}
 	}
+	if err := h.ledger.ChargeResource("secret", replPolicy, name, 1); err != nil {
+		h.fail(err)
+		return &SecretMetadata{NameVal: name, LabelsVal: map[string]string{}}
+	}
 	enriched := h.ledger.EnrichLabels(labels, fakegcp.DefaultEpoch)
 	req := &secretmanager.Secret{
 		Labels:      enriched,
@@ -2146,6 +2249,10 @@ func (h *Host) KMSCreateKey(location, keyring, keyName, purpose string, rotDays 
 		location = h.region
 	}
 	if err := safety.ValidateResourcePrefix("kms_key", keyName); err != nil {
+		h.fail(err)
+		return &KmsKey{NameVal: keyName, KeyRingVal: keyring, LocationVal: location}
+	}
+	if err := h.ledger.ChargeResource("kms_key", purpose, keyName, 1); err != nil {
 		h.fail(err)
 		return &KmsKey{NameVal: keyName, KeyRingVal: keyring, LocationVal: location}
 	}
@@ -2284,6 +2391,10 @@ func (h *Host) ARCreateRepository(location, name, format string, immutableTags b
 		h.fail(err)
 		return &ArtifactRepo{NameVal: name, LocationVal: location}
 	}
+	if err := h.ledger.ChargeResource("artifact_repo", format, name, 1); err != nil {
+		h.fail(err)
+		return &ArtifactRepo{NameVal: name, LocationVal: location}
+	}
 	parent := fmt.Sprintf("projects/%s/locations/%s", h.projectID, location)
 	req := &artifactregistry.Repository{
 		Format: strings.ToUpper(format),
@@ -2366,6 +2477,10 @@ func (h *Host) DNSCreateZone(name, dnsName, visibility string, dnssec bool) *Dns
 		h.fail(err)
 		return &DnsZone{NameVal: name}
 	}
+	if err := h.ledger.ChargeResource("dns_zone", visibility, name, 1); err != nil {
+		h.fail(err)
+		return &DnsZone{NameVal: name}
+	}
 	state := "off"
 	if dnssec {
 		state = "on"
@@ -2403,6 +2518,10 @@ func (h *Host) DNSListRecords(zoneName string) []string {
 
 func (h *Host) DNSAddRecord(zoneName, fqdn, recType string, ttl int64, rrdata string) bool {
 	if err := h.ledger.ValidateModifyOrDelete("dns_zone", zoneName); err != nil {
+		h.fail(err)
+		return false
+	}
+	if err := h.ledger.ChargeResource("dns_record", recType, zoneName+"/"+fqdn, 1); err != nil {
 		h.fail(err)
 		return false
 	}
@@ -2484,6 +2603,10 @@ func (h *Host) LoggingCreateSink(name, destination, filter string) *LogSink {
 		h.fail(err)
 		return &LogSink{NameVal: name}
 	}
+	if err := h.ledger.ChargeResource("log_sink", "global", name, 1); err != nil {
+		h.fail(err)
+		return &LogSink{NameVal: name}
+	}
 	req := &logging.LogSink{
 		Name:        name,
 		Destination: destination,
@@ -2514,6 +2637,10 @@ func (h *Host) LoggingDeleteSink(name string) bool {
 
 func (h *Host) LoggingWriteEntry(logName, severity, message string, labels map[string]string) bool {
 	if err := safety.ValidateResourcePrefix("log_stream", logName); err != nil {
+		h.fail(err)
+		return false
+	}
+	if err := h.ledger.ChargeResource("log_entry", severity, logName, 1); err != nil {
 		h.fail(err)
 		return false
 	}
@@ -2603,6 +2730,10 @@ func (h *Host) MonitoringGetAlertPolicy(name string) *AlertPolicy {
 
 func (h *Host) MonitoringCreateAlertPolicy(name, metricType string, threshold float64, durSec int64) *AlertPolicy {
 	if err := safety.ValidateResourcePrefix("alert_policy", name); err != nil {
+		h.fail(err)
+		return &AlertPolicy{NameVal: name}
+	}
+	if err := h.ledger.ChargeResource("alert_policy", metricType, name, 1); err != nil {
 		h.fail(err)
 		return &AlertPolicy{NameVal: name}
 	}

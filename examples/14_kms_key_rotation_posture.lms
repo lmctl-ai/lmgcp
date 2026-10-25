@@ -24,6 +24,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let ek = gcp.kms_create_key("us-central1", "prod-ring", "lmgcp-ephemeral-cmek", "ENCRYPT_DECRYPT", 30);
   assert_close(float(ek.rotation_days()), 30.0, 0.01);
   gcp.cleanup_ledger();
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("14_kms_key_rotation_posture", "build/evidence/live-cost-14_kms_key_rotation_posture.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/14_kms_key_rotation_posture.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/14_kms_key_rotation_posture.dslb;
@@ -63,3 +67,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/14_kms_key_rotation_posture_dr
 assert(rd.code == 0);
 copy_file("images/14_kms_key_rotation_posture.png", "docs/images/14_kms_key_rotation_posture.png");
 println("ok 14_kms_key_rotation_posture - wrote images/14_kms_key_rotation_posture.png");
+println(split(r.stdout, "\n")[0]);

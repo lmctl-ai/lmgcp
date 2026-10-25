@@ -27,6 +27,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   check(gcp.firestore_delete_doc("lmgcp_sessions", "lmgcp-sess-101"));
   check(gcp.firestore_delete_doc("lmgcp_sessions", "lmgcp-sess-102"));
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("17_firestore_document_workflow", "build/evidence/live-cost-17_firestore_document_workflow.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/17_firestore_document_workflow.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/17_firestore_document_workflow.dslb;
@@ -74,3 +78,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/17_firestore_document_workflow
 assert(rd.code == 0);
 copy_file("images/17_firestore_document_workflow.png", "docs/images/17_firestore_document_workflow.png");
 println("ok 17_firestore_document_workflow - wrote images/17_firestore_document_workflow.png");
+println(split(r.stdout, "\n")[0]);

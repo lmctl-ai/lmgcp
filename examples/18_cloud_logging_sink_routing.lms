@@ -29,6 +29,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
 
   check(gcp.logging_delete_sink("lmgcp-siem-sink"));
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("18_cloud_logging_sink_routing", "build/evidence/live-cost-18_cloud_logging_sink_routing.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/18_cloud_logging_sink_routing.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/18_cloud_logging_sink_routing.dslb;
@@ -78,3 +82,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/18_cloud_logging_sink_routing_
 assert(rd.code == 0);
 copy_file("images/18_cloud_logging_sink_routing.png", "docs/images/18_cloud_logging_sink_routing.png");
 println("ok 18_cloud_logging_sink_routing - wrote images/18_cloud_logging_sink_routing.png");
+println(split(r.stdout, "\n")[0]);

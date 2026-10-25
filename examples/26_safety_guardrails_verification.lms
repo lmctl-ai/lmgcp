@@ -1,7 +1,7 @@
-# Comprehensive end-to-end verification of all 7 binding Cloud Safety Guardrails:
+# Comprehensive end-to-end verification of all 8 binding Cloud Safety & Cost Guardrails:
 # (1) Fake-by-default endpoint gate, (2) Secret redaction, (3) Project ID masking,
 # (4) Mandatory lmgcp- prefix, (5) GPU/large VM shape rejection, (6) Large SQL tier rejection,
-# and (7) RunLedger ownership enforcement protecting baseline resources.
+# (7) RunLedger ownership enforcement, and (8) Per-example cost cap ($0.05 default / $0.25 ceiling).
 mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
@@ -37,39 +37,51 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let del_safe = gcp.compute_delete_instance("us-central1-a", "lmgcp-safe-vm");
   check(del_safe);
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+
+  assert_close(gcp.cost_cap_usd(), 0.05, 0.0001);
+  check(gcp.set_cost_cap_usd(0.0020));
+  let overcap_sql = gcp.sql_create_instance("lmgcp-overcap-sql", "POSTGRES_15", "db-custom-1-3840", "us-central1", false);
+  check(overcap_sql.state() == "");
+  check(str_contains(gcp.last_error(), "cost cap exceeded"));
+  check(gcp.estimated_cost_usd() > 0.0);
+  check(gcp.estimated_cost_usd() <= gcp.cost_cap_usd());
+  check(gcp.write_cost_evidence("26_safety_guardrails_verification", "build/evidence/live-cost-26_safety_guardrails_verification.json"));
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/26_safety_guardrails_verification.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/26_safety_guardrails_verification.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
-  scene.canvas(960, 560, "#0d1117");
-  scene.text(480.0, 34.0, 20.0, "Cloud Safety Guardrails Verification Suite (7 / 7 Binding Rules)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-  scene.text(480.0, 56.0, 12.5, "Every mutating call passes pre-flight prefix, cost/shape, and RunLedger ownership checks before execution", "#8b949e").set_attr("text-anchor", "middle");
+  scene.canvas(960, 600, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud Safety & Cost Guardrails Verification Suite (8 / 8 Binding Rules)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Every mutating call passes pre-flight prefix, shape, cost-cap, and RunLedger ownership checks before execution", "#8b949e").set_attr("text-anchor", "middle");
 
-  scene.rect(40.0, 78.0, 880.0, 450.0, "#161b22").set_attr("stroke", "#30363d");
+  scene.rect(40.0, 76.0, 880.0, 500.0, "#161b22").set_attr("stroke", "#30363d");
 
   fn rule_row(y: float, rule: string, test_case: string, result: string) -> void {
-    scene.rect(58.0, y, 844.0, 52.0, "#0d1117").set_attr("stroke", "#30363d");
-    scene.rect(58.0, y, 8.0, 52.0, "#3fb950");
-    scene.text(78.0, y + 22.0, 13.5, rule, "#e6edf3").set_attr("font-weight", "700");
-    scene.text(78.0, y + 42.0, 11.5, test_case, "#8b949e");
-    scene.rect(745.0, y + 10.0, 140.0, 32.0, "#161b22").set_attr("stroke", "#3fb950");
-    scene.text(815.0, y + 31.0, 12.0, result, "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+    scene.rect(58.0, y, 844.0, 50.0, "#0d1117").set_attr("stroke", "#30363d");
+    scene.rect(58.0, y, 8.0, 50.0, "#3fb950");
+    scene.text(78.0, y + 21.0, 13.0, rule, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(78.0, y + 40.0, 11.5, test_case, "#8b949e");
+    scene.rect(745.0, y + 9.0, 140.0, 32.0, "#161b22").set_attr("stroke", "#3fb950");
+    scene.text(815.0, y + 30.0, 12.0, result, "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
   }
 
-  rule_row(92.0,  "1. Default Fake Endpoint Gate",        "gcp.is_live() == false unless LMGCP_LIVE=1 is explicitly set",               "VERIFIED");
-  rule_row(152.0, "2. Automatic Secret Redaction",        "Bearer ya29.*, AIza*, PEM keys & DB passwords -> [REDACTED]",                "VERIFIED");
-  rule_row(212.0, "3. Project & Account ID Masking",      "gcp.masked_project() -> gcp-proj-****8f2a in all outputs & visuals",         "VERIFIED");
-  rule_row(272.0, "4. Mandatory lmgcp- Prefix Guardrail", "compute_create_instance('prod-unprefixed-vm') -> status == BLOCKED",         "VERIFIED");
-  rule_row(332.0, "5. Compute GPU & Large Shape Block",   "compute_create_instance('lmgcp-gpu-vm', 'a2-highgpu-1g') -> BLOCKED",        "VERIFIED");
-  rule_row(392.0, "6. Cloud SQL Tier Cost Guardrail",     "sql_create_instance('lmgcp-big-sql', 'db-n1-highmem-32') -> BLOCKED",        "VERIFIED");
-  rule_row(452.0, "7. RunLedger Ownership Enforcement",   "delete('prod-api-gw-01') -> BLOCKED; delete('lmgcp-safe-vm') -> OK",         "VERIFIED");
+  rule_row(88.0,  "1. Default Fake Endpoint Gate",        "gcp.is_live() == false unless LMGCP_LIVE=1 is explicitly set",               "VERIFIED");
+  rule_row(148.0, "2. Automatic Secret Redaction",        "Bearer ya29.*, AIza*, PEM keys & DB passwords -> [REDACTED]",                "VERIFIED");
+  rule_row(208.0, "3. Project & Account ID Masking",      "gcp.masked_project() -> gcp-proj-****8f2a in all outputs & visuals",         "VERIFIED");
+  rule_row(268.0, "4. Mandatory lmgcp- Prefix Guardrail", "compute_create_instance('prod-unprefixed-vm') -> status == BLOCKED",         "VERIFIED");
+  rule_row(328.0, "5. Compute GPU & Large Shape Block",   "compute_create_instance('lmgcp-gpu-vm', 'a2-highgpu-1g') -> BLOCKED",        "VERIFIED");
+  rule_row(388.0, "6. Cloud SQL Tier Cost Guardrail",     "sql_create_instance('lmgcp-big-sql', 'db-n1-highmem-32') -> BLOCKED",        "VERIFIED");
+  rule_row(448.0, "7. RunLedger Ownership Enforcement",   "delete('prod-api-gw-01') -> BLOCKED; delete('lmgcp-safe-vm') -> OK",         "VERIFIED");
+  rule_row(508.0, "8. Per-Example Cost Cap ($0.05/$0.25)","set_cost_cap_usd(0.0020) -> next resource past cap refused before create",   "VERIFIED");
 
-  scene.render_png("images/26_safety_guardrails_verification.png", 960, 560, 1);
+  scene.render_png("images/26_safety_guardrails_verification.png", 960, 600, 1);
 end _dsl_
 savedsl(draw, "build/examples/26_safety_guardrails_verification_draw.dslb");
 rd = system ${dsl_cli(draw)} --dsl build/examples/26_safety_guardrails_verification_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/26_safety_guardrails_verification.png", "docs/images/26_safety_guardrails_verification.png");
 println("ok 26_safety_guardrails_verification - wrote images/26_safety_guardrails_verification.png");
+println(split(r.stdout, "\n")[0]);

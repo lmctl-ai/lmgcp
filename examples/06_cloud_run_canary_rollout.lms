@@ -24,6 +24,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
 
   let del = gcp.cleanup_ledger();
   assert_close(float(del), 1.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("06_cloud_run_canary_rollout", "build/evidence/live-cost-06_cloud_run_canary_rollout.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/06_cloud_run_canary_rollout.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/06_cloud_run_canary_rollout.dslb;
@@ -64,3 +68,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/06_cloud_run_canary_rollout_dr
 assert(rd.code == 0);
 copy_file("images/06_cloud_run_canary_rollout.png", "docs/images/06_cloud_run_canary_rollout.png");
 println("ok 06_cloud_run_canary_rollout - wrote images/06_cloud_run_canary_rollout.png");
+println(split(r.stdout, "\n")[0]);

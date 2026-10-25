@@ -30,6 +30,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   check(gcp.network_delete_subnet("us-central1", "lmgcp-subnet-sandbox"));
   check(gcp.network_delete_vpc("lmgcp-vpc-sandbox"));
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("21_vpc_subnet_cidr_utilization", "build/evidence/live-cost-21_vpc_subnet_cidr_utilization.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/21_vpc_subnet_cidr_utilization.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/21_vpc_subnet_cidr_utilization.dslb;
@@ -69,3 +73,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/21_vpc_subnet_cidr_utilization
 assert(rd.code == 0);
 copy_file("images/21_vpc_subnet_cidr_utilization.png", "docs/images/21_vpc_subnet_cidr_utilization.png");
 println("ok 21_vpc_subnet_cidr_utilization - wrote images/21_vpc_subnet_cidr_utilization.png");
+println(split(r.stdout, "\n")[0]);

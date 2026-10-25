@@ -139,4 +139,25 @@ func TestHostEndToEndFakeServicesAndSafety(t *testing.T) {
 	if deleted < 5 || h.LedgerCount() != 0 {
 		t.Fatalf("expected CleanupLedger to delete >=5 resources and leave 0 in ledger, deleted=%d remaining=%d", deleted, h.LedgerCount())
 	}
+
+	// 4. Verify cost ledger retains cumulative run cost after cleanup and enforces per-example cost cap
+	if h.EstimatedCostUSD() <= 0 || h.EstimatedCostUSD() > h.CostCapUSD() {
+		t.Fatalf("expected positive estimated cost within cap, got cost=%f cap=%f", h.EstimatedCostUSD(), h.CostCapUSD())
+	}
+	report := h.CostReport()
+	if !strings.HasPrefix(report, "estimated cost: $0.00") {
+		t.Fatalf("expected cost report prefix 'estimated cost: $0.00', got %q", report)
+	}
+	evPath := filepath.Join(t.TempDir(), "live-cost-test.json")
+	if !h.WriteCostEvidence("host_test", evPath) {
+		t.Fatalf("WriteCostEvidence failed: %s", h.LastError())
+	}
+	// Tighten cap just above current estimated cost so the next SQL instance is refused
+	if !h.SetCostCapUSD(h.EstimatedCostUSD() + 0.0005) {
+		t.Fatalf("SetCostCapUSD failed: %s", h.LastError())
+	}
+	sqlInst := h.SQLCreateInstance("lmgcp-overcap-db", "POSTGRES_15", "db-custom-1-3840", "us-central1", false)
+	if sqlInst.StateVal != "" || !strings.Contains(h.LastError(), "cost cap exceeded") {
+		t.Fatalf("expected SQLCreateInstance past cost cap to be refused, got state=%q err=%q", sqlInst.StateVal, h.LastError())
+	}
 }

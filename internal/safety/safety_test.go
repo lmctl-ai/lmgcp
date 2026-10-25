@@ -106,3 +106,29 @@ func TestRunLedgerOwnership(t *testing.T) {
 		t.Fatal("expected removed bucket to no longer be owned")
 	}
 }
+
+func TestCostLedgerCapAndReport(t *testing.T) {
+	ledger := NewRunLedger("cost-run-01")
+	if got := ledger.FormatCostReport(); !strings.HasPrefix(got, "estimated cost: $0.00") {
+		t.Fatalf("read-only FormatCostReport = %q, want prefix 'estimated cost: $0.00'", got)
+	}
+	if err := ledger.SetCostCapUSD(0.30); err == nil {
+		t.Fatal("expected cost cap > $0.25 hard ceiling to be rejected")
+	}
+	if err := ledger.SetCostCapUSD(0.0020); err != nil {
+		t.Fatalf("expected $0.0020 cap to be accepted: %v", err)
+	}
+	if err := ledger.ChargeResource("compute_instance", "e2-micro", "lmgcp-vm-1", 1); err != nil {
+		t.Fatalf("expected first e2-micro ($0.0009) to fit within $0.0020 cap: %v", err)
+	}
+	if err := ledger.ChargeResource("compute_instance", "e2-micro", "lmgcp-vm-2", 1); err != nil {
+		t.Fatalf("expected second e2-micro ($0.0018 total) to fit within $0.0020 cap: %v", err)
+	}
+	if err := ledger.ChargeResource("compute_instance", "e2-micro", "lmgcp-vm-3", 1); err == nil {
+		t.Fatal("expected third e2-micro ($0.0027 total) to be rejected past $0.0020 cap")
+	}
+	rep := ledger.FormatCostReport()
+	if !strings.HasPrefix(rep, "estimated cost: $0.0018") {
+		t.Fatalf("FormatCostReport = %q, want prefix 'estimated cost: $0.0018'", rep)
+	}
+}

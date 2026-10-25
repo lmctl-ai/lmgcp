@@ -31,6 +31,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let cleaned = gcp.cleanup_ledger();
   assert_close(float(cleaned), 6.0, 0.01);
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("24_serverless_event_driven_mesh", "build/evidence/live-cost-24_serverless_event_driven_mesh.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/24_serverless_event_driven_mesh.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/24_serverless_event_driven_mesh.dslb;
@@ -73,3 +77,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/24_serverless_event_driven_mes
 assert(rd.code == 0);
 copy_file("images/24_serverless_event_driven_mesh.png", "docs/images/24_serverless_event_driven_mesh.png");
 println("ok 24_serverless_event_driven_mesh - wrote images/24_serverless_event_driven_mesh.png");
+println(split(r.stdout, "\n")[0]);

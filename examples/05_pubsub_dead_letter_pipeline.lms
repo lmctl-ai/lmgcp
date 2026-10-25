@@ -28,6 +28,10 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let cleaned = gcp.cleanup_ledger();
   assert_close(float(cleaned), 3.0, 0.01);
   assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("05_pubsub_dead_letter_pipeline", "build/evidence/live-cost-05_pubsub_dead_letter_pipeline.json");
+  print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/05_pubsub_dead_letter_pipeline.dslb");
 r = system ${dsl_cli(p)} --dsl build/examples/05_pubsub_dead_letter_pipeline.dslb;
@@ -72,3 +76,4 @@ rd = system ${dsl_cli(draw)} --dsl build/examples/05_pubsub_dead_letter_pipeline
 assert(rd.code == 0);
 copy_file("images/05_pubsub_dead_letter_pipeline.png", "docs/images/05_pubsub_dead_letter_pipeline.png");
 println("ok 05_pubsub_dead_letter_pipeline - wrote images/05_pubsub_dead_letter_pipeline.png");
+println(split(r.stdout, "\n")[0]);
