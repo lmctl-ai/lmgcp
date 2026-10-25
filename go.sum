@@ -29,6 +29,8 @@ github.com/googleapis/gax-go/v2 v2.24.0 h1:myMaPYyF9MecEmvQqMqomIwn9t/4KCZN9qnws
 github.com/googleapis/gax-go/v2 v2.24.0/go.mod h1:IaTHBDd7NHxSCiu0vEs8pQZu4dGZrWwuSoxCnk16OFM=
 github.com/lmctl-ai/lmcode-go v0.0.0-20261025001854-f26401cb4844 h1:414aYFTuZjmX08bvP7mED9ely9mbnwosCkeqWS2S6ac=
 github.com/lmctl-ai/lmcode-go v0.0.0-20261025001854-f26401cb4844/go.mod h1:Wfm1dj/9Uek4C4Y6LOkL5kFNRojgFUej7DDRGStSfVc=
+github.com/lmctl-ai/lmcode-go v0.0.0-20261025030137-9b9a03559f50 h1:Qi0QjI3vHeb7yXJBer5uKnXeaEWXDk3Yk6tV4mbDHGc=
+github.com/lmctl-ai/lmcode-go v0.0.0-20261025030137-9b9a03559f50/go.mod h1:Wfm1dj/9Uek4C4Y6LOkL5kFNRojgFUej7DDRGStSfVc=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=

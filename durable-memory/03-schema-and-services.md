@@ -13,3 +13,5 @@
 7. **Cloud SQL, Firestore & BigQuery (`sql_*`, `firestore_*`, `bq_*`)**: Full inspection and guarded ephemeral CRUD.
 8. **IAM, Secret Manager Metadata & KMS (`iam_*`, `secrets_*`, `kms_*`)**: Least-privilege auditing, metadata-only secret inspection, and KMS key rotation checks.
 9. **GKE, Artifact Registry, Cloud DNS, Logging & Monitoring (`gke_*`, `ar_*`, `dns_*`, `logging_*`, `monitoring_*`)**: Cluster hardening checks, container supply-chain verification, split-horizon DNS, log sink routing, and metric time-series queries.
+
+Compiler >=0.2.420 resolves the SDK standard implicitly; schema generation uses `--dsl-signatures --without-std`, embeds host-only bytes, and tests retain full plus host-only registry parity.

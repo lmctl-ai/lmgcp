@@ -23,7 +23,7 @@ def parse_params(raw: str):
 
 def main():
     bin_path = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "bin" / "lmgcp")
-    out = subprocess.check_output([bin_path, "--dsl-signatures"], text=True)
+    out = subprocess.check_output([bin_path, "--dsl-signatures", "--without-std"], text=True)
     context = {}
     functions = {}
     types = {}

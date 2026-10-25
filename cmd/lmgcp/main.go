@@ -23,7 +23,7 @@ var rawVersion string
 //go:embed THIRD_PARTY_NOTICES
 var embeddedNotices string
 
-const usageText = `usage: lmgcp --version | --help | --notices | --dsl-schema [--json] | --dsl-signatures | --dsl [--dry-run] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete]
+const usageText = `usage: lmgcp --version | --help | --notices | --dsl-schema [--json] | --dsl-signatures [--without-std] | --dsl [--dry-run] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete]
 
 Google Cloud Go SDK host for lmscript (Apache-2.0 SDK on lmcode-go).
 
@@ -130,6 +130,12 @@ func realMain(args []string) int {
 		return 2
 	}
 
+	if len(args) == 3 && args[1] == "--dsl-signatures" && args[2] == "--without-std" {
+		for _, s := range reg.HostSignatures() {
+			fmt.Println(s)
+		}
+		return 0
+	}
 	if len(args) == 2 && args[1] == "--dsl-signatures" {
 		for _, s := range reg.Signatures() {
 			fmt.Println(s)

@@ -74,9 +74,11 @@ echo "$notices_out" | grep -q "lmcode-go" || fail "--notices missing lmcode-go"
 ok "--notices prints embedded third-party notices"
 
 # 4. Schema & signature parity
-LMSCRIPT="${LMSCRIPT_BIN:-lmscript}"
+LMSCRIPT="$(scripts/select-compiler.sh)"
 diff -u <("$LMSCRIPT" --dsl-signatures schema/lmgcp.dsl.json | tr -d '\r') <("$HOST" --dsl-signatures | tr -d '\r') >/dev/null || fail "schema/host signature drift"
 ok "host signatures match schema/lmgcp.dsl.json"
+diff -u <("$LMSCRIPT" --dsl-signatures schema/lmgcp.dsl.json --without-std | tr -d '\r') <("$HOST" --dsl-signatures --without-std | tr -d '\r') >/dev/null || fail "host-only signature drift"
+ok "host-only compiler/registry signature parity"
 
 cmp <("$HOST" --dsl-schema --json) schema/lmgcp.dsl.json >/dev/null || fail "embedded schema differs from schema/lmgcp.dsl.json"
 ok "embedded schema is byte-identical"

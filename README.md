@@ -201,3 +201,5 @@ lmscript examples/02_label_compliance_audit.lms
 ## License
 
 MIT License — see [`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES) for Apache-2.0 and BSD-3-Clause notices of the Google Cloud Go SDK and transitive dependencies.
+
+The compiler minimum is lmscript 0.2.420; the built-in standard is supplied by the SDK and omitted from the host schema.
