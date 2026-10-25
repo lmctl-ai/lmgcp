@@ -175,4 +175,18 @@ if [ "${#img_files[@]}" -gt 0 ]; then
   ok "verified ${#img_files[@]} PNG images in docs/images/"
 fi
 
+# 12. Verify all 40 lmcloud (OpenTofu) equivalents under compare/ and compare/RESULTS.md
+[ -x "compare/run.sh" ] || fail "compare/run.sh missing or not executable"
+[ -s "compare/RESULTS.md" ] || fail "compare/RESULTS.md missing or empty"
+compare_dirs=(compare/[0-9][0-9]_*)
+[ "${#compare_dirs[@]}" -eq "${#example_files[@]}" ] || fail "expected ${#example_files[@]} compare/* dirs, found ${#compare_dirs[@]}"
+for d in "${compare_dirs[@]}"; do
+  ex="$(basename "$d")"
+  [ -s "$d/main.tf" ] || fail "missing $d/main.tf"
+  [ -s "$d/${ex}.lms" ] || fail "missing $d/${ex}.lms"
+  grep -q 'source  = "hashicorp/google"' "$d/main.tf" || fail "$d/main.tf missing hashicorp/google provider"
+done
+./compare/run.sh 04_gcs_bucket_lifecycle_ephemeral >/dev/null || fail "compare/run.sh 04_gcs_bucket_lifecycle_ephemeral failed"
+ok "verified ${#compare_dirs[@]} lmcloud equivalents under compare/, compare/RESULTS.md, and compare/run.sh"
+
 echo "all $pass checks passed"

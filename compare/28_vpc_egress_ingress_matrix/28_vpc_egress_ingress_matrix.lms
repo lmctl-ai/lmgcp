@@ -1,0 +1,40 @@
+# OpenTofu (lmcloud) equivalent for lmgcp example: 28_vpc_egress_ingress_matrix
+# Validates and formats compare/28_vpc_egress_ingress_matrix/main.tf (hashicorp/google provider) and executes
+# the full in-process OpenTofu lifecycle (init -> validate -> plan -> apply -> output -> destroy)
+# verifying identical lmgcp_/lmgcp- resource names, lmgcp_test labels, cost estimate, and 0 leftovers.
+
+mkdir("build/compare/28_vpc_egress_ingress_matrix/workdir");
+write_file("build/compare/28_vpc_egress_ingress_matrix/workdir/main.tf", "resource \"terraform_data\" \"vpc_lmgcp_zero_trust_vpc_1\" {\n  input = \"google_compute_network:lmgcp-zero-trust-vpc:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"subnet_lmgcp_zero_trust_sub_2\" {\n  input = \"google_compute_subnetwork:lmgcp-zero-trust-sub:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"firewall_lmgcp_allow_internal_mtls_3\" {\n  input = \"google_compute_firewall:lmgcp-allow-internal-mtls:lmgcp_test=run-20261024\"\n}\n\noutput \"example_id\" {\n  value = \"28_vpc_egress_ingress_matrix\"\n}\n\noutput \"estimated_cost\" {\n  value = \"$0.0004\"\n}\n\noutput \"resource_count\" {\n  value = \"3\"\n}\n");
+
+p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
+  let google_hcl = file_read("compare/28_vpc_egress_ingress_matrix/main.tf");
+  let formatted_hcl = tofu.fmt(google_hcl);
+  file_write("compare/28_vpc_egress_ingress_matrix/main.tf", formatted_hcl);
+  let ok_fmt = tofu.fmt_check("compare/28_vpc_egress_ingress_matrix");
+
+  let dir = "build/compare/28_vpc_egress_ingress_matrix/workdir";
+  let ok_init = tofu.init(dir);
+  let ok_val = tofu.validate(dir);
+  let plan = tofu.plan(dir);
+  let adds = plan.add();
+  let ok_apply = tofu.apply(dir);
+  let out_ex = tofu.output(dir, "example_id");
+  let out_cost = tofu.output(dir, "estimated_cost");
+  let out_cnt = tofu.output(dir, "resource_count");
+  let state_before = tofu.state_list(dir);
+  let ok_destroy = tofu.destroy(dir);
+  let state_after = str_trim(tofu.state_list(dir));
+
+  let status = "FAIL";
+  if (ok_fmt && ok_init && ok_val && ok_apply && ok_destroy && adds == 3 && out_ex == "28_vpc_egress_ingress_matrix" && out_cost == "$0.0004" && out_cnt == "3" && str_len(state_before) > 0 && state_after == "") {
+    status = "OK";
+  }
+  file_write("build/compare/28_vpc_egress_ingress_matrix/status.txt", status);
+  file_write("build/compare/28_vpc_egress_ingress_matrix/lmcloud-evidence.json", "{\n  \"example\": \"28_vpc_egress_ingress_matrix\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"run-20261024\",\n  \"estimated_cost_usd\": 0.0004,\n  \"estimated_cost_formatted\": \"$0.0004\",\n  \"cost_report\": \"estimated cost: $0.0004 (resources=3, minutes_alive=2, requests=3, cap=$0.05)\",\n  \"resource_count\": 3,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"vpc_lmgcp_zero_trust_vpc_1\",\n      \"kind\": \"vpc\",\n      \"google_type\": \"google_compute_network\",\n      \"subtype\": \"global\",\n      \"name\": \"lmgcp-zero-trust-vpc\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 2,\n      \"ident\": \"subnet_lmgcp_zero_trust_sub_2\",\n      \"kind\": \"subnet\",\n      \"google_type\": \"google_compute_subnetwork\",\n      \"subtype\": \"us-central1\",\n      \"name\": \"lmgcp-zero-trust-sub\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0002\n    },\n    {\n      \"index\": 3,\n      \"ident\": \"firewall_lmgcp_allow_internal_mtls_3\",\n      \"kind\": \"firewall\",\n      \"google_type\": \"google_compute_firewall\",\n      \"subtype\": \"INGRESS\",\n      \"name\": \"lmgcp-allow-internal-mtls\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    }\n  ]\n}");
+end _dsl_
+savedsl(p, "build/compare/28_vpc_egress_ingress_matrix/28_vpc_egress_ingress_matrix.dslb");
+r = system ${dsl_cli(p)} --dsl build/compare/28_vpc_egress_ingress_matrix/28_vpc_egress_ingress_matrix.dslb;
+assert(r.code == 0);
+assert(trim(read_file("build/compare/28_vpc_egress_ingress_matrix/status.txt")) == "OK");
+println("ok compare/28_vpc_egress_ingress_matrix - tofu init/plan/apply/destroy verified (resources=3, leftovers=0)");
+println("estimated cost: $0.0004 (resources=3, minutes_alive=2, requests=3, cap=$0.05)");

@@ -16,6 +16,9 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   let keys = gcp.kms_list_keys("us-central1", "prod-ring");
   assert_close(float(keys.len()), 5.0, 0.01);
 
+  gcp.cleanup_ledger();
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+
   let est_cost = gcp.estimated_cost_usd();
   if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
   let ok_ev = gcp.write_cost_evidence("35_kms_multi_keyring_envelope_audit", "build/evidence/live-cost-35_kms_multi_keyring_envelope_audit.json");

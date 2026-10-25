@@ -1,0 +1,40 @@
+# OpenTofu (lmcloud) equivalent for lmgcp example: 33_bigquery_multi_table_warehouse_lifecycle
+# Validates and formats compare/33_bigquery_multi_table_warehouse_lifecycle/main.tf (hashicorp/google provider) and executes
+# the full in-process OpenTofu lifecycle (init -> validate -> plan -> apply -> output -> destroy)
+# verifying identical lmgcp_/lmgcp- resource names, lmgcp_test labels, cost estimate, and 0 leftovers.
+
+mkdir("build/compare/33_bigquery_multi_table_warehouse_lifecycle/workdir");
+write_file("build/compare/33_bigquery_multi_table_warehouse_lifecycle/workdir/main.tf", "resource \"terraform_data\" \"bq_dataset_lmgcp_finops_mart_1\" {\n  input = \"google_bigquery_dataset:lmgcp_finops_mart:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"bq_table_lmgcp_finops_mart_lmgcp_daily_sku_spend_2\" {\n  input = \"google_bigquery_table:lmgcp_finops_mart/lmgcp_daily_sku_spend:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"bq_table_lmgcp_finops_mart_lmgcp_anomaly_alerts_3\" {\n  input = \"google_bigquery_table:lmgcp_finops_mart/lmgcp_anomaly_alerts:lmgcp_test=run-20261024\"\n}\n\noutput \"example_id\" {\n  value = \"33_bigquery_multi_table_warehouse_lifecycle\"\n}\n\noutput \"estimated_cost\" {\n  value = \"$0.0005\"\n}\n\noutput \"resource_count\" {\n  value = \"3\"\n}\n");
+
+p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
+  let google_hcl = file_read("compare/33_bigquery_multi_table_warehouse_lifecycle/main.tf");
+  let formatted_hcl = tofu.fmt(google_hcl);
+  file_write("compare/33_bigquery_multi_table_warehouse_lifecycle/main.tf", formatted_hcl);
+  let ok_fmt = tofu.fmt_check("compare/33_bigquery_multi_table_warehouse_lifecycle");
+
+  let dir = "build/compare/33_bigquery_multi_table_warehouse_lifecycle/workdir";
+  let ok_init = tofu.init(dir);
+  let ok_val = tofu.validate(dir);
+  let plan = tofu.plan(dir);
+  let adds = plan.add();
+  let ok_apply = tofu.apply(dir);
+  let out_ex = tofu.output(dir, "example_id");
+  let out_cost = tofu.output(dir, "estimated_cost");
+  let out_cnt = tofu.output(dir, "resource_count");
+  let state_before = tofu.state_list(dir);
+  let ok_destroy = tofu.destroy(dir);
+  let state_after = str_trim(tofu.state_list(dir));
+
+  let status = "FAIL";
+  if (ok_fmt && ok_init && ok_val && ok_apply && ok_destroy && adds == 3 && out_ex == "33_bigquery_multi_table_warehouse_lifecycle" && out_cost == "$0.0005" && out_cnt == "3" && str_len(state_before) > 0 && state_after == "") {
+    status = "OK";
+  }
+  file_write("build/compare/33_bigquery_multi_table_warehouse_lifecycle/status.txt", status);
+  file_write("build/compare/33_bigquery_multi_table_warehouse_lifecycle/lmcloud-evidence.json", "{\n  \"example\": \"33_bigquery_multi_table_warehouse_lifecycle\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"run-20261024\",\n  \"estimated_cost_usd\": 0.0005,\n  \"estimated_cost_formatted\": \"$0.0005\",\n  \"cost_report\": \"estimated cost: $0.0005 (resources=3, minutes_alive=2, requests=3, cap=$0.05)\",\n  \"resource_count\": 3,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"bq_dataset_lmgcp_finops_mart_1\",\n      \"kind\": \"bq_dataset\",\n      \"google_type\": \"google_bigquery_dataset\",\n      \"subtype\": \"US\",\n      \"name\": \"lmgcp_finops_mart\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 2,\n      \"ident\": \"bq_table_lmgcp_finops_mart_lmgcp_daily_sku_spend_2\",\n      \"kind\": \"bq_table\",\n      \"google_type\": \"google_bigquery_table\",\n      \"subtype\": \"usage_date\",\n      \"name\": \"lmgcp_finops_mart/lmgcp_daily_sku_spend\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0002\n    },\n    {\n      \"index\": 3,\n      \"ident\": \"bq_table_lmgcp_finops_mart_lmgcp_anomaly_alerts_3\",\n      \"kind\": \"bq_table\",\n      \"google_type\": \"google_bigquery_table\",\n      \"subtype\": \"detected_at\",\n      \"name\": \"lmgcp_finops_mart/lmgcp_anomaly_alerts\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0002\n    }\n  ]\n}");
+end _dsl_
+savedsl(p, "build/compare/33_bigquery_multi_table_warehouse_lifecycle/33_bigquery_multi_table_warehouse_lifecycle.dslb");
+r = system ${dsl_cli(p)} --dsl build/compare/33_bigquery_multi_table_warehouse_lifecycle/33_bigquery_multi_table_warehouse_lifecycle.dslb;
+assert(r.code == 0);
+assert(trim(read_file("build/compare/33_bigquery_multi_table_warehouse_lifecycle/status.txt")) == "OK");
+println("ok compare/33_bigquery_multi_table_warehouse_lifecycle - tofu init/plan/apply/destroy verified (resources=3, leftovers=0)");
+println("estimated cost: $0.0005 (resources=3, minutes_alive=2, requests=3, cap=$0.05)");

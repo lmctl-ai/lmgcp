@@ -196,6 +196,14 @@ lmscript examples/02_label_compliance_audit.lms
 ./bin/lmgcp --sweep --older-than-hours 0 --delete
 ```
 
+### `lmcloud` (OpenTofu) Equivalents & Side-by-Side Comparison (`compare/`)
+
+Every `lmgcp` example (`01` .. `40`) has a 1-to-1 [`lmcloud`](https://github.com/lmctl-ai/lmcloud) (OpenTofu `v1.13.2` host) equivalent under [`compare/<example>/`](compare/) containing:
+- `compare/<example>/<example>.lms` — an `lmctl autorun` script using the `tofu.*` DSL API (`init`, `validate`, `plan`, `apply`, `output`, `state_list`, `destroy`),
+- `compare/<example>/main.tf` — a `hashicorp/google` provider configuration using the exact same `lmgcp_` / `lmgcp-` resource names, `lmgcp_test` labels, and teardown (`leftovers = 0`).
+
+Run [`./compare/run.sh <example>`](compare/run.sh) (or `./compare/run.sh all`) to execute the native `lmgcp` example and its `lmcloud` equivalent side-by-side and compare resources created, outputs, wall time, estimated cost, and cleanup. See [`compare/RESULTS.md`](compare/RESULTS.md) for the complete 40-example comparison table and architectural analysis.
+
 ---
 
 ## License

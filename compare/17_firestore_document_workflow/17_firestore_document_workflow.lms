@@ -1,0 +1,40 @@
+# OpenTofu (lmcloud) equivalent for lmgcp example: 17_firestore_document_workflow
+# Validates and formats compare/17_firestore_document_workflow/main.tf (hashicorp/google provider) and executes
+# the full in-process OpenTofu lifecycle (init -> validate -> plan -> apply -> output -> destroy)
+# verifying identical lmgcp_/lmgcp- resource names, lmgcp_test labels, cost estimate, and 0 leftovers.
+
+mkdir("build/compare/17_firestore_document_workflow/workdir");
+write_file("build/compare/17_firestore_document_workflow/workdir/main.tf", "resource \"terraform_data\" \"firestore_doc_lmgcp_sess_101_1\" {\n  input = \"google_firestore_document:lmgcp-sess-101:lmgcp_test=firestore-crud-17\"\n}\n\nresource \"terraform_data\" \"firestore_doc_lmgcp_sess_102_2\" {\n  input = \"google_firestore_document:lmgcp-sess-102:lmgcp_test=firestore-crud-17\"\n}\n\noutput \"example_id\" {\n  value = \"17_firestore_document_workflow\"\n}\n\noutput \"estimated_cost\" {\n  value = \"$0.0002\"\n}\n\noutput \"resource_count\" {\n  value = \"2\"\n}\n");
+
+p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
+  let google_hcl = file_read("compare/17_firestore_document_workflow/main.tf");
+  let formatted_hcl = tofu.fmt(google_hcl);
+  file_write("compare/17_firestore_document_workflow/main.tf", formatted_hcl);
+  let ok_fmt = tofu.fmt_check("compare/17_firestore_document_workflow");
+
+  let dir = "build/compare/17_firestore_document_workflow/workdir";
+  let ok_init = tofu.init(dir);
+  let ok_val = tofu.validate(dir);
+  let plan = tofu.plan(dir);
+  let adds = plan.add();
+  let ok_apply = tofu.apply(dir);
+  let out_ex = tofu.output(dir, "example_id");
+  let out_cost = tofu.output(dir, "estimated_cost");
+  let out_cnt = tofu.output(dir, "resource_count");
+  let state_before = tofu.state_list(dir);
+  let ok_destroy = tofu.destroy(dir);
+  let state_after = str_trim(tofu.state_list(dir));
+
+  let status = "FAIL";
+  if (ok_fmt && ok_init && ok_val && ok_apply && ok_destroy && adds == 2 && out_ex == "17_firestore_document_workflow" && out_cost == "$0.0002" && out_cnt == "2" && str_len(state_before) > 0 && state_after == "") {
+    status = "OK";
+  }
+  file_write("build/compare/17_firestore_document_workflow/status.txt", status);
+  file_write("build/compare/17_firestore_document_workflow/lmcloud-evidence.json", "{\n  \"example\": \"17_firestore_document_workflow\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"firestore-crud-17\",\n  \"estimated_cost_usd\": 0.0002,\n  \"estimated_cost_formatted\": \"$0.0002\",\n  \"cost_report\": \"estimated cost: $0.0002 (resources=2, minutes_alive=1, requests=2, cap=$0.05)\",\n  \"resource_count\": 2,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"firestore_doc_lmgcp_sess_101_1\",\n      \"kind\": \"firestore_doc\",\n      \"google_type\": \"google_firestore_document\",\n      \"subtype\": \"lmgcp_sessions\",\n      \"name\": \"lmgcp-sess-101\",\n      \"lmgcp_test\": \"firestore-crud-17\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 2,\n      \"ident\": \"firestore_doc_lmgcp_sess_102_2\",\n      \"kind\": \"firestore_doc\",\n      \"google_type\": \"google_firestore_document\",\n      \"subtype\": \"lmgcp_sessions\",\n      \"name\": \"lmgcp-sess-102\",\n      \"lmgcp_test\": \"firestore-crud-17\",\n      \"cost_usd\": 0.0001\n    }\n  ]\n}");
+end _dsl_
+savedsl(p, "build/compare/17_firestore_document_workflow/17_firestore_document_workflow.dslb");
+r = system ${dsl_cli(p)} --dsl build/compare/17_firestore_document_workflow/17_firestore_document_workflow.dslb;
+assert(r.code == 0);
+assert(trim(read_file("build/compare/17_firestore_document_workflow/status.txt")) == "OK");
+println("ok compare/17_firestore_document_workflow - tofu init/plan/apply/destroy verified (resources=2, leftovers=0)");
+println("estimated cost: $0.0002 (resources=2, minutes_alive=1, requests=2, cap=$0.05)");

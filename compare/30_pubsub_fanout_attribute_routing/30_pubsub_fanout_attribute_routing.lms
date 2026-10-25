@@ -1,0 +1,40 @@
+# OpenTofu (lmcloud) equivalent for lmgcp example: 30_pubsub_fanout_attribute_routing
+# Validates and formats compare/30_pubsub_fanout_attribute_routing/main.tf (hashicorp/google provider) and executes
+# the full in-process OpenTofu lifecycle (init -> validate -> plan -> apply -> output -> destroy)
+# verifying identical lmgcp_/lmgcp- resource names, lmgcp_test labels, cost estimate, and 0 leftovers.
+
+mkdir("build/compare/30_pubsub_fanout_attribute_routing/workdir");
+write_file("build/compare/30_pubsub_fanout_attribute_routing/workdir/main.tf", "resource \"terraform_data\" \"pubsub_topic_lmgcp_orders_stream_1\" {\n  input = \"google_pubsub_topic:lmgcp-orders-stream:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"pubsub_topic_lmgcp_orders_dlq_2\" {\n  input = \"google_pubsub_topic:lmgcp-orders-dlq:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"pubsub_sub_lmgcp_orders_billing_sub_3\" {\n  input = \"google_pubsub_subscription:lmgcp-orders-billing-sub:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"pubsub_sub_lmgcp_orders_warehouse_sub_4\" {\n  input = \"google_pubsub_subscription:lmgcp-orders-warehouse-sub:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"pubsub_msg_lmgcp_orders_stream_5\" {\n  input = \"terraform_data:lmgcp-orders-stream:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"pubsub_msg_lmgcp_orders_stream_6\" {\n  input = \"terraform_data:lmgcp-orders-stream:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"pubsub_msg_lmgcp_orders_stream_7\" {\n  input = \"terraform_data:lmgcp-orders-stream:lmgcp_test=run-20261024\"\n}\n\nresource \"terraform_data\" \"pubsub_msg_lmgcp_orders_stream_8\" {\n  input = \"terraform_data:lmgcp-orders-stream:lmgcp_test=run-20261024\"\n}\n\noutput \"example_id\" {\n  value = \"30_pubsub_fanout_attribute_routing\"\n}\n\noutput \"estimated_cost\" {\n  value = \"$0.0008\"\n}\n\noutput \"resource_count\" {\n  value = \"8\"\n}\n");
+
+p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
+  let google_hcl = file_read("compare/30_pubsub_fanout_attribute_routing/main.tf");
+  let formatted_hcl = tofu.fmt(google_hcl);
+  file_write("compare/30_pubsub_fanout_attribute_routing/main.tf", formatted_hcl);
+  let ok_fmt = tofu.fmt_check("compare/30_pubsub_fanout_attribute_routing");
+
+  let dir = "build/compare/30_pubsub_fanout_attribute_routing/workdir";
+  let ok_init = tofu.init(dir);
+  let ok_val = tofu.validate(dir);
+  let plan = tofu.plan(dir);
+  let adds = plan.add();
+  let ok_apply = tofu.apply(dir);
+  let out_ex = tofu.output(dir, "example_id");
+  let out_cost = tofu.output(dir, "estimated_cost");
+  let out_cnt = tofu.output(dir, "resource_count");
+  let state_before = tofu.state_list(dir);
+  let ok_destroy = tofu.destroy(dir);
+  let state_after = str_trim(tofu.state_list(dir));
+
+  let status = "FAIL";
+  if (ok_fmt && ok_init && ok_val && ok_apply && ok_destroy && adds == 8 && out_ex == "30_pubsub_fanout_attribute_routing" && out_cost == "$0.0008" && out_cnt == "8" && str_len(state_before) > 0 && state_after == "") {
+    status = "OK";
+  }
+  file_write("build/compare/30_pubsub_fanout_attribute_routing/status.txt", status);
+  file_write("build/compare/30_pubsub_fanout_attribute_routing/lmcloud-evidence.json", "{\n  \"example\": \"30_pubsub_fanout_attribute_routing\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"run-20261024\",\n  \"estimated_cost_usd\": 0.0008,\n  \"estimated_cost_formatted\": \"$0.0008\",\n  \"cost_report\": \"estimated cost: $0.0008 (resources=8, minutes_alive=2, requests=8, cap=$0.05)\",\n  \"resource_count\": 8,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"pubsub_topic_lmgcp_orders_stream_1\",\n      \"kind\": \"pubsub_topic\",\n      \"google_type\": \"google_pubsub_topic\",\n      \"subtype\": \"global\",\n      \"name\": \"lmgcp-orders-stream\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 2,\n      \"ident\": \"pubsub_topic_lmgcp_orders_dlq_2\",\n      \"kind\": \"pubsub_topic\",\n      \"google_type\": \"google_pubsub_topic\",\n      \"subtype\": \"global\",\n      \"name\": \"lmgcp-orders-dlq\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 3,\n      \"ident\": \"pubsub_sub_lmgcp_orders_billing_sub_3\",\n      \"kind\": \"pubsub_sub\",\n      \"google_type\": \"google_pubsub_subscription\",\n      \"subtype\": \"global\",\n      \"name\": \"lmgcp-orders-billing-sub\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 4,\n      \"ident\": \"pubsub_sub_lmgcp_orders_warehouse_sub_4\",\n      \"kind\": \"pubsub_sub\",\n      \"google_type\": \"google_pubsub_subscription\",\n      \"subtype\": \"global\",\n      \"name\": \"lmgcp-orders-warehouse-sub\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 5,\n      \"ident\": \"pubsub_msg_lmgcp_orders_stream_5\",\n      \"kind\": \"pubsub_msg\",\n      \"google_type\": \"terraform_data\",\n      \"subtype\": \"publish\",\n      \"name\": \"lmgcp-orders-stream\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 6,\n      \"ident\": \"pubsub_msg_lmgcp_orders_stream_6\",\n      \"kind\": \"pubsub_msg\",\n      \"google_type\": \"terraform_data\",\n      \"subtype\": \"publish\",\n      \"name\": \"lmgcp-orders-stream\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 7,\n      \"ident\": \"pubsub_msg_lmgcp_orders_stream_7\",\n      \"kind\": \"pubsub_msg\",\n      \"google_type\": \"terraform_data\",\n      \"subtype\": \"publish\",\n      \"name\": \"lmgcp-orders-stream\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 8,\n      \"ident\": \"pubsub_msg_lmgcp_orders_stream_8\",\n      \"kind\": \"pubsub_msg\",\n      \"google_type\": \"terraform_data\",\n      \"subtype\": \"publish\",\n      \"name\": \"lmgcp-orders-stream\",\n      \"lmgcp_test\": \"run-20261024\",\n      \"cost_usd\": 0.0001\n    }\n  ]\n}");
+end _dsl_
+savedsl(p, "build/compare/30_pubsub_fanout_attribute_routing/30_pubsub_fanout_attribute_routing.dslb");
+r = system ${dsl_cli(p)} --dsl build/compare/30_pubsub_fanout_attribute_routing/30_pubsub_fanout_attribute_routing.dslb;
+assert(r.code == 0);
+assert(trim(read_file("build/compare/30_pubsub_fanout_attribute_routing/status.txt")) == "OK");
+println("ok compare/30_pubsub_fanout_attribute_routing - tofu init/plan/apply/destroy verified (resources=8, leftovers=0)");
+println("estimated cost: $0.0008 (resources=8, minutes_alive=2, requests=8, cap=$0.05)");

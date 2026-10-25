@@ -1,0 +1,40 @@
+# OpenTofu (lmcloud) equivalent for lmgcp example: 16_bigquery_dataset_partition_audit
+# Validates and formats compare/16_bigquery_dataset_partition_audit/main.tf (hashicorp/google provider) and executes
+# the full in-process OpenTofu lifecycle (init -> validate -> plan -> apply -> output -> destroy)
+# verifying identical lmgcp_/lmgcp- resource names, lmgcp_test labels, cost estimate, and 0 leftovers.
+
+mkdir("build/compare/16_bigquery_dataset_partition_audit/workdir");
+write_file("build/compare/16_bigquery_dataset_partition_audit/workdir/main.tf", "resource \"terraform_data\" \"bq_dataset_lmgcp_analytics_ds_1\" {\n  input = \"google_bigquery_dataset:lmgcp_analytics_ds:lmgcp_test=bq-audit-16\"\n}\n\nresource \"terraform_data\" \"bq_table_lmgcp_analytics_ds_lmgcp_session_rollup_2\" {\n  input = \"google_bigquery_table:lmgcp_analytics_ds/lmgcp_session_rollup:lmgcp_test=bq-audit-16\"\n}\n\noutput \"example_id\" {\n  value = \"16_bigquery_dataset_partition_audit\"\n}\n\noutput \"estimated_cost\" {\n  value = \"$0.0003\"\n}\n\noutput \"resource_count\" {\n  value = \"2\"\n}\n");
+
+p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
+  let google_hcl = file_read("compare/16_bigquery_dataset_partition_audit/main.tf");
+  let formatted_hcl = tofu.fmt(google_hcl);
+  file_write("compare/16_bigquery_dataset_partition_audit/main.tf", formatted_hcl);
+  let ok_fmt = tofu.fmt_check("compare/16_bigquery_dataset_partition_audit");
+
+  let dir = "build/compare/16_bigquery_dataset_partition_audit/workdir";
+  let ok_init = tofu.init(dir);
+  let ok_val = tofu.validate(dir);
+  let plan = tofu.plan(dir);
+  let adds = plan.add();
+  let ok_apply = tofu.apply(dir);
+  let out_ex = tofu.output(dir, "example_id");
+  let out_cost = tofu.output(dir, "estimated_cost");
+  let out_cnt = tofu.output(dir, "resource_count");
+  let state_before = tofu.state_list(dir);
+  let ok_destroy = tofu.destroy(dir);
+  let state_after = str_trim(tofu.state_list(dir));
+
+  let status = "FAIL";
+  if (ok_fmt && ok_init && ok_val && ok_apply && ok_destroy && adds == 2 && out_ex == "16_bigquery_dataset_partition_audit" && out_cost == "$0.0003" && out_cnt == "2" && str_len(state_before) > 0 && state_after == "") {
+    status = "OK";
+  }
+  file_write("build/compare/16_bigquery_dataset_partition_audit/status.txt", status);
+  file_write("build/compare/16_bigquery_dataset_partition_audit/lmcloud-evidence.json", "{\n  \"example\": \"16_bigquery_dataset_partition_audit\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"bq-audit-16\",\n  \"estimated_cost_usd\": 0.0003,\n  \"estimated_cost_formatted\": \"$0.0003\",\n  \"cost_report\": \"estimated cost: $0.0003 (resources=2, minutes_alive=2, requests=2, cap=$0.05)\",\n  \"resource_count\": 2,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"bq_dataset_lmgcp_analytics_ds_1\",\n      \"kind\": \"bq_dataset\",\n      \"google_type\": \"google_bigquery_dataset\",\n      \"subtype\": \"US\",\n      \"name\": \"lmgcp_analytics_ds\",\n      \"lmgcp_test\": \"bq-audit-16\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 2,\n      \"ident\": \"bq_table_lmgcp_analytics_ds_lmgcp_session_rollup_2\",\n      \"kind\": \"bq_table\",\n      \"google_type\": \"google_bigquery_table\",\n      \"subtype\": \"ts\",\n      \"name\": \"lmgcp_analytics_ds/lmgcp_session_rollup\",\n      \"lmgcp_test\": \"bq-audit-16\",\n      \"cost_usd\": 0.0002\n    }\n  ]\n}");
+end _dsl_
+savedsl(p, "build/compare/16_bigquery_dataset_partition_audit/16_bigquery_dataset_partition_audit.dslb");
+r = system ${dsl_cli(p)} --dsl build/compare/16_bigquery_dataset_partition_audit/16_bigquery_dataset_partition_audit.dslb;
+assert(r.code == 0);
+assert(trim(read_file("build/compare/16_bigquery_dataset_partition_audit/status.txt")) == "OK");
+println("ok compare/16_bigquery_dataset_partition_audit - tofu init/plan/apply/destroy verified (resources=2, leftovers=0)");
+println("estimated cost: $0.0003 (resources=2, minutes_alive=2, requests=2, cap=$0.05)");

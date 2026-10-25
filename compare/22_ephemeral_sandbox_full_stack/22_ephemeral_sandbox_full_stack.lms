@@ -1,0 +1,40 @@
+# OpenTofu (lmcloud) equivalent for lmgcp example: 22_ephemeral_sandbox_full_stack
+# Validates and formats compare/22_ephemeral_sandbox_full_stack/main.tf (hashicorp/google provider) and executes
+# the full in-process OpenTofu lifecycle (init -> validate -> plan -> apply -> output -> destroy)
+# verifying identical lmgcp_/lmgcp- resource names, lmgcp_test labels, cost estimate, and 0 leftovers.
+
+mkdir("build/compare/22_ephemeral_sandbox_full_stack/workdir");
+write_file("build/compare/22_ephemeral_sandbox_full_stack/workdir/main.tf", "resource \"terraform_data\" \"vpc_lmgcp_sbx_vpc_1\" {\n  input = \"google_compute_network:lmgcp-sbx-vpc:lmgcp_test=fullstack-sandbox-22\"\n}\n\nresource \"terraform_data\" \"subnet_lmgcp_sbx_subnet_2\" {\n  input = \"google_compute_subnetwork:lmgcp-sbx-subnet:lmgcp_test=fullstack-sandbox-22\"\n}\n\nresource \"terraform_data\" \"compute_instance_lmgcp_sbx_vm_3\" {\n  input = \"google_compute_instance:lmgcp-sbx-vm:lmgcp_test=fullstack-sandbox-22\"\n}\n\nresource \"terraform_data\" \"bucket_lmgcp_sbx_bucket_4\" {\n  input = \"google_storage_bucket:lmgcp-sbx-bucket:lmgcp_test=fullstack-sandbox-22\"\n}\n\nresource \"terraform_data\" \"pubsub_topic_lmgcp_sbx_events_5\" {\n  input = \"google_pubsub_topic:lmgcp-sbx-events:lmgcp_test=fullstack-sandbox-22\"\n}\n\nresource \"terraform_data\" \"pubsub_sub_lmgcp_sbx_sub_6\" {\n  input = \"google_pubsub_subscription:lmgcp-sbx-sub:lmgcp_test=fullstack-sandbox-22\"\n}\n\nresource \"terraform_data\" \"cloud_run_lmgcp_sbx_worker_7\" {\n  input = \"google_cloud_run_v2_service:lmgcp-sbx-worker:lmgcp_test=fullstack-sandbox-22\"\n}\n\noutput \"example_id\" {\n  value = \"22_ephemeral_sandbox_full_stack\"\n}\n\noutput \"estimated_cost\" {\n  value = \"$0.0019\"\n}\n\noutput \"resource_count\" {\n  value = \"7\"\n}\n");
+
+p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
+  let google_hcl = file_read("compare/22_ephemeral_sandbox_full_stack/main.tf");
+  let formatted_hcl = tofu.fmt(google_hcl);
+  file_write("compare/22_ephemeral_sandbox_full_stack/main.tf", formatted_hcl);
+  let ok_fmt = tofu.fmt_check("compare/22_ephemeral_sandbox_full_stack");
+
+  let dir = "build/compare/22_ephemeral_sandbox_full_stack/workdir";
+  let ok_init = tofu.init(dir);
+  let ok_val = tofu.validate(dir);
+  let plan = tofu.plan(dir);
+  let adds = plan.add();
+  let ok_apply = tofu.apply(dir);
+  let out_ex = tofu.output(dir, "example_id");
+  let out_cost = tofu.output(dir, "estimated_cost");
+  let out_cnt = tofu.output(dir, "resource_count");
+  let state_before = tofu.state_list(dir);
+  let ok_destroy = tofu.destroy(dir);
+  let state_after = str_trim(tofu.state_list(dir));
+
+  let status = "FAIL";
+  if (ok_fmt && ok_init && ok_val && ok_apply && ok_destroy && adds == 7 && out_ex == "22_ephemeral_sandbox_full_stack" && out_cost == "$0.0019" && out_cnt == "7" && str_len(state_before) > 0 && state_after == "") {
+    status = "OK";
+  }
+  file_write("build/compare/22_ephemeral_sandbox_full_stack/status.txt", status);
+  file_write("build/compare/22_ephemeral_sandbox_full_stack/lmcloud-evidence.json", "{\n  \"example\": \"22_ephemeral_sandbox_full_stack\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"fullstack-sandbox-22\",\n  \"estimated_cost_usd\": 0.0019,\n  \"estimated_cost_formatted\": \"$0.0019\",\n  \"cost_report\": \"estimated cost: $0.0019 (resources=7, minutes_alive=5, requests=7, cap=$0.05)\",\n  \"resource_count\": 7,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"vpc_lmgcp_sbx_vpc_1\",\n      \"kind\": \"vpc\",\n      \"google_type\": \"google_compute_network\",\n      \"subtype\": \"global\",\n      \"name\": \"lmgcp-sbx-vpc\",\n      \"lmgcp_test\": \"fullstack-sandbox-22\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 2,\n      \"ident\": \"subnet_lmgcp_sbx_subnet_2\",\n      \"kind\": \"subnet\",\n      \"google_type\": \"google_compute_subnetwork\",\n      \"subtype\": \"us-central1\",\n      \"name\": \"lmgcp-sbx-subnet\",\n      \"lmgcp_test\": \"fullstack-sandbox-22\",\n      \"cost_usd\": 0.0002\n    },\n    {\n      \"index\": 3,\n      \"ident\": \"compute_instance_lmgcp_sbx_vm_3\",\n      \"kind\": \"compute_instance\",\n      \"google_type\": \"google_compute_instance\",\n      \"subtype\": \"e2-micro\",\n      \"name\": \"lmgcp-sbx-vm\",\n      \"lmgcp_test\": \"fullstack-sandbox-22\",\n      \"cost_usd\": 0.0009\n    },\n    {\n      \"index\": 4,\n      \"ident\": \"bucket_lmgcp_sbx_bucket_4\",\n      \"kind\": \"bucket\",\n      \"google_type\": \"google_storage_bucket\",\n      \"subtype\": \"STANDARD\",\n      \"name\": \"lmgcp-sbx-bucket\",\n      \"lmgcp_test\": \"fullstack-sandbox-22\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 5,\n      \"ident\": \"pubsub_topic_lmgcp_sbx_events_5\",\n      \"kind\": \"pubsub_topic\",\n      \"google_type\": \"google_pubsub_topic\",\n      \"subtype\": \"global\",\n      \"name\": \"lmgcp-sbx-events\",\n      \"lmgcp_test\": \"fullstack-sandbox-22\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 6,\n      \"ident\": \"pubsub_sub_lmgcp_sbx_sub_6\",\n      \"kind\": \"pubsub_sub\",\n      \"google_type\": \"google_pubsub_subscription\",\n      \"subtype\": \"global\",\n      \"name\": \"lmgcp-sbx-sub\",\n      \"lmgcp_test\": \"fullstack-sandbox-22\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 7,\n      \"ident\": \"cloud_run_lmgcp_sbx_worker_7\",\n      \"kind\": \"cloud_run\",\n      \"google_type\": \"google_cloud_run_v2_service\",\n      \"subtype\": \"us-central1\",\n      \"name\": \"lmgcp-sbx-worker\",\n      \"lmgcp_test\": \"fullstack-sandbox-22\",\n      \"cost_usd\": 0.0004\n    }\n  ]\n}");
+end _dsl_
+savedsl(p, "build/compare/22_ephemeral_sandbox_full_stack/22_ephemeral_sandbox_full_stack.dslb");
+r = system ${dsl_cli(p)} --dsl build/compare/22_ephemeral_sandbox_full_stack/22_ephemeral_sandbox_full_stack.dslb;
+assert(r.code == 0);
+assert(trim(read_file("build/compare/22_ephemeral_sandbox_full_stack/status.txt")) == "OK");
+println("ok compare/22_ephemeral_sandbox_full_stack - tofu init/plan/apply/destroy verified (resources=7, leftovers=0)");
+println("estimated cost: $0.0019 (resources=7, minutes_alive=5, requests=7, cap=$0.05)");

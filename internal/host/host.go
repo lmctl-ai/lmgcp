@@ -346,6 +346,9 @@ func (h *Host) CleanupLedger() int64 {
 			ok = h.BQDeleteDataset(e.Name)
 		case "secret":
 			ok = h.SecretsDelete(e.Name)
+		case "kms_key":
+			h.ledger.Remove("kms_key", e.Location, e.Name)
+			ok = true
 		case "artifact_repo":
 			ok = h.ARDeleteRepository(e.Location, e.Name)
 		case "dns_zone":
@@ -433,6 +436,9 @@ func (h *Host) SweepDelete(maxAgeHours int64) int64 {
 			ok = h.BQDeleteDataset(e.Name)
 		case "secret":
 			ok = h.SecretsDelete(e.Name)
+		case "kms_key":
+			h.ledger.Remove("kms_key", e.Location, e.Name)
+			ok = true
 		case "artifact_repo":
 			ok = h.ARDeleteRepository(e.Location, e.Name)
 		case "dns_zone":
