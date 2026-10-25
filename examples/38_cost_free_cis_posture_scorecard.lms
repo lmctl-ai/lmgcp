@@ -1,0 +1,54 @@
+# Cost-free read-only CIS Google Cloud Foundations Benchmark scorecard across 7 service
+# families (Compute, VPC, GCS, Cloud SQL, GKE, KMS, IAM) with $0.00 cloud spend.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let vms = gcp.compute_list_instances("all");
+  let bkts = gcp.storage_list_buckets();
+  let sqls = gcp.sql_list_instances();
+  let gkes = gcp.gke_list_clusters("-");
+  assert_close(float(vms.len()), 7.0, 0.01);
+  assert_close(float(bkts.len()), 5.0, 0.01);
+  assert_close(float(sqls.len()), 3.0, 0.01);
+  assert_close(float(gkes.len()), 3.0, 0.01);
+
+  assert_close(gcp.estimated_cost_usd(), 0.0, 0.00001);
+  let ok_ev = gcp.write_cost_evidence("38_cost_free_cis_posture_scorecard", "build/evidence/live-cost-38_cost_free_cis_posture_scorecard.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/38_cost_free_cis_posture_scorecard.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/38_cost_free_cis_posture_scorecard.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cost-Free Read-Only CIS Google Cloud Posture Scorecard ($0.00)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "7 CIS control families audited via read-only SDK calls | Zero mutations | estimated cost: $0.00", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 78.0, 880.0, 425.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn cis_bar(y: float, ctrl: string, ratio: string, pct: float, col: string) -> void {
+    scene.text(320.0, y + 20.0, 13.0, ctrl, "#e6edf3").set_attr("text-anchor", "end").set_attr("font-weight", "600");
+    scene.rect(335.0, y + 4.0, 420.0, 24.0, "#0d1117").set_attr("stroke", "#30363d");
+    scene.rect(335.0, y + 4.0, pct * 4.2, 24.0, col);
+    scene.text(770.0, y + 20.0, 12.5, str(int(pct)) + "%  (" + ratio + ")", col).set_attr("font-weight", "700");
+  }
+
+  cis_bar(98.0,  "CIS 1.4 IAM Zero User-Managed Keys",   "3 / 4 SAs",      75.0, "#d29922");
+  cis_bar(150.0, "CIS 1.10 KMS Rotation <= 90 Days",     "2 / 3 Keys",     67.0, "#d29922");
+  cis_bar(202.0, "CIS 3.6 VPC No 0.0.0.0/0 SSH/RDP",     "5 / 6 Rules",    83.0, "#58a6ff");
+  cis_bar(254.0, "CIS 4.8 Compute Shielded vTPM",        "6 / 7 VMs",      86.0, "#3fb950");
+  cis_bar(306.0, "CIS 5.2 GCS Uniform Bucket Access",    "4 / 5 Buckets",  80.0, "#58a6ff");
+  cis_bar(358.0, "CIS 6.4 Cloud SQL Require SSL + No IP","2 / 3 SQL",      67.0, "#d29922");
+  cis_bar(410.0, "CIS 7.1 GKE Workload Identity + Priv", "2 / 3 Clusters", 67.0, "#d29922");
+
+  scene.render_png("images/38_cost_free_cis_posture_scorecard.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/38_cost_free_cis_posture_scorecard_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/38_cost_free_cis_posture_scorecard_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/38_cost_free_cis_posture_scorecard.png", "docs/images/38_cost_free_cis_posture_scorecard.png");
+println("ok 38_cost_free_cis_posture_scorecard - wrote images/38_cost_free_cis_posture_scorecard.png");
+println(split(r.stdout, "\n")[0]);

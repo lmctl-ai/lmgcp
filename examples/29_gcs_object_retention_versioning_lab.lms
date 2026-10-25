@@ -1,0 +1,69 @@
+# Provisions an ephemeral GCS bucket (lmgcp-telemetry-lake), uploads 4 partitioned objects,
+# verifies prefix listing, payload readback, secret redaction, object deletion, and full teardown.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let bkt = gcp.storage_create_bucket("lmgcp-telemetry-lake", "US-CENTRAL1", "STANDARD");
+  let ok_ver = gcp.storage_set_bucket_versioning("lmgcp-telemetry-lake", true);
+  let ok_lc = gcp.storage_set_bucket_lifecycle("lmgcp-telemetry-lake", 180, 30);
+
+  gcp.storage_put_object("lmgcp-telemetry-lake", "raw/2026-10-24/shard-00.jsonl", "shard=0,rows=1200", "application/json");
+  gcp.storage_put_object("lmgcp-telemetry-lake", "raw/2026-10-24/shard-01.jsonl", "shard=1,rows=1450,token=ya29.secretAbc12345", "application/json");
+  gcp.storage_put_object("lmgcp-telemetry-lake", "curated/2026-10-24/summary.csv", "metric,value\np95_ms,38.4\n", "text/csv");
+  gcp.storage_put_object("lmgcp-telemetry-lake", "tmp/scratch.txt", "ephemeral staging marker", "text/plain");
+
+  let raw_objs = gcp.storage_list_objects("lmgcp-telemetry-lake", "raw/2026-10-24/");
+  assert_close(float(raw_objs.len()), 2.0, 0.01);
+
+  let body1 = gcp.storage_read_object("lmgcp-telemetry-lake", "raw/2026-10-24/shard-01.jsonl");
+  if (!str_contains(body1, "ya29.[REDACTED]")) { assert_close(0.0, 1.0, 0.01); }
+
+  let sz = gcp.storage_object_size("lmgcp-telemetry-lake", "curated/2026-10-24/summary.csv");
+  if (sz <= 10) { assert_close(0.0, 1.0, 0.01); }
+
+  let ok_del_obj = gcp.storage_delete_object("lmgcp-telemetry-lake", "tmp/scratch.txt");
+  let after_bkt = gcp.storage_get_bucket("lmgcp-telemetry-lake");
+  assert_close(float(after_bkt.object_count()), 3.0, 0.01);
+
+  let del = gcp.cleanup_ledger();
+  assert_close(float(del), 1.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("29_gcs_object_retention_versioning_lab", "build/evidence/live-cost-29_gcs_object_retention_versioning_lab.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/29_gcs_object_retention_versioning_lab.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/29_gcs_object_retention_versioning_lab.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "GCS Partitioned Object Ingestion, Redaction & Versioning Lab", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Bucket: lmgcp-telemetry-lake | 4 objects written -> OAuth token redacted -> tmp object pruned -> bucket deleted", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 82.0, 880.0, 395.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn obj_box(y: float, key: string, ctype: string, status: string, detail: string, col: string) -> void {
+    scene.rect(65.0, y, 830.0, 72.0, "#0d1117").set_attr("stroke", col);
+    scene.text(85.0, y + 28.0, 14.0, key, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(85.0, y + 52.0, 12.0, "Content-Type: " + ctype + "  |  " + detail, "#8b949e");
+    scene.text(875.0, y + 40.0, 12.5, status, col).set_attr("text-anchor", "end").set_attr("font-weight", "700");
+  }
+
+  obj_box(105.0, "raw/2026-10-24/shard-00.jsonl",    "application/json", "VERIFIED (1,200 rows)", "Prefix filter raw/2026-10-24/ matched", "#3fb950");
+  obj_box(192.0, "raw/2026-10-24/shard-01.jsonl",    "application/json", "TOKEN REDACTED",        "ya29.secretAbc12345 -> ya29.[REDACTED]", "#58a6ff");
+  obj_box(279.0, "curated/2026-10-24/summary.csv",   "text/csv",         "VERIFIED (p95=38.4ms)", "Readback & byte-size check passed",     "#a371f7");
+  obj_box(366.0, "tmp/scratch.txt",                  "text/plain",       "PRUNED & CLEANED",      "Deleted via storage_delete_object()",   "#d29922");
+
+  scene.render_png("images/29_gcs_object_retention_versioning_lab.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/29_gcs_object_retention_versioning_lab_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/29_gcs_object_retention_versioning_lab_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/29_gcs_object_retention_versioning_lab.png", "docs/images/29_gcs_object_retention_versioning_lab.png");
+println("ok 29_gcs_object_retention_versioning_lab - wrote images/29_gcs_object_retention_versioning_lab.png");
+println(split(r.stdout, "\n")[0]);

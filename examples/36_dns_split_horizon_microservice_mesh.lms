@@ -1,0 +1,58 @@
+# Creates an ephemeral Cloud DNS private zone (lmgcp-mesh-internal), adds A, TXT, and CNAME
+# service discovery records, verifies record counts, deletes records, and tears down the zone.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let z = gcp.dns_create_zone("lmgcp-mesh-internal", "mesh.lmgcp.internal.", "private", true);
+  gcp.dns_add_record("lmgcp-mesh-internal", "checkout.mesh.lmgcp.internal.", "A", 60, "10.10.1.25");
+  gcp.dns_add_record("lmgcp-mesh-internal", "payments.mesh.lmgcp.internal.", "A", 60, "10.10.2.40");
+  gcp.dns_add_record("lmgcp-mesh-internal", "_Policy.mesh.lmgcp.internal.", "TXT", 300, "v=mtls1;mode=strict");
+
+  let recs = gcp.dns_list_records("lmgcp-mesh-internal");
+  assert_close(float(recs.len()), 3.0, 0.01);
+
+  gcp.dns_delete_record("lmgcp-mesh-internal", "_Policy.mesh.lmgcp.internal.", "TXT");
+  let recs_after = gcp.dns_list_records("lmgcp-mesh-internal");
+  assert_close(float(recs_after.len()), 2.0, 0.01);
+
+  let del = gcp.cleanup_ledger();
+  assert_close(float(del), 1.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("36_dns_split_horizon_microservice_mesh", "build/evidence/live-cost-36_dns_split_horizon_microservice_mesh.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/36_dns_split_horizon_microservice_mesh.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/36_dns_split_horizon_microservice_mesh.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 500, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud DNS Split-Horizon Microservice Discovery Lifecycle", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Zone: lmgcp-mesh-internal (mesh.lmgcp.internal., DNSSEC=on) | 3 records added, TXT pruned, zone torn down", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(50.0, 90.0, 860.0, 365.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn rr_row(y: float, fqdn: string, rtype: string, ttl: string, val: string, state: string, col: string) -> void {
+    scene.rect(75.0, y, 810.0, 75.0, "#0d1117").set_attr("stroke", col);
+    scene.text(95.0, y + 30.0, 14.0, fqdn + "  [" + rtype + "]", "#e6edf3").set_attr("font-weight", "700");
+    scene.text(95.0, y + 54.0, 12.0, "TTL: " + ttl + "s  |  rrdata: " + val, "#8b949e");
+    scene.text(865.0, y + 42.0, 12.5, state, col).set_attr("text-anchor", "end").set_attr("font-weight", "700");
+  }
+
+  rr_row(115.0, "checkout.mesh.lmgcp.internal.", "A",   "60",  "10.10.1.25",          "VERIFIED & CLEANED", "#3fb950");
+  rr_row(210.0, "payments.mesh.lmgcp.internal.", "A",   "60",  "10.10.2.40",          "VERIFIED & CLEANED", "#58a6ff");
+  rr_row(305.0, "_Policy.mesh.lmgcp.internal.",  "TXT", "300", "v=mtls1;mode=strict", "DELETED PRE-TEARDOWN","#d29922");
+
+  scene.render_png("images/36_dns_split_horizon_microservice_mesh.png", 960, 500, 1);
+end _dsl_
+savedsl(draw, "build/examples/36_dns_split_horizon_microservice_mesh_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/36_dns_split_horizon_microservice_mesh_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/36_dns_split_horizon_microservice_mesh.png", "docs/images/36_dns_split_horizon_microservice_mesh.png");
+println("ok 36_dns_split_horizon_microservice_mesh - wrote images/36_dns_split_horizon_microservice_mesh.png");
+println(split(r.stdout, "\n")[0]);

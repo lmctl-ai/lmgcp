@@ -7,11 +7,11 @@
 
 ---
 
-## Visual Gallery (26 Self-Executing `.lms` Cloud Stories)
+## Visual Gallery (40 Self-Executing `.lms` Cloud Stories)
 
-Every image below is generated directly by its `.lms` script in [`examples/`](examples/) against the deterministic in-process GCP REST emulator and rendered via [`lmdraw`](https://github.com/lmctl-ai/lmdraw). Every example measures its own cost using the `RunLedger` price table, enforces a per-example cost cap (default **`$0.05`**, hard ceiling **`$0.25`** per run), and prints `estimated cost: $0.00xx` (or `estimated cost: $0.00` for read-only stories) at the end. See [Cost per Example & Ledger Price Table](#cost-per-example--ledger-price-table) for how estimates are computed (`us-central1` list pricing; prices vary by region and change over time).
+Every image below is generated directly by its `.lms` script in [`examples/`](examples/) against the deterministic in-process GCP REST emulator and rendered via [`lmdraw`](https://github.com/lmctl-ai/lmdraw). Every example measures its own cost using the `RunLedger` price table, enforces a per-example cost cap (default **`$0.05`**, hard ceiling **`$0.25`** per run), and prints `estimated cost: $0.00xx` (or `estimated cost: $0.00` for cost-free read-only stories) at the end. See [Cost per Example & Ledger Price Table](#cost-per-example--ledger-price-table) for how estimates are computed (`us-central1` list pricing; prices vary by region and change over time).
 
-### 1. Multi-Service Estate Inventory & Topology
+### 1. Multi-Service Estate Inventory & Resource Topology
 
 | Estate Inventory Overview (`01`) | Label & Tag Compliance Audit (`02`) |
 |---|---|
@@ -20,6 +20,10 @@ Every image below is generated directly by its `.lms` script in [`examples/`](ex
 | VPC Firewall Security Review (`03`) | Multi-VPC Topology & Dependency Graph (`08`) |
 |---|---|
 | ![VPC Firewall Security Review](docs/images/03_vpc_firewall_security_review.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/03_vpc_firewall_security_review.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). | ![VPC Resource Topology Graph](docs/images/08_vpc_resource_topology_graph.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/08_vpc_resource_topology_graph.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). |
+
+| Compute Persistent Disk & Boot Inventory (`27`) | Multi-Service Dependency & Blast-Radius Graph (`39`) |
+|---|---|
+| ![Compute Disk Snapshot Inventory](docs/images/27_compute_disk_snapshot_inventory.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/27_compute_disk_snapshot_inventory.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). | ![Multi Service Dependency Blast Radius](docs/images/39_multi_service_dependency_blast_radius.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/39_multi_service_dependency_blast_radius.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). |
 
 ### 2. Storage, Messaging, Serverless & Ephemeral Lifecycles
 
@@ -31,6 +35,14 @@ Every image below is generated directly by its `.lms` script in [`examples/`](ex
 |---|---|
 | ![Cloud Run Canary Rollout](docs/images/06_cloud_run_canary_rollout.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/06_cloud_run_canary_rollout.lms`*<br>Running this example costs about **$0.0004** (`estimated cost: $0.0004`, 1 Cloud Run service, 2 min alive, 1 request; estimated from price table, not yet measured live; prices vary by region). | ![Cleanup Sweeper Dry Run](docs/images/07_cleanup_sweeper_dry_run.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/07_cleanup_sweeper_dry_run.lms`*<br>Running this example costs about **$0.0015** (`estimated cost: $0.0015`, 1 `e2-micro` VM + 1 bucket + 1 topic + 1 secret, 5 min alive, 4 requests; estimated from price table, not yet measured live; prices vary by region). |
 
+| GCS Partitioned Object Ingestion & Versioning Lab (`29`) | Pub/Sub Multi-Subscriber Fan-Out Pipeline (`30`) |
+|---|---|
+| ![GCS Object Retention Versioning Lab](docs/images/29_gcs_object_retention_versioning_lab.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/29_gcs_object_retention_versioning_lab.lms`*<br>Running this example costs about **$0.0005** (`estimated cost: $0.0005`, 1 bucket + 4 objects, 2 min alive, 5 requests; estimated from price table, not yet measured live; prices vary by region). | ![Pub/Sub Fanout Attribute Routing](docs/images/30_pubsub_fanout_attribute_routing.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/30_pubsub_fanout_attribute_routing.lms`*<br>Running this example costs about **$0.0008** (`estimated cost: $0.0008`, 2 topics + 2 subs + 4 messages, 2 min alive, 8 requests; estimated from price table, not yet measured live; prices vary by region). |
+
+| Cloud Run Multi-Region Active-Active Serverless (`31`) | Serverless Event-Driven Mesh (`24`) |
+|---|---|
+| ![Cloud Run Multi Region Serverless](docs/images/31_cloud_run_multi_region_serverless.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/31_cloud_run_multi_region_serverless.lms`*<br>Running this example costs about **$0.0008** (`estimated cost: $0.0008`, 2 regional Cloud Run services, 2 min alive, 2 requests; estimated from price table, not yet measured live; prices vary by region). | ![Serverless Event Driven Mesh](docs/images/24_serverless_event_driven_mesh.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/24_serverless_event_driven_mesh.lms`*<br>Running this example costs about **$0.0012** (`estimated cost: $0.0012`, 8 serverless resources across Run/PubSub/GCS/BQ/Secrets, 2 min alive, 8 requests; estimated from price table, not yet measured live; prices vary by region). |
+
 ### 3. Compute, IAM, Databases & Containers Security Posture
 
 | Compute Engine Fleet Rightsizing (`09`) | IAM Service Account Key & Role Audit (`10`) |
@@ -40,6 +52,10 @@ Every image below is generated directly by its `.lms` script in [`examples/`](ex
 | Cloud SQL HA, PITR & SSL Posture (`11`) | GKE CIS Cluster Hardening Matrix (`12`) |
 |---|---|
 | ![Cloud SQL HA Backup Posture](docs/images/11_cloud_sql_ha_backup_posture.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/11_cloud_sql_ha_backup_posture.lms`*<br>Running this example costs about **$0.0027** (`estimated cost: $0.0027`, 1 `db-f1-micro` SQL instance, 10 min alive, 1 request; estimated from price table, not yet measured live; prices vary by region). | ![GKE Cluster Hardening Matrix](docs/images/12_gke_cluster_hardening_matrix.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/12_gke_cluster_hardening_matrix.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). |
+
+| IAM Policy Binding & Blast-Radius Audit (`32`) | Cost-Free CIS Cloud Posture Scorecard (`38`) |
+|---|---|
+| ![IAM Binding Blast Radius Audit](docs/images/32_iam_binding_blast_radius_audit.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/32_iam_binding_blast_radius_audit.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). | ![Cost Free CIS Posture Scorecard](docs/images/38_cost_free_cis_posture_scorecard.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/38_cost_free_cis_posture_scorecard.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). |
 
 ### 4. Secrets, KMS, DNS, BigQuery & Firestore Workflows
 
@@ -51,27 +67,39 @@ Every image below is generated directly by its `.lms` script in [`examples/`](ex
 |---|---|
 | ![Cloud DNS Zone Records](docs/images/15_cloud_dns_zone_records.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/15_cloud_dns_zone_records.lms`*<br>Running this example costs about **$0.0009** (`estimated cost: $0.0009`, 1 DNS zone + 2 record sets, 5 min alive, 3 requests; estimated from price table, not yet measured live; prices vary by region). | ![BigQuery Dataset Partition Audit](docs/images/16_bigquery_dataset_partition_audit.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/16_bigquery_dataset_partition_audit.lms`*<br>Running this example costs about **$0.0003** (`estimated cost: $0.0003`, 1 BQ dataset + 1 partitioned table, 2 min alive, 2 requests; estimated from price table, not yet measured live; prices vary by region). |
 
-| Cloud Firestore Document Workflow (`17`) | Cloud Logging Severity & SIEM Routing (`18`) |
+| Cloud Firestore Document Workflow (`17`) | BigQuery Multi-Table FinOps Mart (`33`) |
 |---|---|
-| ![Firestore Document Workflow](docs/images/17_firestore_document_workflow.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/17_firestore_document_workflow.lms`*<br>Running this example costs about **$0.0002** (`estimated cost: $0.0002`, 2 Firestore documents, 1 min alive, 2 requests; estimated from price table, not yet measured live; prices vary by region). | ![Cloud Logging Sink Routing](docs/images/18_cloud_logging_sink_routing.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/18_cloud_logging_sink_routing.lms`*<br>Running this example costs about **$0.0002** (`estimated cost: $0.0002`, 1 log sink + 1 log entry, 2 min alive, 2 requests; estimated from price table, not yet measured live; prices vary by region). |
+| ![Firestore Document Workflow](docs/images/17_firestore_document_workflow.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/17_firestore_document_workflow.lms`*<br>Running this example costs about **$0.0002** (`estimated cost: $0.0002`, 2 Firestore documents, 1 min alive, 2 requests; estimated from price table, not yet measured live; prices vary by region). | ![BigQuery Multi Table Warehouse Lifecycle](docs/images/33_bigquery_multi_table_warehouse_lifecycle.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/33_bigquery_multi_table_warehouse_lifecycle.lms`*<br>Running this example costs about **$0.0005** (`estimated cost: $0.0005`, 1 BQ dataset + 2 partitioned tables, 2 min alive, 3 requests; estimated from price table, not yet measured live; prices vary by region). |
 
-### 5. Observability, Supply Chain, DR & Safety Guardrails
-
-| Cloud Monitoring P95 Latency & SLO Burn (`19`) | Artifact Registry Supply-Chain Security (`20`) |
+| Firestore Multi-Collection State & Lock Store (`34`) | KMS Multi-KeyRing Envelope Encryption (`35`) |
 |---|---|
-| ![Cloud Monitoring SLO Burn Rate](docs/images/19_cloud_monitoring_slo_burn_rate.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/19_cloud_monitoring_slo_burn_rate.lms`*<br>Running this example costs about **$0.0002** (`estimated cost: $0.0002`, 1 alert policy, 2 min alive, 1 request; estimated from price table, not yet measured live; prices vary by region). | ![Artifact Registry Supply Chain](docs/images/20_artifact_registry_supply_chain.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/20_artifact_registry_supply_chain.lms`*<br>Running this example costs about **$0.0002** (`estimated cost: $0.0002`, 1 Docker repository, 2 min alive, 1 request; estimated from price table, not yet measured live; prices vary by region). |
+| ![Firestore Multi Collection State Store](docs/images/34_firestore_multi_collection_state_store.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/34_firestore_multi_collection_state_store.lms`*<br>Running this example costs about **$0.0003** (`estimated cost: $0.0003`, 3 Firestore documents across 2 collections, 1 min alive, 3 requests; estimated from price table, not yet measured live; prices vary by region). | ![KMS Multi Keyring Envelope Audit](docs/images/35_kms_multi_keyring_envelope_audit.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/35_kms_multi_keyring_envelope_audit.lms`*<br>Running this example costs about **$0.0020** (`estimated cost: $0.0020`, 2 HSM KMS CryptoKeys, 5 min alive, 2 requests; estimated from price table, not yet measured live; prices vary by region). |
 
-| VPC Subnet CIDR, PGA & Flow Logs (`21`) | Full-Stack Ephemeral Sandbox Teardown (`22`) |
+| Cloud DNS Microservice Discovery Mesh (`36`) | VPC Firewall Priority & Zero-Trust mTLS Matrix (`28`) |
 |---|---|
-| ![VPC Subnet CIDR Utilization](docs/images/21_vpc_subnet_cidr_utilization.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/21_vpc_subnet_cidr_utilization.lms`*<br>Running this example costs about **$0.0003** (`estimated cost: $0.0003`, 1 VPC + 1 subnet, 2 min alive, 2 requests; estimated from price table, not yet measured live; prices vary by region). | ![Ephemeral Sandbox Full Stack](docs/images/22_ephemeral_sandbox_full_stack.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/22_ephemeral_sandbox_full_stack.lms`*<br>Running this example costs about **$0.0019** (`estimated cost: $0.0019`, 7 resources across VPC/Subnet/Firewall/VM/GCS/PubSub/Run, 5 min alive, 7 requests; estimated from price table, not yet measured live; prices vary by region). |
+| ![DNS Split Horizon Microservice Mesh](docs/images/36_dns_split_horizon_microservice_mesh.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/36_dns_split_horizon_microservice_mesh.lms`*<br>Running this example costs about **$0.0010** (`estimated cost: $0.0010`, 1 private DNSSEC zone + 3 record sets, 5 min alive, 4 requests; estimated from price table, not yet measured live; prices vary by region). | ![VPC Egress Ingress Matrix](docs/images/28_vpc_egress_ingress_matrix.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/28_vpc_egress_ingress_matrix.lms`*<br>Running this example costs about **$0.0004** (`estimated cost: $0.0004`, 1 VPC + 1 subnet + 1 mTLS firewall rule, 2 min alive, 3 requests; estimated from price table, not yet measured live; prices vary by region). |
 
-| GCS Storage Class Tiering & CMEK (`23`) | Serverless Event-Driven Mesh (`24`) |
-|---|---|
-| ![Storage Class Tiering Analysis](docs/images/23_storage_class_tiering_analysis.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/23_storage_class_tiering_analysis.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). | ![Serverless Event Driven Mesh](docs/images/24_serverless_event_driven_mesh.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/24_serverless_event_driven_mesh.lms`*<br>Running this example costs about **$0.0012** (`estimated cost: $0.0012`, 8 serverless resources across Run/PubSub/GCS/BQ/Secrets, 2 min alive, 8 requests; estimated from price table, not yet measured live; prices vary by region). |
+### 5. Observability, Supply Chain, DR, Cost Ledger & Safety Guardrails
 
-| Multi-Region DR Readiness Scorecard (`25`) | Cloud Safety & Cost Guardrails Verification (`26`) |
+| Cloud Logging Severity & SIEM Routing (`18`) | Cloud Monitoring P95 Latency & SLO Burn (`19`) |
 |---|---|
-| ![Multi Region DR Readiness](docs/images/25_multi_region_dr_readiness.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/25_multi_region_dr_readiness.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). | ![Safety Guardrails Verification](docs/images/26_safety_guardrails_verification.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/26_safety_guardrails_verification.lms`*<br>Running this example costs about **$0.0009** (`estimated cost: $0.0009`, 1 `e2-micro` VM created & deleted + over-cap SQL creation refused at `cap=$0.0020`; estimated from price table, not yet measured live; prices vary by region). |
+| ![Cloud Logging Sink Routing](docs/images/18_cloud_logging_sink_routing.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/18_cloud_logging_sink_routing.lms`*<br>Running this example costs about **$0.0002** (`estimated cost: $0.0002`, 1 log sink + 1 log entry, 2 min alive, 2 requests; estimated from price table, not yet measured live; prices vary by region). | ![Cloud Monitoring SLO Burn Rate](docs/images/19_cloud_monitoring_slo_burn_rate.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/19_cloud_monitoring_slo_burn_rate.lms`*<br>Running this example costs about **$0.0002** (`estimated cost: $0.0002`, 1 alert policy, 2 min alive, 1 request; estimated from price table, not yet measured live; prices vary by region). |
+
+| Artifact Registry Supply-Chain Security (`20`) | VPC Subnet CIDR, PGA & Flow Logs (`21`) |
+|---|---|
+| ![Artifact Registry Supply Chain](docs/images/20_artifact_registry_supply_chain.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/20_artifact_registry_supply_chain.lms`*<br>Running this example costs about **$0.0002** (`estimated cost: $0.0002`, 1 Docker repository, 2 min alive, 1 request; estimated from price table, not yet measured live; prices vary by region). | ![VPC Subnet CIDR Utilization](docs/images/21_vpc_subnet_cidr_utilization.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/21_vpc_subnet_cidr_utilization.lms`*<br>Running this example costs about **$0.0003** (`estimated cost: $0.0003`, 1 VPC + 1 subnet, 2 min alive, 2 requests; estimated from price table, not yet measured live; prices vary by region). |
+
+| Full-Stack Ephemeral Sandbox Teardown (`22`) | GCS Storage Class Tiering & CMEK (`23`) |
+|---|---|
+| ![Ephemeral Sandbox Full Stack](docs/images/22_ephemeral_sandbox_full_stack.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/22_ephemeral_sandbox_full_stack.lms`*<br>Running this example costs about **$0.0019** (`estimated cost: $0.0019`, 7 resources across VPC/Subnet/Firewall/VM/GCS/PubSub/Run, 5 min alive, 7 requests; estimated from price table, not yet measured live; prices vary by region). | ![Storage Class Tiering Analysis](docs/images/23_storage_class_tiering_analysis.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/23_storage_class_tiering_analysis.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). |
+
+| Multi-Region DR Readiness Scorecard (`25`) | Integrated Logging & Monitoring Incident Pipeline (`37`) |
+|---|---|
+| ![Multi Region DR Readiness](docs/images/25_multi_region_dr_readiness.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/25_multi_region_dr_readiness.lms`*<br>Running this example costs about **$0.00** (`estimated cost: $0.00`, read-only; estimated from price table, not yet measured live; prices vary by region). | ![Logging Monitoring Incident Pipeline](docs/images/37_logging_monitoring_incident_pipeline.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/37_logging_monitoring_incident_pipeline.lms`*<br>Running this example costs about **$0.0006** (`estimated cost: $0.0006`, 3 log entries + 1 log sink + 1 alert policy, 2 min alive, 5 requests; estimated from price table, not yet measured live; prices vary by region). |
+
+| Cloud Safety & Cost Guardrails Verification (`26`) | RunLedger Cost Trajectory & Cap Readiness Probe (`40`) |
+|---|---|
+| ![Safety Guardrails Verification](docs/images/26_safety_guardrails_verification.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/26_safety_guardrails_verification.lms`*<br>Running this example costs about **$0.0009** (`estimated cost: $0.0009`, 1 `e2-micro` VM created & deleted + over-cap SQL creation refused at `cap=$0.0020`; estimated from price table, not yet measured live; prices vary by region). | ![Cost Cap Ledger Live Readiness](docs/images/40_cost_cap_ledger_live_readiness.png)<br>*`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/40_cost_cap_ledger_live_readiness.lms`*<br>Running this example costs about **$0.0018** (`estimated cost: $0.0018`, 6 resources across VPC/Subnet/GCS/PubSub/Run/VM + over-cap SQL refused at `cap=$0.0050`; estimated from price table, not yet measured live; prices vary by region). |
 
 ---
 
@@ -138,7 +166,7 @@ go build -o bin/lmgcp ./cmd/lmgcp
 ./bin/lmgcp --dsl-signatures
 ./bin/lmgcp --notices
 
-# Run full offline test suite + all 26 examples (uses in-process fake GCP server)
+# Run full offline test suite + all 40 examples (uses in-process fake GCP server)
 ./test.sh
 
 # Dry-run or execute the orphaned lmgcp-* resource sweeper

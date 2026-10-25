@@ -1,0 +1,55 @@
+# Cost-free read-only dependency fan-out and blast-radius graph analysis across VPCs,
+# subnets, firewalls, Compute VMs, Pub/Sub topics/DLQs, and SIEM log sinks ($0.00).
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let edges = gcp.resource_graph_edges();
+  assert_close(float(edges.len()), 24.0, 0.01);
+
+  let prod_vpc_edges = 0;
+  let i = 0;
+  while (i < edges.len()) {
+    if (str_contains(edges.at(i), "vpc:prod-vpc->")) {
+      prod_vpc_edges = prod_vpc_edges + 1;
+    }
+    i = i + 1;
+  }
+  assert_close(float(prod_vpc_edges), 11.0, 0.01);
+  assert_close(gcp.estimated_cost_usd(), 0.0, 0.00001);
+  let ok_ev = gcp.write_cost_evidence("39_multi_service_dependency_blast_radius", "build/evidence/live-cost-39_multi_service_dependency_blast_radius.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/39_multi_service_dependency_blast_radius.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/39_multi_service_dependency_blast_radius.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Multi-Service Dependency Fan-Out & Blast-Radius Analysis ($0.00)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "26 directed dependency edges analyzed via gcp.resource_graph_edges() | Zero cloud mutations", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 82.0, 880.0, 400.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn hub_box(y: float, hub: string, deg: int, children: string, risk: string, col: string) -> void {
+    scene.rect(60.0, y, 840.0, 62.0, "#0d1117").set_attr("stroke", col);
+    scene.text(80.0, y + 26.0, 14.0, hub + "  (Out-Degree: " + str(deg) + " dependents)", "#e6edf3").set_attr("font-weight", "700");
+    scene.text(80.0, y + 48.0, 12.0, children, "#8b949e");
+    scene.text(880.0, y + 36.0, 12.5, risk, col).set_attr("text-anchor", "end").set_attr("font-weight", "700");
+  }
+
+  hub_box(102.0, "vpc:prod-vpc",                11, "3 Subnets + 4 Firewalls + 4 Production Compute VMs",            "TIER-0 CORE HUB", "#f85149");
+  hub_box(178.0, "vpc:staging-vpc",              4, "1 Subnet + 1 Worker VM + 2 World-Open Firewall Rules",          "ISOLATED STAGING","#d29922");
+  hub_box(254.0, "vpc:dr-vpc",                   4, "1 Subnet + 1 Firewall + 2 DR Standby VMs (us-east1)",           "DR FAILOVER HUB", "#a371f7");
+  hub_box(330.0, "topic:orders-events-v1",       3, "2 Subscriptions (orders-sub-worker, analytics-sub) + 1 DLQ",    "EVENT BACKBONE",  "#58a6ff");
+  hub_box(406.0, "log_sink:prod-All-audit-to-bq",2, "Routes Cloud Audit + Firewall logs -> BigQuery & Archive GCS",  "SIEM COMPLIANCE", "#3fb950");
+
+  scene.render_png("images/39_multi_service_dependency_blast_radius.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/39_multi_service_dependency_blast_radius_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/39_multi_service_dependency_blast_radius_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/39_multi_service_dependency_blast_radius.png", "docs/images/39_multi_service_dependency_blast_radius.png");
+println("ok 39_multi_service_dependency_blast_radius - wrote images/39_multi_service_dependency_blast_radius.png");
+println(split(r.stdout, "\n")[0]);

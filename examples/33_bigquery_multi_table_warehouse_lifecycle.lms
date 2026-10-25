@@ -1,0 +1,60 @@
+# Creates an ephemeral BigQuery FinOps mart dataset (lmgcp_finops_mart) and two time-partitioned
+# tables (lmgcp_daily_sku_spend and lmgcp_anomaly_alerts), verifies schemas, and tears down.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let ds = gcp.bq_create_dataset("lmgcp_finops_mart", "US");
+  assert_close(float(ds.default_expiration_days()), 30.0, 0.01);
+
+  let t1 = gcp.bq_create_table("lmgcp_finops_mart", "lmgcp_daily_sku_spend", "usage_date:DATE,service:STRING,sku:STRING,cost_usd:FLOAT64", "usage_date");
+  let t2 = gcp.bq_create_table("lmgcp_finops_mart", "lmgcp_anomaly_alerts", "detected_at:TIMESTAMP,project:STRING,delta_pct:FLOAT64", "detected_at");
+
+  let g1 = gcp.bq_get_table("lmgcp_finops_mart", "lmgcp_daily_sku_spend");
+  let g2 = gcp.bq_get_table("lmgcp_finops_mart", "lmgcp_anomaly_alerts");
+  if (g1.partition_field() != "usage_date") { assert_close(0.0, 1.0, 0.01); }
+  if (g2.partition_field() != "detected_at") { assert_close(0.0, 1.0, 0.01); }
+
+  let del = gcp.cleanup_ledger();
+  assert_close(float(del), 3.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("33_bigquery_multi_table_warehouse_lifecycle", "build/evidence/live-cost-33_bigquery_multi_table_warehouse_lifecycle.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/33_bigquery_multi_table_warehouse_lifecycle.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/33_bigquery_multi_table_warehouse_lifecycle.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 500, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "BigQuery Multi-Table FinOps Mart & Time-Partitioning Lifecycle", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Dataset: lmgcp_finops_mart (US, 30d default TTL) + 2 DAY-partitioned tables created, verified & torn down in LIFO order", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(50.0, 95.0, 860.0, 110.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(480.0, 132.0, 16.0, "Dataset: lmgcp_finops_mart (Location: US | Default Table Expiration: 30 Days)", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 162.0, 12.5, "Labels: lmgcp_test=run-20261024 | Enforces partition pruning on analytical queries", "#c9d1d9").set_attr("text-anchor", "middle");
+
+  scene.rect(50.0, 235.0, 410.0, 210.0, "#161b22").set_attr("stroke", "#3fb950").set_attr("stroke-width", "2");
+  scene.text(255.0, 272.0, 15.0, "Table 1: lmgcp_daily_sku_spend", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(255.0, 305.0, 12.0, "DAY Partition Field: usage_date", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(255.0, 335.0, 11.5, "Columns: usage_date, service, sku, cost_usd", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(255.0, 395.0, 12.5, "VERIFIED & DELETED", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.rect(500.0, 235.0, 410.0, 210.0, "#161b22").set_attr("stroke", "#a371f7").set_attr("stroke-width", "2");
+  scene.text(705.0, 272.0, 15.0, "Table 2: lmgcp_anomaly_alerts", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(705.0, 305.0, 12.0, "DAY Partition Field: detected_at", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(705.0, 335.0, 11.5, "Columns: detected_at, project, delta_pct", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(705.0, 395.0, 12.5, "VERIFIED & DELETED", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.render_png("images/33_bigquery_multi_table_warehouse_lifecycle.png", 960, 500, 1);
+end _dsl_
+savedsl(draw, "build/examples/33_bigquery_multi_table_warehouse_lifecycle_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/33_bigquery_multi_table_warehouse_lifecycle_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/33_bigquery_multi_table_warehouse_lifecycle.png", "docs/images/33_bigquery_multi_table_warehouse_lifecycle.png");
+println("ok 33_bigquery_multi_table_warehouse_lifecycle - wrote images/33_bigquery_multi_table_warehouse_lifecycle.png");
+println(split(r.stdout, "\n")[0]);

@@ -151,7 +151,7 @@ ok "Go unit tests pass (internal/safety, internal/host)"
 # 10. Verify all examples compile and run
 shopt -s nullglob
 example_files=(examples/*.lms)
-[ "${#example_files[@]}" -ge 25 ] || fail "expected at least 25 examples, found ${#example_files[@]}"
+[ "${#example_files[@]}" -ge 40 ] || fail "expected at least 40 examples, found ${#example_files[@]}"
 for f in "${example_files[@]}"; do
   base="$(basename "$f" .lms)"
   out="$("$LMSCRIPT" "$f" 2>&1)" || { echo "$out" >&2; fail "$f failed"; }

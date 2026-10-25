@@ -1,0 +1,61 @@
+# Audits baseline VPC firewall priorities and provisions an ephemeral zero-trust VPC,
+# regional subnet, and mTLS ingress rule (lmgcp-allow-internal-mtls) with automatic teardown.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let base_fws = gcp.network_list_firewalls();
+  assert_close(float(base_fws.len()), 6.0, 0.01);
+
+  let vpc = gcp.network_create_vpc("lmgcp-zero-trust-vpc", false);
+  let sub = gcp.network_create_subnet("us-central1", "lmgcp-zero-trust-sub", "lmgcp-zero-trust-vpc", "10.88.0.0/24", true);
+  let fw = gcp.network_create_firewall("lmgcp-allow-internal-mtls", "lmgcp-zero-trust-vpc", "INGRESS", 900, "tcp", "8443", "10.88.0.0/24");
+
+  assert_close(float(fw.priority()), 900.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 3.0, 0.01);
+
+  let del = gcp.cleanup_ledger();
+  assert_close(float(del), 3.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("28_vpc_egress_ingress_matrix", "build/evidence/live-cost-28_vpc_egress_ingress_matrix.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/28_vpc_egress_ingress_matrix.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/28_vpc_egress_ingress_matrix.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "VPC Firewall Priority Matrix & Ephemeral Zero-Trust mTLS Rule", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "6 baseline rules audited + ephemeral lmgcp-zero-trust-vpc / subnet / mTLS 8443 firewall verified & cleaned up", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 78.0, 880.0, 425.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn fw_card(y: float, prio: string, name: string, net: string, cidr: string, ports: string, badge: string, col: string) -> void {
+    scene.rect(60.0, y, 840.0, 48.0, "#0d1117").set_attr("stroke", col);
+    scene.text(80.0, y + 30.0, 13.0, "P" + prio, col).set_attr("font-weight", "700");
+    scene.text(145.0, y + 30.0, 13.0, name, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(415.0, y + 30.0, 12.0, net + " | " + cidr + " -> " + ports, "#8b949e");
+    scene.text(880.0, y + 30.0, 12.0, badge, col).set_attr("text-anchor", "end").set_attr("font-weight", "700");
+  }
+
+  fw_card(96.0,  "100",  "prod-deny-known-bad-egress", "prod-vpc",            "198.51.100.0/24", "ALL (DENY)",   "EGRESS DENY",     "#3fb950");
+  fw_card(156.0, "900",  "lmgcp-allow-internal-mtls",  "lmgcp-zero-trust-vpc","10.88.0.0/24",    "tcp:8443",     "EPHEMERAL PASS",  "#58a6ff");
+  fw_card(216.0, "1000", "prod-allow-https-lb",        "prod-vpc",            "130.211.0.0/22",  "tcp:443,8443", "GLB HEALTH OK",   "#3fb950");
+  fw_card(276.0, "1000", "prod-allow-internal-mesh",   "prod-vpc",            "10.10.0.0/16",    "tcp:8080,9090","INTERNAL MESH",   "#3fb950");
+  fw_card(336.0, "1000", "dr-allow-replication",       "dr-vpc",              "10.10.0.0/16",    "tcp:5432",     "DR CROSS-VPC",    "#a371f7");
+  fw_card(396.0, "1000", "staging-open-ssh-world",     "staging-vpc",         "0.0.0.0/0",       "tcp:22,3389",  "HIGH RISK (SSH)", "#f85149");
+  fw_card(450.0, "65534","legacy-open-postgres-world", "staging-vpc",         "0.0.0.0/0",       "tcp:5432",     "DISABLED RULE",   "#d29922");
+
+  scene.render_png("images/28_vpc_egress_ingress_matrix.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/28_vpc_egress_ingress_matrix_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/28_vpc_egress_ingress_matrix_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/28_vpc_egress_ingress_matrix.png", "docs/images/28_vpc_egress_ingress_matrix.png");
+println("ok 28_vpc_egress_ingress_matrix - wrote images/28_vpc_egress_ingress_matrix.png");
+println(split(r.stdout, "\n")[0]);

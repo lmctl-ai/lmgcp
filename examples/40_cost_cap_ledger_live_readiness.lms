@@ -1,0 +1,80 @@
+# End-to-end cost-ledger and per-example cap readiness probe: provisions 6 ephemeral resources,
+# tracks cumulative USD estimate at each step, enforces a tight cost cap refusal, and cleans up.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  gcp.set_run_id("cost-readiness-40");
+
+  let vpc = gcp.network_create_vpc("lmgcp-probe-vpc", false);
+  let c1 = gcp.estimated_cost_usd();
+
+  let sub = gcp.network_create_subnet("us-central1", "lmgcp-probe-sub", "lmgcp-probe-vpc", "10.99.0.0/24", true);
+  let c2 = gcp.estimated_cost_usd();
+
+  let bkt = gcp.storage_create_bucket("lmgcp-probe-bkt", "US-CENTRAL1", "STANDARD");
+  let c3 = gcp.estimated_cost_usd();
+
+  let top = gcp.pubsub_create_topic("lmgcp-probe-topic");
+  let c4 = gcp.estimated_cost_usd();
+
+  let svc = gcp.run_deploy_service("us-central1", "lmgcp-probe-run", "us-central1-docker.pkg.dev/demo/probe:v1", 1000, 512, 5);
+  let c5 = gcp.estimated_cost_usd();
+
+  let vm = gcp.compute_create_instance("us-central1-a", "lmgcp-probe-vm", "e2-micro", "debian-12");
+  let c6 = gcp.estimated_cost_usd();
+
+  if (c6 <= c5 || c5 <= c4 || c4 <= c3) { assert_close(0.0, 1.0, 0.01); }
+
+  # Tighten cap to $0.0050 so a db-custom-1-3840 SQL instance ($0.0105) is refused pre-flight
+  gcp.set_cost_cap_usd(0.0050);
+  let blocked_sql = gcp.sql_create_instance("lmgcp-probe-blocked-sql", "POSTGRES_15", "db-custom-1-3840", "us-central1", false);
+  if (blocked_sql.state() != "" || !str_contains(gcp.last_error(), "cost cap exceeded")) {
+    assert_close(0.0, 1.0, 0.01);
+  }
+
+  let del = gcp.cleanup_ledger();
+  assert_close(float(del), 6.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+
+  let ok_ev = gcp.write_cost_evidence("40_cost_cap_ledger_live_readiness", "build/evidence/live-cost-40_cost_cap_ledger_live_readiness.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/40_cost_cap_ledger_live_readiness.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/40_cost_cap_ledger_live_readiness.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "RunLedger Cumulative Cost Trajectory & Cap Enforcement Probe", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "6 resources provisioned ($0.0018 total) -> SQL instance ($0.0105) refused at $0.0050 cap -> 0 leftovers after cleanup", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 80.0, 880.0, 420.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn step_row(y: float, step: string, item: string, cum: string, w: float, status: string, col: string) -> void {
+    scene.text(70.0, y + 22.0, 12.5, step, "#8b949e").set_attr("font-weight", "700");
+    scene.text(145.0, y + 22.0, 13.0, item, "#e6edf3").set_attr("font-weight", "600");
+    scene.rect(430.0, y + 4.0, w, 24.0, col);
+    scene.text(440.0 + w, y + 21.0, 12.0, cum, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(890.0, y + 21.0, 12.0, status, col).set_attr("text-anchor", "end").set_attr("font-weight", "700");
+  }
+
+  step_row(102.0, "Step 1", "lmgcp-probe-vpc (VPC)",          "$0.0001", 25.0,  "CHARGED & CREATED", "#3fb950");
+  step_row(152.0, "Step 2", "lmgcp-probe-sub (Subnet)",       "$0.0003", 50.0,  "CHARGED & CREATED", "#3fb950");
+  step_row(202.0, "Step 3", "lmgcp-probe-bkt (GCS Bucket)",   "$0.0004", 75.0,  "CHARGED & CREATED", "#3fb950");
+  step_row(252.0, "Step 4", "lmgcp-probe-topic (Pub/Sub)",    "$0.0005", 100.0, "CHARGED & CREATED", "#3fb950");
+  step_row(302.0, "Step 5", "lmgcp-probe-run (Cloud Run v2)", "$0.0009", 150.0, "CHARGED & CREATED", "#58a6ff");
+  step_row(352.0, "Step 6", "lmgcp-probe-vm (e2-micro VM)",   "$0.0018", 240.0, "CHARGED & CREATED", "#58a6ff");
+  step_row(408.0, "Step 7", "lmgcp-probe-blocked-sql (+$0.0105)", "WOULD HIT $0.0123 > $0.0050 CAP", 310.0, "REFUSED PRE-FLIGHT", "#f85149");
+
+  scene.text(480.0, 476.0, 13.0, "Teardown: cleanup_ledger() deleted 6 / 6 created resources | leftover_count == 0 | Final spend: $0.0018", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.render_png("images/40_cost_cap_ledger_live_readiness.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/40_cost_cap_ledger_live_readiness_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/40_cost_cap_ledger_live_readiness_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/40_cost_cap_ledger_live_readiness.png", "docs/images/40_cost_cap_ledger_live_readiness.png");
+println("ok 40_cost_cap_ledger_live_readiness - wrote images/40_cost_cap_ledger_live_readiness.png");
+println(split(r.stdout, "\n")[0]);

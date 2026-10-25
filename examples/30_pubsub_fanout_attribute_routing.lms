@@ -1,0 +1,81 @@
+# Builds a multi-subscriber Pub/Sub fan-out pipeline (lmgcp-orders-stream -> billing + warehouse
+# subscriptions + DLQ), publishes 4 attributed messages, pulls from both subscribers, and cleans up.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let top = gcp.pubsub_create_topic("lmgcp-orders-stream");
+  let dlq = gcp.pubsub_create_topic("lmgcp-orders-dlq");
+  let sub_bill = gcp.pubsub_create_subscription("lmgcp-orders-billing-sub", "lmgcp-orders-stream", 30, "lmgcp-orders-dlq");
+  let sub_wh = gcp.pubsub_create_subscription("lmgcp-orders-warehouse-sub", "lmgcp-orders-stream", 60, "lmgcp-orders-dlq");
+
+  let attrs = str_map();
+  attrs.set("region", "us-central1");
+  attrs.set("schema", "orders.v2");
+
+  gcp.pubsub_publish("lmgcp-orders-stream", "order_id=9001,amount=49.99", attrs);
+  gcp.pubsub_publish("lmgcp-orders-stream", "order_id=9002,amount=129.00", attrs);
+  gcp.pubsub_publish("lmgcp-orders-stream", "order_id=9003,amount=19.50", attrs);
+  gcp.pubsub_publish("lmgcp-orders-stream", "order_id=9004,amount=299.00", attrs);
+
+  let t_info = gcp.pubsub_get_topic("lmgcp-orders-stream");
+  assert_close(float(t_info.published_count()), 4.0, 0.01);
+
+  let m_bill = gcp.pubsub_pull("lmgcp-orders-billing-sub", 10);
+  let m_wh = gcp.pubsub_pull("lmgcp-orders-warehouse-sub", 10);
+  assert_close(float(m_bill.len()), 4.0, 0.01);
+  assert_close(float(m_wh.len()), 4.0, 0.01);
+
+  let del = gcp.cleanup_ledger();
+  assert_close(float(del), 4.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("30_pubsub_fanout_attribute_routing", "build/evidence/live-cost-30_pubsub_fanout_attribute_routing.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/30_pubsub_fanout_attribute_routing.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/30_pubsub_fanout_attribute_routing.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Pub/Sub Multi-Subscription Fan-Out & Attribute Routing Pipeline", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "4 events published once to lmgcp-orders-stream -> fanned out to Billing (4 msgs) & Warehouse (4 msgs) subscribers", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(50.0, 185.0, 240.0, 130.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(170.0, 225.0, 15.0, "lmgcp-orders-stream", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(170.0, 252.0, 12.0, "4 Published Events (orders.v2)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(170.0, 278.0, 11.5, "Retention: 7 days (604,800s)", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.line(290.0, 230.0, 390.0, 155.0, "#3fb950", 2.5);
+  scene.line(290.0, 270.0, 390.0, 345.0, "#a371f7", 2.5);
+
+  scene.rect(390.0, 100.0, 270.0, 115.0, "#161b22").set_attr("stroke", "#3fb950").set_attr("stroke-width", "2");
+  scene.text(525.0, 135.0, 14.0, "lmgcp-orders-billing-sub", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(525.0, 162.0, 12.0, "Pulled: 4 / 4 messages (ack=30s)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(525.0, 186.0, 11.5, "Real-time ledger settlement", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(390.0, 285.0, 270.0, 115.0, "#161b22").set_attr("stroke", "#a371f7").set_attr("stroke-width", "2");
+  scene.text(525.0, 320.0, 14.0, "lmgcp-orders-warehouse-sub", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(525.0, 347.0, 12.0, "Pulled: 4 / 4 messages (ack=60s)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(525.0, 371.0, 11.5, "BigQuery analytical batch sink", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.line(660.0, 155.0, 725.0, 230.0, "#d29922", 2.0);
+  scene.line(660.0, 345.0, 725.0, 270.0, "#d29922", 2.0);
+
+  scene.rect(725.0, 195.0, 190.0, 110.0, "#161b22").set_attr("stroke", "#d29922").set_attr("stroke-width", "2");
+  scene.text(820.0, 235.0, 14.0, "lmgcp-orders-dlq", "#d29922").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(820.0, 260.0, 11.5, "MaxAttempts: 5", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(820.0, 282.0, 11.5, "Poison-pill quarantine", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.render_png("images/30_pubsub_fanout_attribute_routing.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/30_pubsub_fanout_attribute_routing_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/30_pubsub_fanout_attribute_routing_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/30_pubsub_fanout_attribute_routing.png", "docs/images/30_pubsub_fanout_attribute_routing.png");
+println("ok 30_pubsub_fanout_attribute_routing - wrote images/30_pubsub_fanout_attribute_routing.png");
+println(split(r.stdout, "\n")[0]);

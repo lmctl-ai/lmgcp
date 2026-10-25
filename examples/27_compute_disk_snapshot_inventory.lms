@@ -1,0 +1,62 @@
+# Cost-free read-only audit of Compute Engine persistent disks, attached boot volumes,
+# vCPU-to-storage ratios, and deletion protection across all zones (estimated cost: $0.00).
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let disks = gcp.compute_list_disks("all");
+  let vms = gcp.compute_list_instances("all");
+  assert_close(float(disks.len()), 7.0, 0.01);
+  assert_close(float(vms.len()), 7.0, 0.01);
+
+  let gw1 = gcp.compute_get_instance("us-central1-a", "prod-api-gw-01");
+  let gw2 = gcp.compute_get_instance("us-central1-b", "prod-api-gw-02");
+  let wrk = gcp.compute_get_instance("us-central1-a", "prod-worker-pool-01");
+  let cch = gcp.compute_get_instance("us-central1-c", "prod-cache-node-01");
+  let stg = gcp.compute_get_instance("us-central1-a", "staging-test-runner-01");
+  let etl = gcp.compute_get_instance("us-west1-a", "analytics-etl-node-01");
+  let dr  = gcp.compute_get_instance("us-east1-b", "dr-standby-api-01");
+  let total_gb = gw1.disk_gb() + gw2.disk_gb() + wrk.disk_gb() + cch.disk_gb() + stg.disk_gb() + etl.disk_gb() + dr.disk_gb();
+  assert_close(float(total_gb), 520.0, 0.01);
+  assert_close(gcp.estimated_cost_usd(), 0.0, 0.00001);
+  let ok_ev = gcp.write_cost_evidence("27_compute_disk_snapshot_inventory", "build/evidence/live-cost-27_compute_disk_snapshot_inventory.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/27_compute_disk_snapshot_inventory.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/27_compute_disk_snapshot_inventory.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Compute Persistent Disk & Boot Volume Inventory (850 GB Total)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Cost-free read-only inspection across us-central1-a, us-central1-b, and us-east1-b | 5/7 VMs deletion-protected", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 78.0, 880.0, 425.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn disk_row(y: float, vm: string, zone: string, shape: string, gb: int, prot: string, col: string) -> void {
+    scene.rect(60.0, y, 840.0, 46.0, "#0d1117").set_attr("stroke", "#30363d");
+    scene.text(78.0, y + 28.0, 13.0, vm, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(280.0, y + 28.0, 12.0, zone + "  (" + shape + ")", "#8b949e");
+    let w = float(gb) * 1.1;
+    scene.rect(490.0, y + 12.0, w, 22.0, col);
+    scene.text(500.0 + w, y + 28.0, 12.0, str(gb) + " GB", "#e6edf3").set_attr("font-weight", "600");
+    scene.text(880.0, y + 28.0, 11.5, prot, col).set_attr("text-anchor", "end").set_attr("font-weight", "700");
+  }
+
+  disk_row(95.0,  "prod-db-replica-01",   "us-central1-b", "n2-highmem-4",  250, "PROTECTED",   "#3fb950");
+  disk_row(151.0, "prod-etl-runner-01",   "us-central1-a", "n2-standard-8", 200, "PROTECTED",   "#3fb950");
+  disk_row(207.0, "prod-api-gw-01",       "us-central1-a", "e2-standard-4", 100, "PROTECTED",   "#58a6ff");
+  disk_row(263.0, "prod-api-gw-02",       "us-central1-b", "e2-standard-4", 100, "PROTECTED",   "#58a6ff");
+  disk_row(319.0, "dr-standby-gw-01",     "us-east1-b",    "e2-standard-2", 80,  "PROTECTED",   "#a371f7");
+  disk_row(375.0, "staging-worker-01",    "us-central1-a", "e2-medium",     50,  "UNPROTECTED", "#d29922");
+  disk_row(431.0, "dev-Experiment-untagged","us-east1-b",  "e2-small",      70,  "UNPROTECTED", "#f85149");
+
+  scene.render_png("images/27_compute_disk_snapshot_inventory.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/27_compute_disk_snapshot_inventory_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/27_compute_disk_snapshot_inventory_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/27_compute_disk_snapshot_inventory.png", "docs/images/27_compute_disk_snapshot_inventory.png");
+println("ok 27_compute_disk_snapshot_inventory - wrote images/27_compute_disk_snapshot_inventory.png");
+println(split(r.stdout, "\n")[0]);

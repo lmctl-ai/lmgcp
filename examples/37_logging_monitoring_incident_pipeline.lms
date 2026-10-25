@@ -1,0 +1,66 @@
+# End-to-end observability pipeline combining Cloud Monitoring metric time series, structured
+# Cloud Logging writes (with automatic secret redaction), SIEM log sink, and SLO alert policy.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let lat = gcp.monitoring_query_series("run.googleapis.com/request_latencies_p95_ms", 6);
+  let cpu = gcp.monitoring_query_series("cloudsql.googleapis.com/database/cpu/utilization", 6);
+  assert_close(float(lat.len()), 6.0, 0.01);
+  assert_close(float(cpu.len()), 6.0, 0.01);
+
+  let lbl = str_map();
+  lbl.set("service", "checkout-api");
+  gcp.logging_write_entry("lmgcp-incident-log", "INFO", "request completed in 42ms", lbl);
+  gcp.logging_write_entry("lmgcp-incident-log", "WARNING", "latency spike 162ms token=ya29.incidentSecret99", lbl);
+  gcp.logging_write_entry("lmgcp-incident-log", "ERROR", "upstream timeout after 150ms", lbl);
+
+  let sink = gcp.logging_create_sink("lmgcp-incident-sink", "bigquery.googleapis.com/projects/gcp-proj/datasets/sec_audit_logs", "severity>=WARNING");
+  let pol = gcp.monitoring_create_alert_policy("lmgcp-incident-slo-alert", "run.googleapis.com/request_latencies_p95_ms", 150.0, 300);
+  assert_close(pol.threshold(), 150.0, 0.01);
+
+  let del = gcp.cleanup_ledger();
+  assert_close(float(del), 2.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("37_logging_monitoring_incident_pipeline", "build/evidence/live-cost-37_logging_monitoring_incident_pipeline.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/37_logging_monitoring_incident_pipeline.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/37_logging_monitoring_incident_pipeline.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud Logging & Monitoring Incident Detection Pipeline", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Correlates P95 latency series + Cloud SQL CPU + redacted structured logs -> SIEM sink & SLO alert policy", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(45.0, 95.0, 270.0, 360.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(180.0, 132.0, 15.0, "1. Metric Series Query", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(180.0, 170.0, 12.0, "Run P95 peak: 162.4 ms", "#f85149").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(180.0, 200.0, 12.0, "SQL CPU peak: 64.0%", "#d29922").set_attr("text-anchor", "middle");
+  scene.text(180.0, 240.0, 11.5, "6 time-series windows", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(345.0, 95.0, 270.0, 360.0, "#161b22").set_attr("stroke", "#d29922").set_attr("stroke-width", "2");
+  scene.text(480.0, 132.0, 15.0, "2. Structured Log Stream", "#d29922").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 170.0, 12.0, "lmgcp-incident-log (3 entries)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(480.0, 200.0, 11.5, "INFO / WARNING / ERROR", "#c9d1d9").set_attr("text-anchor", "middle");
+  scene.text(480.0, 235.0, 11.5, "ya29.incidentSecret99 -> REDACTED", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.rect(645.0, 95.0, 270.0, 360.0, "#161b22").set_attr("stroke", "#3fb950").set_attr("stroke-width", "2");
+  scene.text(780.0, 132.0, 15.0, "3. Sink & Alert Routing", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(780.0, 170.0, 12.0, "Sink: lmgcp-incident-sink", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(780.0, 200.0, 12.0, "Alert: lmgcp-incident-slo-alert", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(780.0, 235.0, 11.5, "Both torn down via cleanup_ledger()", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.render_png("images/37_logging_monitoring_incident_pipeline.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/37_logging_monitoring_incident_pipeline_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/37_logging_monitoring_incident_pipeline_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/37_logging_monitoring_incident_pipeline.png", "docs/images/37_logging_monitoring_incident_pipeline.png");
+println("ok 37_logging_monitoring_incident_pipeline - wrote images/37_logging_monitoring_incident_pipeline.png");
+println(split(r.stdout, "\n")[0]);

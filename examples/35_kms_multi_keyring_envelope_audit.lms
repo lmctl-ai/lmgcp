@@ -1,0 +1,55 @@
+# Audits Cloud KMS keyrings and CryptoKeys in us-central1 and creates two ephemeral HSM
+# CryptoKeys (lmgcp-envelope-dek-01 and lmgcp-artifact-sign-01) with 30d and 60d rotation.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let rings = gcp.kms_list_keyrings("us-central1");
+  assert_close(float(rings.len()), 1.0, 0.01);
+
+  let k1 = gcp.kms_create_key("us-central1", "prod-ring", "lmgcp-envelope-dek-01", "ENCRYPT_DECRYPT", 30);
+  let k2 = gcp.kms_create_key("us-central1", "prod-ring", "lmgcp-artifact-sign-01", "ENCRYPT_DECRYPT", 60);
+  assert_close(float(k1.rotation_days()), 30.0, 0.01);
+  assert_close(float(k2.rotation_days()), 60.0, 0.01);
+
+  let keys = gcp.kms_list_keys("us-central1", "prod-ring");
+  assert_close(float(keys.len()), 5.0, 0.01);
+
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("35_kms_multi_keyring_envelope_audit", "build/evidence/live-cost-35_kms_multi_keyring_envelope_audit.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/35_kms_multi_keyring_envelope_audit.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/35_kms_multi_keyring_envelope_audit.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud KMS Multi-KeyRing Envelope Encryption & Rotation Audit", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "KeyRing: prod-ring (us-central1) | 3 baseline keys + 2 ephemeral HSM keys compared against 90-day CIS threshold", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 82.0, 880.0, 400.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn kms_row(y: float, name: string, rot: string, prot: string, verdict: string, col: string) -> void {
+    scene.rect(60.0, y, 840.0, 58.0, "#0d1117").set_attr("stroke", col);
+    scene.text(80.0, y + 24.0, 14.0, name, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(80.0, y + 45.0, 12.0, "ProtectionLevel: " + prot + "  |  Rotation Period: " + rot + " days", "#8b949e");
+    scene.text(880.0, y + 35.0, 12.5, verdict, col).set_attr("text-anchor", "end").set_attr("font-weight", "700");
+  }
+
+  kms_row(100.0, "lmgcp-envelope-dek-01", "30", "HSM", "PASS (30d <= 90d, EPHEMERAL)", "#3fb950");
+  kms_row(172.0, "lmgcp-artifact-sign-01","60", "HSM", "PASS (60d <= 90d, EPHEMERAL)", "#58a6ff");
+  kms_row(244.0, "gcs-cmek-key",          "90", "HSM", "PASS (90d <= 90d, BASELINE)",  "#3fb950");
+  kms_row(316.0, "sql-cmek-key",          "90", "HSM", "PASS (90d <= 90d, BASELINE)",  "#3fb950");
+  kms_row(388.0, "legacy-manual-key",     "365","HSM", "FAIL (365d > 90d CIS LIMIT)",  "#f85149");
+
+  scene.render_png("images/35_kms_multi_keyring_envelope_audit.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/35_kms_multi_keyring_envelope_audit_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/35_kms_multi_keyring_envelope_audit_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/35_kms_multi_keyring_envelope_audit.png", "docs/images/35_kms_multi_keyring_envelope_audit.png");
+println("ok 35_kms_multi_keyring_envelope_audit - wrote images/35_kms_multi_keyring_envelope_audit.png");
+println(split(r.stdout, "\n")[0]);

@@ -1,0 +1,75 @@
+# Exercises Cloud Firestore across multiple collections (baseline feature_flags + ephemeral
+# lmgcp_workflows and lmgcp_locks), verifying secret redaction and document cleanup.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let base_docs = gcp.firestore_list_docs("feature_flags");
+  assert_close(float(base_docs.len()), 2.0, 0.01);
+
+  let wf1 = str_map();
+  wf1.set("stage", "extract");
+  wf1.set("status", "COMPLETED");
+  wf1.set("auth_header", "Bearer ya29.superSecretWorkflowToken");
+  gcp.firestore_put_doc("lmgcp_workflows", "wf-101", wf1);
+
+  let wf2 = str_map();
+  wf2.set("stage", "transform");
+  wf2.set("status", "RUNNING");
+  gcp.firestore_put_doc("lmgcp_workflows", "wf-102", wf2);
+
+  let lck = str_map();
+  lck.set("holder", "worker-usc1-01");
+  lck.set("ttl_sec", "60");
+  gcp.firestore_put_doc("lmgcp_locks", "lock-shard-0", lck);
+
+  let got1 = gcp.firestore_get_doc("lmgcp_workflows", "wf-101");
+  if (!str_contains(got1.get("auth_header"), "ya29.[REDACTED]")) { assert_close(0.0, 1.0, 0.01); }
+
+  gcp.firestore_delete_doc("lmgcp_workflows", "wf-101");
+  gcp.firestore_delete_doc("lmgcp_workflows", "wf-102");
+  gcp.firestore_delete_doc("lmgcp_locks", "lock-shard-0");
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+
+  let est_cost = gcp.estimated_cost_usd();
+  if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
+  let ok_ev = gcp.write_cost_evidence("34_firestore_multi_collection_state_store", "build/evidence/live-cost-34_firestore_multi_collection_state_store.json");
+  print(gcp.cost_report());
+end _dsl_
+savedsl(p, "build/examples/34_firestore_multi_collection_state_store.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/34_firestore_multi_collection_state_store.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 500, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud Firestore Multi-Collection Workflow & Distributed Lock Store", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Baseline feature_flags inspected + ephemeral lmgcp_workflows & lmgcp_locks documents verified, redacted & deleted", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(45.0, 95.0, 275.0, 350.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(182.0, 130.0, 15.0, "Collection: feature_flags", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(182.0, 165.0, 12.0, "doc: checkout_v2 (enabled=true)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(182.0, 195.0, 12.0, "doc: ai_search (rollout=25%)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(182.0, 395.0, 12.0, "READ-ONLY BASELINE", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.rect(342.0, 95.0, 275.0, 350.0, "#161b22").set_attr("stroke", "#3fb950").set_attr("stroke-width", "2");
+  scene.text(480.0, 130.0, 15.0, "Collection: lmgcp_workflows", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 165.0, 12.0, "doc: wf-101 (COMPLETED)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(480.0, 195.0, 11.5, "auth_header -> ya29.[REDACTED]", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(480.0, 225.0, 12.0, "doc: wf-102 (RUNNING)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(480.0, 395.0, 12.0, "CREATED & CLEANED", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.rect(640.0, 95.0, 275.0, 350.0, "#161b22").set_attr("stroke", "#a371f7").set_attr("stroke-width", "2");
+  scene.text(777.0, 130.0, 15.0, "Collection: lmgcp_locks", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(777.0, 165.0, 12.0, "doc: lock-shard-0", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(777.0, 195.0, 11.5, "holder=worker-usc1-01 (ttl=60s)", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(777.0, 395.0, 12.0, "CREATED & CLEANED", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.render_png("images/34_firestore_multi_collection_state_store.png", 960, 500, 1);
+end _dsl_
+savedsl(draw, "build/examples/34_firestore_multi_collection_state_store_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/34_firestore_multi_collection_state_store_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/34_firestore_multi_collection_state_store.png", "docs/images/34_firestore_multi_collection_state_store.png");
+println("ok 34_firestore_multi_collection_state_store - wrote images/34_firestore_multi_collection_state_store.png");
+println(split(r.stdout, "\n")[0]);
