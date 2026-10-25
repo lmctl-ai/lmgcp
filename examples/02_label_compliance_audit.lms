@@ -1,0 +1,65 @@
+# FinOps & governance mandatory label compliance audit (env, owner, cost_center, data_class)
+# across Compute Engine, Cloud Storage, Cloud Run, Cloud SQL, GKE, and Secret Manager.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let req = str_list().add("env").add("owner").add("cost_center").add("data_class");
+  let rep = gcp.audit_label_compliance(req);
+
+  let comp_pct = str_to_int(rep.get("compute_pct"));
+  let bkt_pct = str_to_int(rep.get("storage_pct"));
+  let run_pct = str_to_int(rep.get("cloud_run_pct"));
+  let sql_pct = str_to_int(rep.get("sql_pct"));
+  let gke_pct = str_to_int(rep.get("gke_pct"));
+  let sec_pct = str_to_int(rep.get("secrets_pct"));
+  let all_pct = str_to_int(rep.get("overall_pct"));
+
+  assert_close(float(comp_pct), 71.0, 1.0);
+  assert_close(float(bkt_pct), 80.0, 1.0);
+  assert_close(float(run_pct), 100.0, 1.0);
+  assert_close(float(sql_pct), 66.0, 1.0);
+  assert_close(float(gke_pct), 66.0, 1.0);
+  assert_close(float(sec_pct), 80.0, 1.0);
+  assert_close(float(all_pct), 76.0, 1.0);
+end _dsl_
+savedsl(p, "build/examples/02_label_compliance_audit.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/02_label_compliance_audit.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "FinOps Mandatory Label Compliance Audit (env, owner, cost_center, data_class)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Overall Estate Compliance: 76% (20 / 26 resources compliant across 6 GCP services)", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 80.0, 880.0, 420.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn comp_row(y: float, svc: string, pct: int, ratio: string, missing: string) -> void {
+    scene.text(210.0, y + 20.0, 13.5, svc, "#e6edf3").set_attr("text-anchor", "end").set_attr("font-weight", "600");
+    scene.rect(225.0, y, 420.0, 28.0, "#21262d").set_attr("stroke", "#30363d");
+    let w = float(pct) * 4.2;
+    let col = "#3fb950";
+    if (pct < 80) {
+      col = "#d29922";
+    }
+    scene.rect(225.0, y, w, 28.0, col);
+    scene.text(235.0, y + 19.0, 12.5, str(pct) + "%  (" + ratio + ")", "#0d1117").set_attr("font-weight", "700");
+    scene.text(660.0, y + 19.0, 12.0, missing, "#8b949e");
+  }
+
+  comp_row(110.0, "Cloud Run Services",  100, "3/3", "All services fully labelled");
+  comp_row(168.0, "Cloud Storage (GCS)", 80,  "4/5", "staging-build-artifacts-c1 missing cost_center");
+  comp_row(226.0, "Secret Manager Meta", 80,  "4/5", "staging-oauth-client-meta missing cost_center");
+  comp_row(284.0, "Compute Engine VMs",  71,  "5/7", "prod-cache-node-01 & staging-test-runner-01");
+  comp_row(342.0, "Cloud SQL Instances", 66,  "2/3", "staging-reporting-mysql8 missing cost_center");
+  comp_row(400.0, "GKE K8s Clusters",    66,  "2/3", "staging-standard-k8s missing cost_center");
+
+  scene.text(480.0, 474.0, 12.5, "Policy: created lmgcp_ resources auto-attach lmgcp_test=<run-id> and lmgcp_created_at=<epoch>", "#58a6ff").set_attr("text-anchor", "middle");
+  scene.render_png("images/02_label_compliance_audit.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/02_label_compliance_audit_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/02_label_compliance_audit_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/02_label_compliance_audit.png", "docs/images/02_label_compliance_audit.png");
+println("ok 02_label_compliance_audit - wrote images/02_label_compliance_audit.png");

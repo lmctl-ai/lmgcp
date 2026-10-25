@@ -1,0 +1,75 @@
+# End-to-end serverless event-driven mesh (GCS -> Pub/Sub -> Cloud Run -> BigQuery): provisions
+# all 6 ephemeral components, exercises data flow, and tears down via cleanup_ledger().
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  gcp.set_run_id("serverless-mesh-24");
+
+  let bkt = gcp.storage_create_bucket("lmgcp-mesh-ingest", "US-CENTRAL1", "STANDARD");
+  let ok_put = gcp.storage_put_object("lmgcp-mesh-ingest", "events/batch-01.json", "{\"batch\":1,\"records\":250}", "application/json");
+  check(ok_put);
+  let sz = gcp.storage_object_size("lmgcp-mesh-ingest", "events/batch-01.json");
+  assert_close(float(sz), 25.0, 0.01);
+
+  let top = gcp.pubsub_create_topic("lmgcp-mesh-topic");
+  let sub = gcp.pubsub_create_subscription("lmgcp-mesh-sub", "lmgcp-mesh-topic", 30, "");
+  let attrs = str_map().set("bucket", "lmgcp-mesh-ingest").set("object", "events/batch-01.json");
+  let mid = gcp.pubsub_publish("lmgcp-mesh-topic", "{\"event\":\"OBJECT_FINALIZE\",\"records\":250}", attrs);
+  let pulled = gcp.pubsub_pull("lmgcp-mesh-sub", 5);
+  assert_close(float(pulled.len()), 1.0, 0.01);
+
+  let svc = gcp.run_deploy_service("us-central1", "lmgcp-mesh-processor", "us-central1-docker.pkg.dev/demo/mesh-proc:v1", 1000, 512, 4);
+  assert_close(float(svc.max_instances()), 4.0, 0.01);
+
+  let ds = gcp.bq_create_dataset("lmgcp_mesh_dw", "US");
+  let tbl = gcp.bq_create_table("lmgcp_mesh_dw", "lmgcp_ingested_events", "batch:INT64,records:INT64,ingest_ts:TIMESTAMP", "ingest_ts");
+  check(tbl.partition_field() == "ingest_ts");
+
+  let cleaned = gcp.cleanup_ledger();
+  assert_close(float(cleaned), 6.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/24_serverless_event_driven_mesh.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/24_serverless_event_driven_mesh.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Serverless Event-Driven Mesh (GCS -> Pub/Sub -> Cloud Run -> BigQuery)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "6 Ephemeral Resources Provisioned, Exercised End-to-End & Torn Down via cleanup_ledger()", "#8b949e").set_attr("text-anchor", "middle");
+
+  fn stage_box(x: float, step: string, name: string, detail1: string, detail2: string, col: string) -> void {
+    scene.rect(x, 110.0, 195.0, 190.0, "#161b22").set_attr("stroke", col).set_attr("stroke-width", "2");
+    scene.text(x + 97.5, 144.0, 14.5, step, col).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+    scene.text(x + 97.5, 174.0, 13.0, name, "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+    scene.text(x + 97.5, 206.0, 11.5, detail1, "#c9d1d9").set_attr("text-anchor", "middle");
+    scene.text(x + 97.5, 232.0, 11.5, detail2, "#8b949e").set_attr("text-anchor", "middle");
+    scene.rect(x + 22.0, 252.0, 151.0, 30.0, "#0d1117").set_attr("stroke", col);
+    scene.text(x + 97.5, 272.0, 11.5, "VERIFIED & CLEANED", col).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  }
+
+  scene.arrow(235.0, 205.0, 270.0, 205.0, "#58a6ff", 2.5);
+  scene.arrow(465.0, 205.0, 500.0, 205.0, "#a371f7", 2.5);
+  scene.arrow(695.0, 205.0, 730.0, 205.0, "#3fb950", 2.5);
+
+  stage_box(40.0,  "1. Cloud Storage", "lmgcp-mesh-ingest",    "events/batch-01.json", "25 bytes uploaded",   "#58a6ff");
+  stage_box(270.0, "2. Cloud Pub/Sub", "lmgcp-mesh-topic",     "Sub: lmgcp-mesh-sub",  "1 event delivered",   "#a371f7");
+  stage_box(500.0, "3. Cloud Run v2",  "lmgcp-mesh-processor", "1000m CPU / 512 MiB",  "0..4 auto-scaling",   "#3fb950");
+  stage_box(730.0, "4. BigQuery DW",   "lmgcp_mesh_dw",        "lmgcp_ingested_events","DAY(ingest_ts) part", "#f0883e");
+
+  scene.rect(40.0, 332.0, 885.0, 150.0, "#161b22").set_attr("stroke", "#30363d");
+  scene.text(60.0, 364.0, 14.5, "End-to-End Pipeline & Ledger Verification", "#e6edf3").set_attr("font-weight", "700");
+  scene.text(60.0, 394.0, 12.5, "1. Uploaded JSON batch to GCS bucket lmgcp-mesh-ingest and verified payload size (25 bytes)", "#c9d1d9");
+  scene.text(60.0, 420.0, 12.5, "2. Published OBJECT_FINALIZE notification to lmgcp-mesh-topic and pulled from lmgcp-mesh-sub", "#c9d1d9");
+  scene.text(60.0, 446.0, 12.5, "3. Deployed Cloud Run worker + BigQuery partitioned sink table, then cleaned all 6 resources (ledger=0)", "#3fb950");
+
+  scene.render_png("images/24_serverless_event_driven_mesh.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/24_serverless_event_driven_mesh_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/24_serverless_event_driven_mesh_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/24_serverless_event_driven_mesh.png", "docs/images/24_serverless_event_driven_mesh.png");
+println("ok 24_serverless_event_driven_mesh - wrote images/24_serverless_event_driven_mesh.png");

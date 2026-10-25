@@ -1,0 +1,60 @@
+# Cloud Storage bucket classes (STANDARD, NEARLINE, COLDLINE, ARCHIVE), CMEK encryption,
+# Uniform Bucket-Level Access, and Public Access Prevention posture across 5 buckets.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  let bkts = gcp.storage_list_buckets();
+  assert_close(float(bkts.len()), 5.0, 0.01);
+
+  let b1 = gcp.storage_get_bucket("prod-customer-invoices-us");
+  let b2 = gcp.storage_get_bucket("prod-telemetry-parquet-us");
+  let b3 = gcp.storage_get_bucket("prod-compliance-ledger-archive");
+  let b4 = gcp.storage_get_bucket("coldline-db-snapshots-us");
+  let b5 = gcp.storage_get_bucket("staging-build-artifacts-c1");
+
+  check(b1.storage_class() == "STANDARD");
+  check(b1.encryption_type() == "CMEK");
+  check(b2.storage_class() == "NEARLINE");
+  check(b3.storage_class() == "ARCHIVE");
+  check(b3.encryption_type() == "CMEK");
+  check(b4.storage_class() == "COLDLINE");
+  check(!b5.uniform_access());
+  assert_close(float(b5.lifecycle_delete_days()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/23_storage_class_tiering_analysis.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/23_storage_class_tiering_analysis.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud Storage Class Tiering, CMEK & Access Control Posture", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "5 Buckets (4.24 GB Across 12,330 Objects) | STANDARD, NEARLINE, COLDLINE & ARCHIVE Tiers", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 80.0, 880.0, 425.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn bkt_row(y: float, name: string, cls: string, enc: string, ubla: string, lc: string, status: string, col: string) -> void {
+    scene.rect(58.0, y, 844.0, 62.0, "#0d1117").set_attr("stroke", "#30363d");
+    scene.rect(58.0, y, 8.0, 62.0, col);
+    scene.text(78.0, y + 25.0, 13.5, name, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(78.0, y + 47.0, 11.5, "Class: " + cls + "  |  Encryption: " + enc + "  |  " + ubla + "  |  Lifecycle: " + lc, "#8b949e");
+    scene.rect(745.0, y + 14.0, 140.0, 34.0, "#161b22").set_attr("stroke", col);
+    scene.text(815.0, y + 36.0, 12.5, status, col).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  }
+
+  bkt_row(98.0,  "prod-customer-invoices-us",      "STANDARD", "CMEK (HSM)",     "UBLA + Enforced PAP", "Nearline 30d / Del 365d", "PASS (100%)", "#3fb950");
+  bkt_row(174.0, "prod-compliance-ledger-archive", "ARCHIVE",  "CMEK (DR Ring)", "UBLA + Enforced PAP", "Nearline 90d / Del 7yr",  "PASS (100%)", "#3fb950");
+  bkt_row(250.0, "prod-telemetry-parquet-us",      "NEARLINE", "GOOGLE_MANAGED", "UBLA + Enforced PAP", "Delete 180d (2.15 GB)",   "PASS (90%)",  "#58a6ff");
+  bkt_row(326.0, "coldline-db-snapshots-us",       "COLDLINE", "GOOGLE_MANAGED", "UBLA + Enforced PAP", "Delete 730d (620 MB)",    "PASS (90%)",  "#58a6ff");
+  bkt_row(402.0, "staging-build-artifacts-c1",     "STANDARD", "GOOGLE_MANAGED", "UBLA OFF / Inherited","No Lifecycle Rules!",     "FAIL (25%)",  "#ff7b72");
+
+  scene.text(480.0, 486.0, 12.0, "Remediation: Enable Uniform Bucket-Level Access, enforced PAP & 30d expiration on staging-build-artifacts-c1.", "#8b949e").set_attr("text-anchor", "middle");
+  scene.render_png("images/23_storage_class_tiering_analysis.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/23_storage_class_tiering_analysis_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/23_storage_class_tiering_analysis_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/23_storage_class_tiering_analysis.png", "docs/images/23_storage_class_tiering_analysis.png");
+println("ok 23_storage_class_tiering_analysis - wrote images/23_storage_class_tiering_analysis.png");

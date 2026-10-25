@@ -1,0 +1,80 @@
+# Cloud Logging severity distribution & SIEM export sink routing + ephemeral sink CRUD.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  gcp.set_run_id("logging-sink-18");
+
+  let lbl = str_map().set("component", "auth-gateway");
+  let ok_w = gcp.logging_write_entry("lmgcp-audit-log", "WARNING", "Failed token check bearer ya29.secret_token_value", lbl);
+  check(ok_w);
+
+  let counts = gcp.logging_severity_counts();
+  let n_info = str_to_int(counts.get("INFO"));
+  let n_warn = str_to_int(counts.get("WARNING"));
+  let n_err = str_to_int(counts.get("ERROR"));
+  let n_crit = str_to_int(counts.get("CRITICAL"));
+
+  assert_close(float(n_info), 94200.0, 1.0);
+  assert_close(float(n_warn), 2181.0, 1.0);
+  assert_close(float(n_err), 340.0, 1.0);
+  assert_close(float(n_crit), 18.0, 1.0);
+
+  let s = gcp.logging_create_sink("lmgcp-siem-sink", "pubsub.googleapis.com/projects/gcp-proj-masked/topics/security-audit-stream", "severity>=ERROR");
+  check(!s.disabled());
+  let sinks = gcp.logging_list_sinks();
+  assert_close(float(sinks.len()), 4.0, 0.01);
+
+  check(gcp.logging_delete_sink("lmgcp-siem-sink"));
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/18_cloud_logging_sink_routing.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/18_cloud_logging_sink_routing.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud Logging Severity Distribution & SIEM Sink Routing", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "121,439 Log Entries Across 6 Severities | Automatic Secret Redaction on logging_write_entry()", "#8b949e").set_attr("text-anchor", "middle");
+
+  fn sev_box(x: float, label: string, count: string, col: string) -> void {
+    scene.rect(x, 82.0, 205.0, 100.0, "#161b22").set_attr("stroke", col).set_attr("stroke-width", "2");
+    scene.text(x + 102.5, 114.0, 12.5, label, col).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+    scene.text(x + 102.5, 154.0, 24.0, count, "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  }
+
+  sev_box(40.0,  "INFO ENTRIES",     "94,200", "#58a6ff");
+  sev_box(265.0, "WARNING ENTRIES",  "2,181",  "#d29922");
+  sev_box(490.0, "ERROR ENTRIES",    "340",    "#f0883e");
+  sev_box(715.0, "CRITICAL ENTRIES", "18",     "#ff7b72");
+
+  scene.rect(40.0, 204.0, 880.0, 280.0, "#161b22").set_attr("stroke", "#30363d");
+  scene.text(60.0, 236.0, 15.0, "Cloud Logging Router & Export Sink Destinations", "#e6edf3").set_attr("font-weight", "700");
+
+  scene.rect(65.0, 290.0, 210.0, 110.0, "#0d1117").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(170.0, 334.0, 14.5, "Cloud Logging Router", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(170.0, 360.0, 12.0, "+ Secret Redactor", "#3fb950").set_attr("text-anchor", "middle");
+
+  scene.arrow(280.0, 345.0, 360.0, 285.0, "#58a6ff", 2.2);
+  scene.arrow(280.0, 345.0, 360.0, 345.0, "#3fb950", 2.2);
+  scene.arrow(280.0, 345.0, 360.0, 405.0, "#a371f7", 2.2);
+
+  scene.rect(365.0, 260.0, 530.0, 48.0, "#0d1117").set_attr("stroke", "#58a6ff");
+  scene.text(382.0, 290.0, 12.5, "audit-to-bigquery -> bigquery/.../datasets/security_telemetry (severity>=WARNING)", "#c9d1d9");
+
+  scene.rect(365.0, 320.0, 530.0, 48.0, "#0d1117").set_attr("stroke", "#3fb950");
+  scene.text(382.0, 350.0, 12.5, "compliance-to-archive-gcs -> storage/.../prod-compliance-ledger-archive", "#c9d1d9");
+
+  scene.rect(365.0, 380.0, 530.0, 48.0, "#0d1117").set_attr("stroke", "#a371f7");
+  scene.text(382.0, 410.0, 12.5, "siem-realtime-pubsub + lmgcp-siem-sink -> pubsub/.../security-audit-stream", "#c9d1d9");
+
+  scene.text(480.0, 464.0, 12.0, "Ephemeral sink lmgcp-siem-sink created, verified in sink list (4 sinks), and deleted cleanly.", "#8b949e").set_attr("text-anchor", "middle");
+  scene.render_png("images/18_cloud_logging_sink_routing.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/18_cloud_logging_sink_routing_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/18_cloud_logging_sink_routing_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/18_cloud_logging_sink_routing.png", "docs/images/18_cloud_logging_sink_routing.png");
+println("ok 18_cloud_logging_sink_routing - wrote images/18_cloud_logging_sink_routing.png");

@@ -1,0 +1,66 @@
+# VPC Firewall / Security-Group ingress posture audit: detects 0.0.0.0/0 open-to-world SSH,
+# RDP, and Postgres rules, checks firewall logging, and computes per-rule risk scores.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let names = gcp.network_list_firewalls();
+  assert_close(float(names.len()), 6.0, 0.01);
+
+  let open_world = 0;
+  let high_risk = 0;
+  let i = 0;
+  while (i < names.len()) {
+    let fw = gcp.network_get_firewall(names.at(i));
+    if (fw.is_open_to_world()) {
+      open_world = open_world + 1;
+    }
+    if (fw.risk_score() >= 80) {
+      high_risk = high_risk + 1;
+    }
+    i = i + 1;
+  }
+  assert_close(float(open_world), 3.0, 0.01);
+  assert_close(float(high_risk), 3.0, 0.01);
+
+  let ssh_fw = gcp.network_get_firewall("legacy-open-ssh-world");
+  assert_close(float(ssh_fw.risk_score()), 100.0, 0.01);
+  let iap_fw = gcp.network_get_firewall("prod-allow-iap-ssh");
+  assert_close(float(iap_fw.risk_score()), 10.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/03_vpc_firewall_security_review.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/03_vpc_firewall_security_review.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 560, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "VPC Firewall Ingress Audit & Risk Scoring (6 Rules Across 3 VPCs)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "3 critical 0.0.0.0/0 exposures flagged (SSH:22, RDP:3389, Postgres:5432) vs 3 hardened prod rules", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(35.0, 78.0, 890.0, 445.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn fw_row(y: float, name: string, vpc: string, cidr: string, port: string, logs: string, score: int, col: string) -> void {
+    scene.rect(55.0, y, 850.0, 54.0, "#0d1117").set_attr("stroke", "#30363d");
+    scene.text(70.0, y + 22.0, 13.5, name, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(70.0, y + 42.0, 11.5, "VPC: " + vpc + "  |  Source: " + cidr + "  |  Port: " + port + "  |  Flow Logs: " + logs, "#8b949e");
+    let bw = float(score) * 2.4;
+    scene.rect(610.0, y + 14.0, 240.0, 24.0, "#21262d");
+    scene.rect(610.0, y + 14.0, bw, 24.0, col);
+    scene.text(862.0, y + 31.0, 13.0, str(score) + "/100", col).set_attr("font-weight", "700");
+  }
+
+  fw_row(95.0,  "legacy-open-ssh-world",    "staging-vpc",   "0.0.0.0/0",                  "tcp:22",        "OFF", 100, "#ff7b72");
+  fw_row(162.0, "legacy-open-rdp-world",    "staging-vpc",   "0.0.0.0/0",                  "tcp:3389",      "OFF", 100, "#ff7b72");
+  fw_row(229.0, "analytics-open-postgres",  "analytics-vpc", "0.0.0.0/0",                  "tcp:5432",      "OFF", 95,  "#f0883e");
+  fw_row(296.0, "prod-allow-iap-ssh",       "prod-vpc",      "35.235.240.0/20 (Google IAP)", "tcp:22",      "ON",  10,  "#3fb950");
+  fw_row(363.0, "prod-allow-lb-healthcheck","prod-vpc",      "35.191.0.0/16, 130.211.0.0/22", "tcp:443",    "ON",  10,  "#3fb950");
+  fw_row(430.0, "prod-allow-internal",      "prod-vpc",      "10.10.0.0/16",               "tcp:8080,8443", "ON",  10,  "#3fb950");
+
+  scene.render_png("images/03_vpc_firewall_security_review.png", 960, 560, 1);
+end _dsl_
+savedsl(draw, "build/examples/03_vpc_firewall_security_review_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/03_vpc_firewall_security_review_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/03_vpc_firewall_security_review.png", "docs/images/03_vpc_firewall_security_review.png");
+println("ok 03_vpc_firewall_security_review - wrote images/03_vpc_firewall_security_review.png");

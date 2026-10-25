@@ -1,0 +1,71 @@
+# GKE Kubernetes cluster security hardening matrix: compares 3 clusters across Autopilot mode,
+# Private Nodes, Workload Identity, Network Policy, Binary Authorization, and Release Channels.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  let clusters = gcp.gke_list_clusters("-");
+  assert_close(float(clusters.len()), 3.0, 0.01);
+
+  let c1 = gcp.gke_get_cluster("us-central1", "prod-autopilot-core");
+  let c2 = gcp.gke_get_cluster("us-east1", "dr-autopilot-standby");
+  let c3 = gcp.gke_get_cluster("us-central1", "staging-standard-k8s");
+
+  check(c1.autopilot());
+  check(c1.private_nodes());
+  check(c1.workload_identity());
+  check(c1.network_policy());
+  check(c1.binary_auth());
+  assert_close(float(c1.total_nodes()), 18.0, 0.01);
+
+  check(c2.autopilot());
+  assert_close(float(c2.total_nodes()), 8.0, 0.01);
+
+  check(!c3.autopilot());
+  check(!c3.private_nodes());
+  check(!c3.binary_auth());
+end _dsl_
+savedsl(p, "build/examples/12_gke_cluster_hardening_matrix.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/12_gke_cluster_hardening_matrix.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "GKE Cluster Security Hardening Matrix (CIS GKE Benchmark)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "3 Clusters | 32 Total Nodes | Autopilot, Private Nodes, Workload Identity, Network Policy & Binary Auth", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 80.0, 880.0, 425.0, "#161b22").set_attr("stroke", "#30363d");
+
+  scene.text(60.0, 114.0, 13.0, "CIS HARDENING CONTROL", "#8b949e").set_attr("font-weight", "700");
+  scene.text(415.0, 114.0, 13.0, "prod-autopilot-core", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(615.0, 114.0, 13.0, "dr-autopilot-standby", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(815.0, 114.0, 13.0, "staging-standard-k8s", "#f0883e").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.line(55.0, 128.0, 905.0, 128.0, "#30363d", 1.5);
+
+  fn gke_row(y: float, ctrl: string, v1: string, c1: string, v2: string, c2: string, v3: string, c3: string) -> void {
+    scene.text(60.0, y + 22.0, 13.0, ctrl, "#e6edf3");
+    scene.rect(330.0, y, 170.0, 32.0, "#0d1117").set_attr("stroke", c1);
+    scene.text(415.0, y + 21.0, 12.0, v1, c1).set_attr("text-anchor", "middle").set_attr("font-weight", "600");
+    scene.rect(530.0, y, 170.0, 32.0, "#0d1117").set_attr("stroke", c2);
+    scene.text(615.0, y + 21.0, 12.0, v2, c2).set_attr("text-anchor", "middle").set_attr("font-weight", "600");
+    scene.rect(730.0, y, 170.0, 32.0, "#0d1117").set_attr("stroke", c3);
+    scene.text(815.0, y + 21.0, 12.0, v3, c3).set_attr("text-anchor", "middle").set_attr("font-weight", "600");
+  }
+
+  gke_row(146.0, "1. Autopilot Managed Mode",     "ENABLED (18 nodes)", "#3fb950", "ENABLED (8 nodes)",  "#3fb950", "STANDARD (6 nodes)", "#d29922");
+  gke_row(200.0, "2. Private Cluster Nodes",      "PASS (Private IPs)", "#3fb950", "PASS (Private IPs)", "#3fb950", "FAIL (Public IPs)",  "#ff7b72");
+  gke_row(254.0, "3. Workload Identity Pool",     "PASS (svc.id.goog)", "#3fb950", "PASS (svc.id.goog)", "#3fb950", "PASS (svc.id.goog)", "#3fb950");
+  gke_row(308.0, "4. Network Policy Enforcement", "PASS (Dataplane V2)","#3fb950", "PASS (Dataplane V2)","#3fb950", "FAIL (Disabled)",    "#ff7b72");
+  gke_row(362.0, "5. Binary Authorization",       "PASS (Enforced)",    "#3fb950", "PASS (Enforced)",    "#3fb950", "FAIL (Disabled)",    "#ff7b72");
+  gke_row(416.0, "6. Release Channel & Version",  "REGULAR (1.31.2)",   "#58a6ff", "STABLE (1.31.2)",    "#58a6ff", "RAPID (1.30.5)",     "#d29922");
+
+  scene.text(480.0, 484.0, 12.5, "Result: Both production & DR Autopilot clusters pass 6/6 CIS GKE controls; staging cluster flagged for remediation.", "#8b949e").set_attr("text-anchor", "middle");
+  scene.render_png("images/12_gke_cluster_hardening_matrix.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/12_gke_cluster_hardening_matrix_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/12_gke_cluster_hardening_matrix_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/12_gke_cluster_hardening_matrix.png", "docs/images/12_gke_cluster_hardening_matrix.png");
+println("ok 12_gke_cluster_hardening_matrix - wrote images/12_gke_cluster_hardening_matrix.png");

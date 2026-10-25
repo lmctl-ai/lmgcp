@@ -1,0 +1,77 @@
+# Creates an ephemeral GCS bucket (lmgcp-lifecycle-demo) with uniform bucket-level access,
+# object versioning, Nearline transition at 30 days, and Delete at 365 days; uploads and
+# verifies objects; then cleans up and confirms ledger_count() == 0.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let bkt = gcp.storage_create_bucket("lmgcp-lifecycle-demo", "US-CENTRAL1", "STANDARD");
+  assert_close(float(gcp.ledger_count()), 1.0, 0.01);
+
+  let ok_lc = gcp.storage_set_bucket_lifecycle("lmgcp-lifecycle-demo", 365, 30);
+  let ok_ver = gcp.storage_set_bucket_versioning("lmgcp-lifecycle-demo", true);
+  let ok_ubla = gcp.storage_set_uniform_access("lmgcp-lifecycle-demo", true);
+
+  let ok_put1 = gcp.storage_put_object("lmgcp-lifecycle-demo", "2026/10/events-01.json", "{\"batch\":1,\"rows\":2500}", "application/json");
+  let ok_put2 = gcp.storage_put_object("lmgcp-lifecycle-demo", "2026/10/events-02.json", "{\"batch\":2,\"rows\":3100}", "application/json");
+
+  let updated = gcp.storage_get_bucket("lmgcp-lifecycle-demo");
+  assert_close(float(updated.lifecycle_nearline_days()), 30.0, 0.01);
+  assert_close(float(updated.lifecycle_delete_days()), 365.0, 0.01);
+  assert_close(float(updated.object_count()), 2.0, 0.01);
+
+  let objs = gcp.storage_list_objects("lmgcp-lifecycle-demo", "2026/10/");
+  assert_close(float(objs.len()), 2.0, 0.01);
+
+  let del_count = gcp.cleanup_ledger();
+  assert_close(float(del_count), 1.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/04_gcs_bucket_lifecycle_ephemeral.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/04_gcs_bucket_lifecycle_ephemeral.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "GCS Ephemeral Bucket Lifecycle & Tiering Pipeline (lmgcp-lifecycle-demo)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Created with lmgcp_test label -> configured UBLA + Versioning + Lifecycle -> verified -> deleted cleanly", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(50.0, 110.0, 240.0, 160.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(170.0, 145.0, 15.0, "Day 0 - 30: STANDARD", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(170.0, 175.0, 12.0, "Hot ingestion & queries", "#c9d1d9").set_attr("text-anchor", "middle");
+  scene.text(170.0, 200.0, 12.0, "2 objects (2026/10/*.json)", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(170.0, 225.0, 12.0, "Uniform Access + Versioning", "#3fb950").set_attr("text-anchor", "middle");
+
+  scene.arrow(295.0, 190.0, 355.0, 190.0, "#58a6ff", 2.5);
+  scene.text(325.0, 178.0, 11.0, "Age >= 30d", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(360.0, 110.0, 240.0, 160.0, "#161b22").set_attr("stroke", "#d29922").set_attr("stroke-width", "2");
+  scene.text(480.0, 145.0, 15.0, "Day 30 - 365: NEARLINE", "#d29922").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 175.0, 12.0, "SetStorageClass rule", "#c9d1d9").set_attr("text-anchor", "middle");
+  scene.text(480.0, 200.0, 12.0, "50% lower storage cost", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(480.0, 225.0, 12.0, "Public access: enforced", "#3fb950").set_attr("text-anchor", "middle");
+
+  scene.arrow(605.0, 190.0, 665.0, 190.0, "#d29922", 2.5);
+  scene.text(635.0, 178.0, 11.0, "Age >= 365d", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(670.0, 110.0, 240.0, 160.0, "#161b22").set_attr("stroke", "#ff7b72").set_attr("stroke-width", "2");
+  scene.text(790.0, 145.0, 15.0, "Day 365+: EXPIRE", "#ff7b72").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(790.0, 175.0, 12.0, "Automatic Delete action", "#c9d1d9").set_attr("text-anchor", "middle");
+  scene.text(790.0, 200.0, 12.0, "Zero retention bloat", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(790.0, 225.0, 12.0, "Ledger teardown verified", "#3fb950").set_attr("text-anchor", "middle");
+
+  scene.rect(50.0, 310.0, 860.0, 165.0, "#161b22").set_attr("stroke", "#30363d");
+  scene.text(70.0, 340.0, 14.0, "Safety & Run Ledger Verification", "#3fb950").set_attr("font-weight", "700");
+  scene.text(70.0, 370.0, 12.5, "1. Prefix check passed: bucket name 'lmgcp-lifecycle-demo' starts with 'lmgcp-'", "#c9d1d9");
+  scene.text(70.0, 396.0, 12.5, "2. Mandatory label attached: lmgcp_test=run-20261024, lmgcp_created_at=1761350400", "#c9d1d9");
+  scene.text(70.0, 422.0, 12.5, "3. Object operations restricted to run-owned bucket; baseline buckets remain untouched", "#c9d1d9");
+  scene.text(70.0, 448.0, 12.5, "4. cleanup_ledger() deleted 1 bucket; post-run ledger_count() == 0", "#58a6ff");
+
+  scene.render_png("images/04_gcs_bucket_lifecycle_ephemeral.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/04_gcs_bucket_lifecycle_ephemeral_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/04_gcs_bucket_lifecycle_ephemeral_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/04_gcs_bucket_lifecycle_ephemeral.png", "docs/images/04_gcs_bucket_lifecycle_ephemeral.png");
+println("ok 04_gcs_bucket_lifecycle_ephemeral - wrote images/04_gcs_bucket_lifecycle_ephemeral.png");

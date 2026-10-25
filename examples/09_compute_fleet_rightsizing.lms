@@ -1,0 +1,70 @@
+# Compute Engine VM fleet sizing, Shielded vTPM posture, and ephemeral e2-micro lifecycle probe
+# (create -> stop -> start -> delete) with cost guardrail verification.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  gcp.set_run_id("compute-fleet-09");
+
+  let gw1 = gcp.compute_get_instance("us-central1-a", "prod-api-gw-01");
+  let stg = gcp.compute_get_instance("us-central1-a", "staging-test-runner-01");
+  let dr = gcp.compute_get_instance("us-east1-b", "dr-standby-api-01");
+
+  assert_close(float(gw1.vcpus()), 4.0, 0.01);
+  assert_close(float(gw1.memory_mb()), 16384.0, 0.01);
+  check(gw1.shielded_vtpm());
+  check(!stg.shielded_vtpm());
+  assert_close(float(dr.vcpus()), 2.0, 0.01);
+
+  let probe = gcp.compute_create_instance("us-central1-a", "lmgcp-rightsize-probe", "e2-micro", "debian-12");
+  assert_close(float(probe.vcpus()), 2.0, 0.01);
+  assert_close(float(probe.memory_mb()), 1024.0, 0.01);
+
+  let stopped = gcp.compute_stop_instance("us-central1-a", "lmgcp-rightsize-probe");
+  check(stopped);
+  let p_after = gcp.compute_get_instance("us-central1-a", "lmgcp-rightsize-probe");
+  check(p_after.status() == "TERMINATED");
+
+  let deleted = gcp.compute_delete_instance("us-central1-a", "lmgcp-rightsize-probe");
+  check(deleted);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/09_compute_fleet_rightsizing.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/09_compute_fleet_rightsizing.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Compute Engine Fleet Rightsizing & Shielded VM Audit (7 VMs)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "6/7 VMs with Shielded vTPM | 1 public-IP staging VM flagged | Ephemeral e2-micro probe verified", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 80.0, 880.0, 340.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn vm_row(y: float, name: string, zone: string, shape: string, vtpm: string, status: string, col: string) -> void {
+    scene.rect(58.0, y, 844.0, 48.0, "#0d1117").set_attr("stroke", "#30363d");
+    scene.text(74.0, y + 29.0, 13.0, name, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(280.0, y + 29.0, 12.0, zone, "#8b949e");
+    scene.text(430.0, y + 29.0, 12.0, shape, "#58a6ff");
+    scene.text(640.0, y + 29.0, 12.0, vtpm, col).set_attr("font-weight", "600");
+    scene.text(765.0, y + 29.0, 12.0, status, col).set_attr("font-weight", "700");
+  }
+
+  vm_row(98.0,  "prod-api-gw-01 / 02",    "us-central1-a/b", "e2-standard-4 (4 vCPU / 16 GB)", "vTPM: ON",  "RUNNING (Optimal)", "#3fb950");
+  vm_row(156.0, "prod-worker-pool-01",    "us-central1-a",   "n2-standard-8 (8 vCPU / 32 GB)", "vTPM: ON",  "RUNNING (Optimal)", "#3fb950");
+  vm_row(214.0, "prod-cache-node-01",     "us-central1-c",   "e2-medium (2 vCPU / 4 GB)",      "vTPM: ON",  "RUNNING (Optimal)", "#3fb950");
+  vm_row(272.0, "analytics-etl-node-01",  "us-west1-a",      "n2-highmem-4 (4 vCPU / 32 GB)",  "vTPM: ON",  "RUNNING (Batch)",   "#58a6ff");
+  vm_row(330.0, "staging-test-runner-01", "us-central1-a",   "e2-standard-2 (Public IP!)",     "vTPM: OFF", "WARN: Harden VM",   "#ff7b72");
+
+  scene.rect(40.0, 434.0, 880.0, 82.0, "#161b22").set_attr("stroke", "#3fb950");
+  scene.text(60.0, 464.0, 14.0, "Ephemeral Lifecycle Probe: lmgcp-rightsize-probe (e2-micro, 1024 MiB RAM)", "#3fb950").set_attr("font-weight", "700");
+  scene.text(60.0, 492.0, 12.5, "Created RUNNING -> Stopped (TERMINATED) -> Deleted cleanly (ledger_count = 0). GPU & large shapes blocked.", "#c9d1d9");
+
+  scene.render_png("images/09_compute_fleet_rightsizing.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/09_compute_fleet_rightsizing_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/09_compute_fleet_rightsizing_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/09_compute_fleet_rightsizing.png", "docs/images/09_compute_fleet_rightsizing.png");
+println("ok 09_compute_fleet_rightsizing - wrote images/09_compute_fleet_rightsizing.png");

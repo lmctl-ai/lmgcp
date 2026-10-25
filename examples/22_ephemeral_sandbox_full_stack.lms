@@ -1,0 +1,60 @@
+# Multi-service ephemeral sandbox provisioning & single-call reverse-dependency cleanup_ledger().
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  gcp.set_run_id("fullstack-sandbox-22");
+
+  let v = gcp.network_create_vpc("lmgcp-sbx-vpc", false);
+  let s = gcp.network_create_subnet("us-central1", "lmgcp-sbx-subnet", "lmgcp-sbx-vpc", "10.88.0.0/24", true);
+  let vm = gcp.compute_create_instance("us-central1-a", "lmgcp-sbx-vm", "e2-micro", "debian-12");
+  let bkt = gcp.storage_create_bucket("lmgcp-sbx-bucket", "US-CENTRAL1", "STANDARD");
+  let top = gcp.pubsub_create_topic("lmgcp-sbx-events");
+  let sub = gcp.pubsub_create_subscription("lmgcp-sbx-sub", "lmgcp-sbx-events", 30, "");
+  let run = gcp.run_deploy_service("us-central1", "lmgcp-sbx-worker", "us-central1-docker.pkg.dev/demo/worker:v1", 1000, 512, 2);
+
+  assert_close(float(gcp.ledger_count()), 7.0, 0.01);
+  check(gcp.ledger_owns("compute_instance", "lmgcp-sbx-vm"));
+  check(gcp.ledger_owns("bucket", "lmgcp-sbx-bucket"));
+
+  let cleaned = gcp.cleanup_ledger();
+  assert_close(float(cleaned), 7.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/22_ephemeral_sandbox_full_stack.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/22_ephemeral_sandbox_full_stack.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Full-Stack Ephemeral Sandbox & Reverse-Order Ledger Teardown", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "7 Ephemeral Resources Provisioned Across 6 APIs | Torn Down in Reverse Dependency Order via cleanup_ledger()", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 80.0, 880.0, 425.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn step_row(y: float, c_step: string, rtype: string, rname: string, d_step: string) -> void {
+    scene.rect(58.0, y, 520.0, 42.0, "#0d1117").set_attr("stroke", "#58a6ff");
+    scene.text(74.0, y + 26.0, 12.5, c_step + "  [" + rtype + "]  " + rname, "#e6edf3");
+    scene.arrow(585.0, y + 21.0, 625.0, y + 21.0, "#3fb950", 2.0);
+    scene.rect(632.0, y, 270.0, 42.0, "#0d1117").set_attr("stroke", "#3fb950");
+    scene.text(767.0, y + 26.0, 12.5, d_step + " -> DELETED", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  }
+
+  step_row(100.0, "Create #1", "network.vpc",         "lmgcp-sbx-vpc",                    "Teardown #7");
+  step_row(152.0, "Create #2", "network.subnet",      "us-central1/lmgcp-sbx-subnet",     "Teardown #6");
+  step_row(204.0, "Create #3", "compute.instance",    "us-central1-a/lmgcp-sbx-vm",       "Teardown #5");
+  step_row(256.0, "Create #4", "storage.bucket",      "lmgcp-sbx-bucket",                 "Teardown #4");
+  step_row(308.0, "Create #5", "pubsub.topic",        "lmgcp-sbx-events",                 "Teardown #3");
+  step_row(360.0, "Create #6", "pubsub.subscription", "lmgcp-sbx-sub",                    "Teardown #2");
+  step_row(412.0, "Create #7", "run.service",         "us-central1/lmgcp-sbx-worker",     "Teardown #1");
+
+  scene.text(480.0, 482.0, 12.5, "Reverse LIFO teardown ensures Subscriptions delete before Topics and Subnets delete before VPCs (0 residual).", "#58a6ff").set_attr("text-anchor", "middle");
+  scene.render_png("images/22_ephemeral_sandbox_full_stack.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/22_ephemeral_sandbox_full_stack_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/22_ephemeral_sandbox_full_stack_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/22_ephemeral_sandbox_full_stack.png", "docs/images/22_ephemeral_sandbox_full_stack.png");
+println("ok 22_ephemeral_sandbox_full_stack - wrote images/22_ephemeral_sandbox_full_stack.png");

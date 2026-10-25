@@ -1,0 +1,71 @@
+# VPC network & regional subnet CIDR, Private Google Access, and VPC Flow Logs audit + ephemeral
+# custom-mode VPC and /24 subnet lifecycle.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  gcp.set_run_id("vpc-subnet-21");
+
+  let s1 = gcp.network_get_subnet("us-central1", "prod-app-subnet");
+  let s2 = gcp.network_get_subnet("us-central1", "prod-db-subnet");
+  let s3 = gcp.network_get_subnet("us-east1", "prod-dr-subnet");
+  let s4 = gcp.network_get_subnet("us-central1", "staging-app-subnet");
+  let s5 = gcp.network_get_subnet("us-west1", "analytics-batch-subnet");
+
+  check(s1.cidr() == "10.10.0.0/20");
+  check(s1.private_ip_google_access());
+  check(s1.flow_logs());
+  check(s2.flow_logs());
+  check(s3.flow_logs());
+  check(!s4.flow_logs());
+  check(!s5.private_ip_google_access());
+
+  let evpc = gcp.network_create_vpc("lmgcp-vpc-sandbox", false);
+  let esub = gcp.network_create_subnet("us-central1", "lmgcp-subnet-sandbox", "lmgcp-vpc-sandbox", "10.99.0.0/24", true);
+  check(esub.cidr() == "10.99.0.0/24");
+  check(esub.private_ip_google_access());
+
+  check(gcp.network_delete_subnet("us-central1", "lmgcp-subnet-sandbox"));
+  check(gcp.network_delete_vpc("lmgcp-vpc-sandbox"));
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/21_vpc_subnet_cidr_utilization.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/21_vpc_subnet_cidr_utilization.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "VPC Subnetwork CIDR Architecture, Private Google Access & Flow Logs", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "5 Regional Subnets Across 3 Custom-Mode VPCs | PGA & VPC Flow Logs Compliance Audit", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 80.0, 880.0, 340.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn sub_row(y: float, name: string, vpc: string, cidr: string, pga: string, logs: string, badge: string, col: string) -> void {
+    scene.rect(58.0, y, 844.0, 50.0, "#0d1117").set_attr("stroke", "#30363d");
+    scene.text(74.0, y + 30.0, 13.0, name, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(290.0, y + 30.0, 12.0, vpc, "#8b949e");
+    scene.text(435.0, y + 30.0, 12.0, cidr, "#58a6ff");
+    scene.text(590.0, y + 30.0, 12.0, pga, col);
+    scene.text(695.0, y + 30.0, 12.0, logs, col);
+    scene.text(815.0, y + 30.0, 12.5, badge, col).set_attr("font-weight", "700");
+  }
+
+  sub_row(98.0,  "prod-app-subnet",        "prod-vpc",      "10.10.0.0/20",  "PGA: ON",  "Logs: ON",  "COMPLIANT", "#3fb950");
+  sub_row(158.0, "prod-db-subnet",         "prod-vpc",      "10.10.16.0/22", "PGA: ON",  "Logs: ON",  "COMPLIANT", "#3fb950");
+  sub_row(218.0, "prod-dr-subnet",         "prod-vpc",      "10.20.0.0/21",  "PGA: ON",  "Logs: ON",  "COMPLIANT", "#3fb950");
+  sub_row(278.0, "staging-app-subnet",     "staging-vpc",   "10.30.0.0/22",  "PGA: ON",  "Logs: OFF", "WARN",      "#d29922");
+  sub_row(338.0, "analytics-batch-subnet", "analytics-vpc", "10.40.0.0/19",  "PGA: OFF", "Logs: OFF", "FAIL",      "#ff7b72");
+
+  scene.rect(40.0, 436.0, 880.0, 78.0, "#161b22").set_attr("stroke", "#58a6ff");
+  scene.text(60.0, 466.0, 13.5, "Ephemeral VPC & Subnet Lifecycle: lmgcp-vpc-sandbox -> lmgcp-subnet-sandbox (10.99.0.0/24)", "#58a6ff").set_attr("font-weight", "700");
+  scene.text(60.0, 492.0, 12.0, "Created custom-mode VPC + regional subnet with PGA & FlowLogs -> verified -> deleted subnet then VPC.", "#c9d1d9");
+
+  scene.render_png("images/21_vpc_subnet_cidr_utilization.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/21_vpc_subnet_cidr_utilization_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/21_vpc_subnet_cidr_utilization_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/21_vpc_subnet_cidr_utilization.png", "docs/images/21_vpc_subnet_cidr_utilization.png");
+println("ok 21_vpc_subnet_cidr_utilization - wrote images/21_vpc_subnet_cidr_utilization.png");

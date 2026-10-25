@@ -1,0 +1,75 @@
+# Cloud SQL Regional HA, automated backup, PITR, SSL enforcement, and Public IP posture audit,
+# plus ephemeral db-f1-micro instance creation and teardown.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  gcp.set_run_id("sql-posture-11");
+
+  let db1 = gcp.sql_get_instance("prod-orders-pg15");
+  let db2 = gcp.sql_get_instance("prod-ledger-pg15");
+  let db3 = gcp.sql_get_instance("staging-reporting-mysql8");
+
+  check(db1.ha_enabled());
+  check(db1.pitr_enabled());
+  check(db1.require_ssl());
+  check(!db1.public_ip_enabled());
+
+  check(db2.ha_enabled());
+  check(!db3.ha_enabled());
+  check(db3.public_ip_enabled());
+
+  let demo = gcp.sql_create_instance("lmgcp-sql-demo", "POSTGRES_15", "db-f1-micro", "us-central1", false);
+  check(demo.tier() == "db-f1-micro");
+  check(demo.require_ssl());
+
+  let ok_del = gcp.sql_delete_instance("lmgcp-sql-demo");
+  check(ok_del);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/11_cloud_sql_ha_backup_posture.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/11_cloud_sql_ha_backup_posture.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud SQL High Availability, PITR Backup & TLS Security Posture", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "2 Regional HA PostgreSQL 15 instances compliant | 1 Zonal MySQL 8 instance flagged for Public IP", "#8b949e").set_attr("text-anchor", "middle");
+
+  fn sql_col(x: float, name: string, meta: string, ha: string, pitr: string, ssl: string, ip: string, score: string, col: string) -> void {
+    scene.rect(x, 82.0, 280.0, 340.0, "#161b22").set_attr("stroke", col).set_attr("stroke-width", "2");
+    scene.text(x + 140.0, 114.0, 15.5, name, "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+    scene.text(x + 140.0, 136.0, 11.5, meta, "#8b949e").set_attr("text-anchor", "middle");
+
+    scene.rect(x + 18.0, 156.0, 244.0, 38.0, "#0d1117");
+    scene.text(x + 30.0, 180.0, 12.0, ha, "#c9d1d9");
+
+    scene.rect(x + 18.0, 204.0, 244.0, 38.0, "#0d1117");
+    scene.text(x + 30.0, 228.0, 12.0, pitr, "#c9d1d9");
+
+    scene.rect(x + 18.0, 252.0, 244.0, 38.0, "#0d1117");
+    scene.text(x + 30.0, 276.0, 12.0, ssl, "#c9d1d9");
+
+    scene.rect(x + 18.0, 300.0, 244.0, 38.0, "#0d1117");
+    scene.text(x + 30.0, 324.0, 12.0, ip, "#c9d1d9");
+
+    scene.text(x + 140.0, 386.0, 14.0, score, col).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  }
+
+  sql_col(40.0,  "prod-orders-pg15",         "POSTGRES_15 | us-central1", "[PASS] Availability: REGIONAL", "[PASS] Backup + PITR: ON",    "[PASS] Require SSL: TRUE",  "[PASS] Private IP Only",     "Score: 100 / 100", "#3fb950");
+  sql_col(340.0, "prod-ledger-pg15",         "POSTGRES_15 | us-east1",    "[PASS] Availability: REGIONAL", "[PASS] Backup + PITR: ON",    "[PASS] Require SSL: TRUE",  "[PASS] Private IP Only",     "Score: 100 / 100", "#3fb950");
+  sql_col(640.0, "staging-reporting-mysql8", "MYSQL_8_0 | db-g1-small",   "[WARN] Availability: ZONAL",    "[WARN] PITR Binlog: OFF",     "[FAIL] Require SSL: FALSE", "[FAIL] Public IPv4: ON!",    "Score: 35 / 100",  "#ff7b72");
+
+  scene.rect(40.0, 440.0, 880.0, 74.0, "#161b22").set_attr("stroke", "#58a6ff");
+  scene.text(60.0, 468.0, 13.5, "Ephemeral SQL Verification: lmgcp-sql-demo (POSTGRES_15, db-f1-micro)", "#58a6ff").set_attr("font-weight", "700");
+  scene.text(60.0, 494.0, 12.0, "Provisioned with RequireSSL=true & Private IP defaults -> verified via sqladmin/v1 -> deleted cleanly.", "#c9d1d9");
+
+  scene.render_png("images/11_cloud_sql_ha_backup_posture.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/11_cloud_sql_ha_backup_posture_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/11_cloud_sql_ha_backup_posture_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/11_cloud_sql_ha_backup_posture.png", "docs/images/11_cloud_sql_ha_backup_posture.png");
+println("ok 11_cloud_sql_ha_backup_posture - wrote images/11_cloud_sql_ha_backup_posture.png");

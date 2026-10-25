@@ -1,0 +1,57 @@
+# IAM service account key hygiene & least-privilege audit: inspects 5 service accounts and
+# 6 IAM policy bindings (metadata only, never key material), flagging user-managed keys >90d
+# and primitive roles/editor bindings.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  let sas = gcp.iam_list_service_accounts();
+  let bindings = gcp.iam_list_bindings();
+  assert_close(float(sas.len()), 5.0, 0.01);
+  assert_close(float(bindings.len()), 7.0, 0.01);
+
+  let api_sa = gcp.iam_get_service_account("sa-prod-api@gcp-proj-masked.iam.gserviceaccount.com");
+  assert_close(float(api_sa.user_managed_keys()), 0.0, 0.01);
+
+  let leg_sa = gcp.iam_get_service_account("sa-legacy-ci@gcp-proj-masked.iam.gserviceaccount.com");
+  assert_close(float(leg_sa.user_managed_keys()), 2.0, 0.01);
+  assert_close(float(leg_sa.key_max_age_days()), 185.0, 0.01);
+
+  let def_sa = gcp.iam_get_service_account("000000000000-compute@developer.gserviceaccount.com");
+  check(def_sa.is_default_compute());
+  assert_close(float(def_sa.key_max_age_days()), 310.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/10_iam_least_privilege_review.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/10_iam_least_privilege_review.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "IAM Service Account Key Hygiene & Least-Privilege Audit", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "5 Service Accounts & 6 Policy Bindings Evaluated | Metadata-only inspection (no private keys read)", "#8b949e").set_attr("text-anchor", "middle");
+
+  fn sa_card(y: float, name: string, roles: string, keys_info: string, badge: string, col: string) -> void {
+    scene.rect(40.0, y, 880.0, 76.0, "#161b22").set_attr("stroke", "#30363d");
+    scene.rect(40.0, y, 8.0, 76.0, col);
+    scene.text(64.0, y + 26.0, 14.0, name, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(64.0, y + 48.0, 12.0, "Roles: " + roles, "#8b949e");
+    scene.text(64.0, y + 66.0, 12.0, keys_info, col);
+    scene.rect(750.0, y + 20.0, 150.0, 34.0, "#0d1117").set_attr("stroke", col);
+    scene.text(825.0, y + 42.0, 12.5, badge, col).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  }
+
+  sa_card(82.0,  "sa-prod-api (Production API Gateway)",      "roles/run.invoker, roles/pubsub.publisher, roles/secretmanager.secretAccessor", "User-Managed Keys: 0 (Workload Identity Only)", "PASS (0 Keys)",    "#3fb950");
+  sa_card(170.0, "sa-prod-worker (Fulfillment Worker)",       "roles/pubsub.subscriber, roles/cloudsql.client, roles/storage.objectUser",      "User-Managed Keys: 0 (Workload Identity Only)", "PASS (0 Keys)",    "#3fb950");
+  sa_card(258.0, "sa-analytics-etl (Analytics BigQuery ETL)", "roles/bigquery.dataEditor, roles/storage.objectViewer",                         "User-Managed Keys: 1 (Max Age: 42d < 90d max)", "WARN (42d Key)",   "#d29922");
+  sa_card(346.0, "sa-legacy-ci (Legacy CI Deployer)",         "roles/editor, roles/storage.admin (Over-privileged primitive role!)",           "User-Managed Keys: 2 (Max Age: 185d > 90d CIS)","FAIL (185d Key)",  "#ff7b72");
+  sa_card(434.0, "000000000000-compute@developer (Default)",  "roles/editor (Default Compute SA enabled with Editor!)",                        "User-Managed Keys: 1 (Max Age: 310d > 90d CIS)","CRITICAL (310d)",  "#ff7b72");
+
+  scene.render_png("images/10_iam_least_privilege_review.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/10_iam_least_privilege_review_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/10_iam_least_privilege_review_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/10_iam_least_privilege_review.png", "docs/images/10_iam_least_privilege_review.png");
+println("ok 10_iam_least_privilege_review - wrote images/10_iam_least_privilege_review.png");

@@ -1,0 +1,92 @@
+lmgcp 0.1.0 — Third-Party Software Notices
+==========================================
+
+lmgcp is licensed under the MIT License (see LICENSE).
+No GPL, AGPL, or statically linked LGPL code is included in this binary.
+
+Linux C library / Runtime Note (Rule 14)
+----------------------------------------
+Release binaries are built with CGO_ENABLED=0 using the Go standard library
+runtime, or dynamically linked exclusively against the host system GNU C Library
+(glibc >= 2.35, LGPL-2.1) with no third-party shared library dependencies.
+
+1. lmcode-go (github.com/lmctl-ai/lmcode-go)
+--------------------------------------------
+License: MIT License
+Copyright (c) 2026 Lattice Systems LLC / lmctl-ai
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+2. Google Cloud Client Libraries for Go (cloud.google.com/go/*)
+---------------------------------------------------------------
+Modules:
+  - cloud.google.com/go
+  - cloud.google.com/go/auth
+  - cloud.google.com/go/compute/metadata
+  - cloud.google.com/go/iam
+  - cloud.google.com/go/kms
+  - cloud.google.com/go/longrunning
+  - cloud.google.com/go/monitoring
+  - cloud.google.com/go/storage
+License: Apache License 2.0
+Copyright 2014-2026 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+3. Google APIs Client Library for Go (google.golang.org/api)
+------------------------------------------------------------
+Packages: compute/v1, storage/v1, pubsub/v1, run/v2, iam/v1, secretmanager/v1,
+logging/v2, monitoring/v3, dns/v1, container/v1, sqladmin/v1, firestore/v1,
+bigquery/v2, cloudresourcemanager/v1, cloudkms/v1, artifactregistry/v1, option.
+License: BSD 3-Clause License
+Copyright (c) 2011-2026 Google Inc. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED.
+
+4. Go Standard Library & golang.org/x/* Packages
+------------------------------------------------
+Modules: golang.org/x/oauth2, golang.org/x/net, golang.org/x/sys,
+golang.org/x/text, golang.org/x/crypto, golang.org/x/sync, golang.org/x/time,
+google.golang.org/protobuf.
+License: BSD 3-Clause License
+Copyright (c) 2009-2026 The Go Authors. All rights reserved.
+
+5. gRPC-Go (google.golang.org/grpc) & Google APIs Common Protos
+---------------------------------------------------------------
+License: Apache License 2.0
+Copyright 2014-2026 gRPC authors / Google LLC.

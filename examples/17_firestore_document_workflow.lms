@@ -1,0 +1,76 @@
+# Cloud Firestore document collection inspection & ephemeral session document CRUD workflow.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  gcp.set_run_id("firestore-crud-17");
+
+  let cols = gcp.firestore_list_collections();
+  assert_close(float(cols.len()), 1.0, 0.01);
+
+  let ff = gcp.firestore_get_doc("feature_flags", "checkout_v2");
+  check(ff.get("rollout_pct") == "25");
+
+  let d1 = str_map().set("state", "ACTIVE").set("region", "us-central1").set("ttl_sec", "3600");
+  let d2 = str_map().set("state", "COMMITTED").set("region", "us-east1").set("ttl_sec", "3600");
+  check(gcp.firestore_put_doc("lmgcp_sessions", "lmgcp-sess-101", d1));
+  check(gcp.firestore_put_doc("lmgcp_sessions", "lmgcp-sess-102", d2));
+
+  let docs = gcp.firestore_list_docs("lmgcp_sessions");
+  assert_close(float(docs.len()), 2.0, 0.01);
+
+  let got = gcp.firestore_get_doc("lmgcp_sessions", "lmgcp-sess-102");
+  check(got.get("state") == "COMMITTED");
+
+  check(gcp.firestore_delete_doc("lmgcp_sessions", "lmgcp-sess-101"));
+  check(gcp.firestore_delete_doc("lmgcp_sessions", "lmgcp-sess-102"));
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/17_firestore_document_workflow.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/17_firestore_document_workflow.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud Firestore Document Store & Ephemeral Session Workflow", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Baseline feature_flags collection inspected | Ephemeral lmgcp_sessions collection exercised & cleaned", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 84.0, 425.0, 396.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(60.0, 118.0, 15.5, "Baseline Collection: feature_flags", "#58a6ff").set_attr("font-weight", "700");
+
+  scene.rect(60.0, 145.0, 385.0, 130.0, "#0d1117").set_attr("stroke", "#30363d");
+  scene.text(78.0, 175.0, 14.0, "Document: checkout_v2", "#e6edf3").set_attr("font-weight", "700");
+  scene.text(78.0, 202.0, 12.5, "enabled: \"true\"", "#3fb950");
+  scene.text(78.0, 226.0, 12.5, "rollout_pct: \"25\"", "#58a6ff");
+  scene.text(78.0, 250.0, 12.5, "owner: \"platform\"", "#8b949e");
+
+  scene.rect(60.0, 295.0, 385.0, 130.0, "#0d1117").set_attr("stroke", "#30363d");
+  scene.text(78.0, 325.0, 14.0, "Document: strict_mtls", "#e6edf3").set_attr("font-weight", "700");
+  scene.text(78.0, 352.0, 12.5, "enabled: \"true\"", "#3fb950");
+  scene.text(78.0, 376.0, 12.5, "rollout_pct: \"100\"", "#3fb950");
+  scene.text(78.0, 400.0, 12.5, "owner: \"secops\"", "#8b949e");
+
+  scene.rect(495.0, 84.0, 425.0, 396.0, "#161b22").set_attr("stroke", "#3fb950").set_attr("stroke-width", "2");
+  scene.text(515.0, 118.0, 15.5, "Ephemeral CRUD: lmgcp_sessions", "#3fb950").set_attr("font-weight", "700");
+
+  scene.rect(515.0, 145.0, 385.0, 92.0, "#0d1117").set_attr("stroke", "#3fb950");
+  scene.text(533.0, 175.0, 13.5, "1. PutDoc: lmgcp-sess-101 & lmgcp-sess-102", "#3fb950").set_attr("font-weight", "700");
+  scene.text(533.0, 204.0, 12.0, "Written to lmgcp_sessions with run label lmgcp_test", "#c9d1d9");
+
+  scene.rect(515.0, 255.0, 385.0, 92.0, "#0d1117").set_attr("stroke", "#58a6ff");
+  scene.text(533.0, 285.0, 13.5, "2. ListDocs & GetDoc Verification", "#58a6ff").set_attr("font-weight", "700");
+  scene.text(533.0, 314.0, 12.0, "Verified 2 docs; lmgcp-sess-102 state == COMMITTED", "#c9d1d9");
+
+  scene.rect(515.0, 365.0, 385.0, 92.0, "#0d1117").set_attr("stroke", "#a371f7");
+  scene.text(533.0, 395.0, 13.5, "3. DeleteDoc & Ledger Clean", "#a371f7").set_attr("font-weight", "700");
+  scene.text(533.0, 424.0, 12.0, "Deleted both ephemeral documents; ledger_count() == 0", "#c9d1d9");
+
+  scene.render_png("images/17_firestore_document_workflow.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/17_firestore_document_workflow_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/17_firestore_document_workflow_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/17_firestore_document_workflow.png", "docs/images/17_firestore_document_workflow.png");
+println("ok 17_firestore_document_workflow - wrote images/17_firestore_document_workflow.png");

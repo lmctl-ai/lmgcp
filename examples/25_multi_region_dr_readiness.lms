@@ -1,0 +1,71 @@
+# Multi-region Disaster Recovery (DR) readiness scorecard comparing primary us-central1
+# against recovery us-east1 across Subnets, Compute, Cloud Run, Cloud SQL, GKE, and KMS.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let pri_subs = gcp.network_list_subnets("us-central1");
+  let dr_subs = gcp.network_list_subnets("us-east1");
+  assert_close(float(pri_subs.len()), 3.0, 0.01);
+  assert_close(float(dr_subs.len()), 1.0, 0.01);
+
+  let pri_vms = gcp.compute_instance_count("us-central1-a") + gcp.compute_instance_count("us-central1-b") + gcp.compute_instance_count("us-central1-c");
+  let dr_vms = gcp.compute_instance_count("us-east1-b");
+  assert_close(float(pri_vms), 5.0, 0.01);
+  assert_close(float(dr_vms), 1.0, 0.01);
+
+  let pri_run = gcp.run_list_services("us-central1");
+  let dr_run = gcp.run_list_services("us-east1");
+  assert_close(float(pri_run.len()), 2.0, 0.01);
+  assert_close(float(dr_run.len()), 1.0, 0.01);
+
+  let pri_gke = gcp.gke_list_clusters("us-central1");
+  let dr_gke = gcp.gke_list_clusters("us-east1");
+  assert_close(float(pri_gke.len()), 2.0, 0.01);
+  assert_close(float(dr_gke.len()), 1.0, 0.01);
+
+  let pri_kms = gcp.kms_list_keys("us-central1", "prod-ring");
+  let dr_kms = gcp.kms_list_keys("us-east1", "dr-ring");
+  assert_close(float(pri_kms.len()), 3.0, 0.01);
+  assert_close(float(dr_kms.len()), 1.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/25_multi_region_dr_readiness.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/25_multi_region_dr_readiness.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Multi-Region Disaster Recovery Readiness Scorecard (us-central1 vs us-east1)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Primary Region: us-central1 | DR Failover Region: us-east1 | Cross-Tier RPO / RTO Posture", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 80.0, 880.0, 425.0, "#161b22").set_attr("stroke", "#30363d");
+  scene.text(65.0, 114.0, 13.0, "INFRASTRUCTURE TIER", "#8b949e").set_attr("font-weight", "700");
+  scene.text(320.0, 114.0, 13.0, "PRIMARY (us-central1)", "#3fb950").set_attr("font-weight", "700");
+  scene.text(565.0, 114.0, 13.0, "RECOVERY (us-east1)", "#58a6ff").set_attr("font-weight", "700");
+  scene.text(815.0, 114.0, 13.0, "DR READINESS", "#8b949e").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.line(55.0, 128.0, 905.0, 128.0, "#30363d", 1.5);
+
+  fn dr_row(y: float, tier: string, pri: string, dr: string, badge: string, col: string) -> void {
+    scene.rect(58.0, y, 844.0, 48.0, "#0d1117").set_attr("stroke", "#30363d");
+    scene.text(74.0, y + 29.0, 13.0, tier, "#e6edf3").set_attr("font-weight", "700");
+    scene.text(320.0, y + 29.0, 12.0, pri, "#c9d1d9");
+    scene.text(565.0, y + 29.0, 12.0, dr, "#c9d1d9");
+    scene.rect(745.0, y + 9.0, 140.0, 30.0, "#161b22").set_attr("stroke", col);
+    scene.text(815.0, y + 29.0, 12.0, badge, col).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  }
+
+  dr_row(144.0, "1. VPC Subnetworks",     "3 Subnets (10.10.0.0/16)",   "1 Subnet (10.20.0.0/21)",     "READY",        "#3fb950");
+  dr_row(202.0, "2. GKE Autopilot K8s",   "prod-autopilot (18 nodes)",  "dr-autopilot-standby (8n)",   "ACTIVE/WARM",  "#3fb950");
+  dr_row(260.0, "3. Cloud SQL Postgres",  "prod-orders-pg15 (HA+PITR)", "prod-ledger-pg15 (HA+PITR)",  "READY",        "#3fb950");
+  dr_row(318.0, "4. Cloud Run Services",  "payments + catalog-search",  "payments-authorizer-dr only", "PARTIAL GAP",  "#d29922");
+  dr_row(376.0, "5. Compute Engine VMs",  "4 Prod VMs RUNNING",         "1 Cold Standby (TERMINATED)", "COLD STANDBY", "#d29922");
+  dr_row(434.0, "6. Cloud KMS CryptoKeys","3 HSM Keys (90d rotation)",  "1 SOFTWARE Key (180d rot)",   "UPGRADE HSM",  "#f0883e");
+
+  scene.render_png("images/25_multi_region_dr_readiness.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/25_multi_region_dr_readiness_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/25_multi_region_dr_readiness_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/25_multi_region_dr_readiness.png", "docs/images/25_multi_region_dr_readiness.png");
+println("ok 25_multi_region_dr_readiness - wrote images/25_multi_region_dr_readiness.png");

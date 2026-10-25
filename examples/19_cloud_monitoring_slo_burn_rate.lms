@@ -1,0 +1,79 @@
+# Cloud Monitoring telemetry time-series query & SLO alert policy lifecycle verification.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  gcp.set_run_id("monitoring-slo-19");
+
+  let metrics = gcp.monitoring_list_metrics();
+  assert_close(float(metrics.len()), 4.0, 0.01);
+
+  let lat = gcp.monitoring_query_series("run.googleapis.com/request_latencies_p95_ms", 12);
+  let err = gcp.monitoring_query_series("run.googleapis.com/request_error_rate_pct", 12);
+  assert_close(float(lat.len()), 12.0, 0.01);
+  assert_close(float(err.len()), 12.0, 0.01);
+  assert_close(lat.at(5), 92.1, 0.1);
+
+  let ap = gcp.monitoring_create_alert_policy("lmgcp-slo-latency-alert", "run.googleapis.com/request_latencies_p95_ms", 80.0, 180);
+  assert_close(ap.threshold(), 80.0, 0.01);
+
+  let pols = gcp.monitoring_list_alert_policies();
+  assert_close(float(pols.len()), 4.0, 0.01);
+
+  check(gcp.monitoring_delete_alert_policy("lmgcp-slo-latency-alert"));
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/19_cloud_monitoring_slo_burn_rate.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/19_cloud_monitoring_slo_burn_rate.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud Monitoring P95 Latency Series & SLO Alert Policy", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Metric: run.googleapis.com/request_latencies_p95_ms (12 windows) | Ephemeral SLO Threshold: 80.0 ms", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 82.0, 880.0, 310.0, "#161b22").set_attr("stroke", "#30363d");
+
+  let y_thresh = 360.0 - 80.0 * 2.4;
+  scene.line(80.0, y_thresh, 890.0, y_thresh, "#ff7b72", 2.0);
+  scene.text(880.0, y_thresh - 8.0, 11.5, "SLO Alert Threshold (80.0 ms)", "#ff7b72").set_attr("text-anchor", "end").set_attr("font-weight", "700");
+
+  fn pt_bar(idx: int, ms: float) -> void {
+    let x = 95.0 + float(idx) * 66.0;
+    let h = ms * 2.4;
+    let y = 360.0 - h;
+    let col = "#3fb950";
+    if (ms >= 80.0) {
+      col = "#ff7b72";
+    }
+    scene.rect(x, y, 38.0, h, col);
+    scene.text(x + 19.0, y - 8.0, 11.0, str(int(ms)) + "ms", "#e6edf3").set_attr("text-anchor", "middle");
+    scene.text(x + 19.0, 378.0, 11.0, "t" + str(idx + 1), "#8b949e").set_attr("text-anchor", "middle");
+  }
+
+  pt_bar(0,  48.5);
+  pt_bar(1,  51.2);
+  pt_bar(2,  54.0);
+  pt_bar(3,  62.8);
+  pt_bar(4,  79.4);
+  pt_bar(5,  92.1);
+  pt_bar(6,  84.0);
+  pt_bar(7,  68.3);
+  pt_bar(8,  59.1);
+  pt_bar(9,  53.7);
+  pt_bar(10, 50.4);
+  pt_bar(11, 49.0);
+
+  scene.rect(40.0, 408.0, 880.0, 82.0, "#161b22").set_attr("stroke", "#58a6ff");
+  scene.text(60.0, 438.0, 14.0, "SLO Burn Alert Verification: lmgcp-slo-latency-alert (Threshold 80.0ms / 180s window)", "#58a6ff").set_attr("font-weight", "700");
+  scene.text(60.0, 466.0, 12.5, "Breach windows detected at t6 (92.1ms) and t7 (84.0ms) -> Policy created, verified & deleted cleanly.", "#c9d1d9");
+
+  scene.render_png("images/19_cloud_monitoring_slo_burn_rate.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/19_cloud_monitoring_slo_burn_rate_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/19_cloud_monitoring_slo_burn_rate_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/19_cloud_monitoring_slo_burn_rate.png", "docs/images/19_cloud_monitoring_slo_burn_rate.png");
+println("ok 19_cloud_monitoring_slo_burn_rate - wrote images/19_cloud_monitoring_slo_burn_rate.png");

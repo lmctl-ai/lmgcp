@@ -1,0 +1,2735 @@
+{
+  "dsl.schema": 2,
+  "name": "lmgcp",
+  "context": {
+    "gcp": "Gcp"
+  },
+  "functions": {
+    "assert_close": [
+      {
+        "params": [
+          "float",
+          "float",
+          "float"
+        ],
+        "returns": "void"
+      }
+    ],
+    "file_append": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "void"
+      }
+    ],
+    "file_exists": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "file_lines": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "StrList"
+      }
+    ],
+    "file_read": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "file_write": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "void"
+      }
+    ],
+    "float_list": [
+      {
+        "params": [],
+        "returns": "FloatList"
+      }
+    ],
+    "int_list": [
+      {
+        "params": [],
+        "returns": "IntList"
+      }
+    ],
+    "math_abs": [
+      {
+        "params": [
+          "float"
+        ],
+        "returns": "float"
+      },
+      {
+        "params": [
+          "int"
+        ],
+        "returns": "int"
+      }
+    ],
+    "math_ceil": [
+      {
+        "params": [
+          "float"
+        ],
+        "returns": "float"
+      },
+      {
+        "params": [
+          "int"
+        ],
+        "returns": "int"
+      }
+    ],
+    "math_floor": [
+      {
+        "params": [
+          "float"
+        ],
+        "returns": "float"
+      },
+      {
+        "params": [
+          "int"
+        ],
+        "returns": "int"
+      }
+    ],
+    "math_max": [
+      {
+        "params": [
+          "float",
+          "float"
+        ],
+        "returns": "float"
+      },
+      {
+        "params": [
+          "int",
+          "int"
+        ],
+        "returns": "int"
+      }
+    ],
+    "math_min": [
+      {
+        "params": [
+          "float",
+          "float"
+        ],
+        "returns": "float"
+      },
+      {
+        "params": [
+          "int",
+          "int"
+        ],
+        "returns": "int"
+      }
+    ],
+    "math_pow": [
+      {
+        "params": [
+          "float",
+          "float"
+        ],
+        "returns": "float"
+      },
+      {
+        "params": [
+          "int",
+          "int"
+        ],
+        "returns": "int"
+      }
+    ],
+    "math_round": [
+      {
+        "params": [
+          "float"
+        ],
+        "returns": "float"
+      },
+      {
+        "params": [
+          "int"
+        ],
+        "returns": "int"
+      }
+    ],
+    "math_sqrt": [
+      {
+        "params": [
+          "float"
+        ],
+        "returns": "float"
+      },
+      {
+        "params": [
+          "int"
+        ],
+        "returns": "int"
+      }
+    ],
+    "print": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "void"
+      }
+    ],
+    "str_contains": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_ends_with": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_find": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "int"
+      }
+    ],
+    "str_is_float": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_is_int": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_len": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "int"
+      }
+    ],
+    "str_list": [
+      {
+        "params": [],
+        "returns": "StrList"
+      }
+    ],
+    "str_lower": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "str_map": [
+      {
+        "params": [],
+        "returns": "StrMap"
+      }
+    ],
+    "str_match": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_repeat": [
+      {
+        "params": [
+          "string",
+          "int"
+        ],
+        "returns": "string"
+      }
+    ],
+    "str_replace": [
+      {
+        "params": [
+          "string",
+          "string",
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "str_split": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "StrList"
+      }
+    ],
+    "str_starts_with": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_substr": [
+      {
+        "params": [
+          "string",
+          "int",
+          "int"
+        ],
+        "returns": "string"
+      }
+    ],
+    "str_to_float": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "float"
+      }
+    ],
+    "str_to_int": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "int"
+      }
+    ],
+    "str_trim": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "str_upper": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ]
+  },
+  "types": {
+    "AlertPolicy": {
+      "methods": {
+        "duration_sec": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "enabled": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "metric_type": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "notification_channels": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "threshold": [
+          {
+            "params": [],
+            "returns": "float"
+          }
+        ]
+      }
+    },
+    "ArtifactRepo": {
+      "methods": {
+        "cleanup_policy_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "format": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "immutable_tags": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "location": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "package_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "size_mb": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "vulnerability_scanning": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ]
+      }
+    },
+    "BqDataset": {
+      "methods": {
+        "dataset_id": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "default_expiration_days": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "labels": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "location": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "BqTable": {
+      "methods": {
+        "bytes": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "dataset_id": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "partition_field": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "row_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "schema_spec": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "table_id": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "CloudRunService": {
+      "methods": {
+        "canary_traffic_pct": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "concurrency": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "cpu_milli": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "image": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "ingress": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "labels": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "latest_revision": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "max_instances": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "memory_mb": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "min_instances": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "region": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "revision_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "stable_traffic_pct": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "uri": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "ComputeInstance": {
+      "methods": {
+        "cpu_platform": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "deletion_protection": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "disk_gb": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "external_ip": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "has_label": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "internal_ip": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "label": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "labels": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "machine_type": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "memory_mb": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "network": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "service_account": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "shielded_vtpm": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "status": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "vcpus": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "zone": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "DnsZone": {
+      "methods": {
+        "dns_name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "dnssec": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "record_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "visibility": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "FirewallRule": {
+      "methods": {
+        "action": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "direction": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "disabled": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "is_open_to_world": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "log_enabled": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "network": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "ports": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "priority": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "protocol": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "risk_score": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "source_cidr": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "target_tags": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "FloatList": {
+      "methods": {
+        "add": [
+          {
+            "params": [
+              "float"
+            ],
+            "returns": "FloatList"
+          }
+        ],
+        "at": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "float"
+          }
+        ],
+        "clear": [
+          {
+            "params": [],
+            "returns": "FloatList"
+          }
+        ],
+        "contains": [
+          {
+            "params": [
+              "float"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "index_of": [
+          {
+            "params": [
+              "float"
+            ],
+            "returns": "int"
+          }
+        ],
+        "len": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "set": [
+          {
+            "params": [
+              "int",
+              "float"
+            ],
+            "returns": "FloatList"
+          }
+        ]
+      }
+    },
+    "Gcp": {
+      "methods": {
+        "alloc_scratch_mb": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "ar_create_repository": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "bool"
+            ],
+            "returns": "ArtifactRepo"
+          }
+        ],
+        "ar_delete_repository": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "ar_get_repository": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "ArtifactRepo"
+          }
+        ],
+        "ar_list_repositories": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "audit_label_compliance": [
+          {
+            "params": [
+              "StrList"
+            ],
+            "returns": "StrMap"
+          }
+        ],
+        "auth_mode": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "bq_create_dataset": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "BqDataset"
+          }
+        ],
+        "bq_create_table": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "string"
+            ],
+            "returns": "BqTable"
+          }
+        ],
+        "bq_delete_dataset": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "bq_delete_table": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "bq_get_dataset": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "BqDataset"
+          }
+        ],
+        "bq_get_table": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "BqTable"
+          }
+        ],
+        "bq_list_datasets": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "cleanup_ledger": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "compute_create_instance": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "string"
+            ],
+            "returns": "ComputeInstance"
+          }
+        ],
+        "compute_delete_instance": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "compute_get_instance": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "ComputeInstance"
+          }
+        ],
+        "compute_instance_count": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "int"
+          }
+        ],
+        "compute_list_disks": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "compute_list_instances": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "compute_set_instance_labels": [
+          {
+            "params": [
+              "string",
+              "string",
+              "StrMap"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "compute_start_instance": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "compute_stop_instance": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "dns_add_record": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "int",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "dns_create_zone": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "bool"
+            ],
+            "returns": "DnsZone"
+          }
+        ],
+        "dns_delete_record": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "dns_delete_zone": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "dns_get_zone": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "DnsZone"
+          }
+        ],
+        "dns_list_records": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "dns_list_zones": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "endpoint": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "firestore_delete_doc": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "firestore_get_doc": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "StrMap"
+          }
+        ],
+        "firestore_list_collections": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "firestore_list_docs": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "firestore_put_doc": [
+          {
+            "params": [
+              "string",
+              "string",
+              "StrMap"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "gke_get_cluster": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "GkeCluster"
+          }
+        ],
+        "gke_list_clusters": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "iam_get_service_account": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "ServiceAccount"
+          }
+        ],
+        "iam_list_bindings": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "iam_list_service_accounts": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "inventory_summary": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "is_live": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "kms_create_key": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "string",
+              "int"
+            ],
+            "returns": "KmsKey"
+          }
+        ],
+        "kms_get_key": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string"
+            ],
+            "returns": "KmsKey"
+          }
+        ],
+        "kms_list_keyrings": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "kms_list_keys": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "last_error": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "ledger_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "ledger_entries": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "ledger_owns": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "logging_create_sink": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string"
+            ],
+            "returns": "LogSink"
+          }
+        ],
+        "logging_delete_sink": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "logging_get_sink": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "LogSink"
+          }
+        ],
+        "logging_list_sinks": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "logging_severity_counts": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "logging_write_entry": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "StrMap"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "masked_project": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "monitoring_create_alert_policy": [
+          {
+            "params": [
+              "string",
+              "string",
+              "float",
+              "int"
+            ],
+            "returns": "AlertPolicy"
+          }
+        ],
+        "monitoring_delete_alert_policy": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "monitoring_get_alert_policy": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "AlertPolicy"
+          }
+        ],
+        "monitoring_list_alert_policies": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "monitoring_list_metrics": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "monitoring_query_series": [
+          {
+            "params": [
+              "string",
+              "int"
+            ],
+            "returns": "FloatList"
+          }
+        ],
+        "network_create_firewall": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "int",
+              "string",
+              "string",
+              "string"
+            ],
+            "returns": "FirewallRule"
+          }
+        ],
+        "network_create_subnet": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "string",
+              "bool"
+            ],
+            "returns": "Subnet"
+          }
+        ],
+        "network_create_vpc": [
+          {
+            "params": [
+              "string",
+              "bool"
+            ],
+            "returns": "VpcNetwork"
+          }
+        ],
+        "network_delete_firewall": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "network_delete_subnet": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "network_delete_vpc": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "network_get_firewall": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "FirewallRule"
+          }
+        ],
+        "network_get_subnet": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "Subnet"
+          }
+        ],
+        "network_get_vpc": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "VpcNetwork"
+          }
+        ],
+        "network_list_firewalls": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "network_list_subnets": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "network_list_vpcs": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "project": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "pubsub_create_subscription": [
+          {
+            "params": [
+              "string",
+              "string",
+              "int",
+              "string"
+            ],
+            "returns": "PubsubSubscription"
+          }
+        ],
+        "pubsub_create_topic": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "PubsubTopic"
+          }
+        ],
+        "pubsub_delete_subscription": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "pubsub_delete_topic": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "pubsub_get_subscription": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "PubsubSubscription"
+          }
+        ],
+        "pubsub_get_topic": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "PubsubTopic"
+          }
+        ],
+        "pubsub_list_subscriptions": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "pubsub_list_topics": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "pubsub_publish": [
+          {
+            "params": [
+              "string",
+              "string",
+              "StrMap"
+            ],
+            "returns": "string"
+          }
+        ],
+        "pubsub_pull": [
+          {
+            "params": [
+              "string",
+              "int"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "pubsub_set_topic_labels": [
+          {
+            "params": [
+              "string",
+              "StrMap"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "redact": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "region": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "resource_graph_edges": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "run_delete_service": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "run_deploy_service": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "int",
+              "int",
+              "int"
+            ],
+            "returns": "CloudRunService"
+          }
+        ],
+        "run_get_service": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "CloudRunService"
+          }
+        ],
+        "run_id": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "run_list_services": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "run_set_labels": [
+          {
+            "params": [
+              "string",
+              "string",
+              "StrMap"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "run_set_traffic_split": [
+          {
+            "params": [
+              "string",
+              "string",
+              "int",
+              "int"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "secrets_create_metadata": [
+          {
+            "params": [
+              "string",
+              "string",
+              "int",
+              "StrMap"
+            ],
+            "returns": "SecretMetadata"
+          }
+        ],
+        "secrets_delete": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "secrets_get_metadata": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "SecretMetadata"
+          }
+        ],
+        "secrets_list": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "seed_demo_age": [
+          {
+            "params": [
+              "string",
+              "string",
+              "int"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "set_auto_cleanup": [
+          {
+            "params": [
+              "bool"
+            ],
+            "returns": "Gcp"
+          }
+        ],
+        "set_project": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "Gcp"
+          }
+        ],
+        "set_region": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "Gcp"
+          }
+        ],
+        "set_run_id": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "Gcp"
+          }
+        ],
+        "set_zone": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "Gcp"
+          }
+        ],
+        "sql_create_instance": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "string",
+              "bool"
+            ],
+            "returns": "SqlInstance"
+          }
+        ],
+        "sql_delete_instance": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "sql_get_instance": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "SqlInstance"
+          }
+        ],
+        "sql_list_instances": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "storage_create_bucket": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string"
+            ],
+            "returns": "StorageBucket"
+          }
+        ],
+        "storage_delete_bucket": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "storage_delete_object": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "storage_get_bucket": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StorageBucket"
+          }
+        ],
+        "storage_list_buckets": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "storage_list_objects": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "storage_object_size": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "int"
+          }
+        ],
+        "storage_put_object": [
+          {
+            "params": [
+              "string",
+              "string",
+              "string",
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "storage_read_object": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "storage_set_bucket_labels": [
+          {
+            "params": [
+              "string",
+              "StrMap"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "storage_set_bucket_lifecycle": [
+          {
+            "params": [
+              "string",
+              "int",
+              "int"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "storage_set_bucket_versioning": [
+          {
+            "params": [
+              "string",
+              "bool"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "storage_set_uniform_access": [
+          {
+            "params": [
+              "string",
+              "bool"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "sweep_delete": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "int"
+          }
+        ],
+        "sweep_dry_run": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "zone": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "GkeCluster": {
+      "methods": {
+        "autopilot": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "binary_auth": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "k8s_version": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "labels": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "location": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "network_policy": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "node_pool_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "private_nodes": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "release_channel": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "status": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "total_nodes": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "workload_identity": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ]
+      }
+    },
+    "IntList": {
+      "methods": {
+        "add": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "IntList"
+          }
+        ],
+        "at": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "int"
+          }
+        ],
+        "clear": [
+          {
+            "params": [],
+            "returns": "IntList"
+          }
+        ],
+        "contains": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "index_of": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "int"
+          }
+        ],
+        "len": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "set": [
+          {
+            "params": [
+              "int",
+              "int"
+            ],
+            "returns": "IntList"
+          }
+        ]
+      }
+    },
+    "KmsKey": {
+      "methods": {
+        "keyring": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "location": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "primary_state": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "protection_level": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "purpose": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "rotation_days": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ]
+      }
+    },
+    "LogSink": {
+      "methods": {
+        "destination": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "disabled": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "filter": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "PubsubSubscription": {
+      "methods": {
+        "ack_deadline_sec": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "backlog_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "dead_letter_topic": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "max_delivery_attempts": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "retain_acked": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "topic": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "PubsubTopic": {
+      "methods": {
+        "labels": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "published_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "retention_sec": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ]
+      }
+    },
+    "SecretMetadata": {
+      "methods": {
+        "cmek_enabled": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "enabled_versions": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "has_expiration": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "labels": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "replication_policy": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "rotation_period_days": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "version_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ]
+      }
+    },
+    "ServiceAccount": {
+      "methods": {
+        "disabled": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "display_name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "email": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "is_default_compute": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "key_max_age_days": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "roles": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "user_managed_keys": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ]
+      }
+    },
+    "SqlInstance": {
+      "methods": {
+        "backup_enabled": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "db_version": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "ha_enabled": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "labels": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "pitr_enabled": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "public_ip_enabled": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "region": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "require_ssl": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "state": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "storage_gb": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "tier": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "StorageBucket": {
+      "methods": {
+        "encryption_type": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "label": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "labels": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "lifecycle_delete_days": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "lifecycle_nearline_days": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "location": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "object_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "public_access_prevention": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "storage_class": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "total_bytes": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "uniform_access": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "versioning": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ]
+      }
+    },
+    "StrList": {
+      "methods": {
+        "add": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "at": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "string"
+          }
+        ],
+        "clear": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "contains": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "index_of": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "int"
+          }
+        ],
+        "join": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "len": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "set": [
+          {
+            "params": [
+              "int",
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ]
+      }
+    },
+    "StrMap": {
+      "methods": {
+        "clear": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "get": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "get_or": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "has": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "key_at": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "string"
+          }
+        ],
+        "len": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "remove": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "set": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "StrMap"
+          }
+        ]
+      }
+    },
+    "Subnet": {
+      "methods": {
+        "cidr": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "flow_logs": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "network": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "private_ip_google_access": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "region": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ]
+      }
+    },
+    "VpcNetwork": {
+      "methods": {
+        "auto_create_subnets": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "mtu": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "routing_mode": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "subnet_count": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ]
+      }
+    }
+  }
+}

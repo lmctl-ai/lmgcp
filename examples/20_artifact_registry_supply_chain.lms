@@ -1,0 +1,68 @@
+# Artifact Registry container & Go module repository supply-chain security audit (immutable tags,
+# vulnerability scanning, cleanup policies) + ephemeral repository CRUD.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  gcp.set_run_id("ar-supplychain-20");
+
+  let repos = gcp.ar_list_repositories("us-central1");
+  assert_close(float(repos.len()), 3.0, 0.01);
+
+  let r1 = gcp.ar_get_repository("us-central1", "prod-containers");
+  let r2 = gcp.ar_get_repository("us-central1", "go-internal-modules");
+  let r3 = gcp.ar_get_repository("us-central1", "staging-scratch-images");
+
+  check(r1.immutable_tags());
+  check(r1.vulnerability_scanning());
+  assert_close(float(r1.package_count()), 64.0, 0.01);
+
+  check(r2.immutable_tags());
+  check(!r3.immutable_tags());
+  check(!r3.vulnerability_scanning());
+
+  let dr = gcp.ar_create_repository("us-central1", "lmgcp-containers", "DOCKER", true);
+  check(dr.immutable_tags());
+  check(gcp.ar_delete_repository("us-central1", "lmgcp-containers"));
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/20_artifact_registry_supply_chain.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/20_artifact_registry_supply_chain.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Artifact Registry Supply-Chain Security & Tag Immutability", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "3 Repositories in us-central1 | Immutable Tags, Vulnerability Scanning & Cleanup Policy Posture", "#8b949e").set_attr("text-anchor", "middle");
+
+  fn ar_card(x: float, name: string, fmt: string, imm: string, scan: string, pol: string, pkg: string, badge: string, col: string) -> void {
+    scene.rect(x, 82.0, 280.0, 310.0, "#161b22").set_attr("stroke", col).set_attr("stroke-width", "2");
+    scene.text(x + 140.0, 114.0, 15.5, name, "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+    scene.text(x + 140.0, 136.0, 12.0, fmt, "#8b949e").set_attr("text-anchor", "middle");
+
+    scene.text(x + 24.0, 174.0, 12.5, imm, "#c9d1d9");
+    scene.text(x + 24.0, 206.0, 12.5, scan, "#c9d1d9");
+    scene.text(x + 24.0, 238.0, 12.5, pol, "#c9d1d9");
+    scene.text(x + 24.0, 270.0, 12.5, pkg, "#58a6ff");
+
+    scene.rect(x + 24.0, 318.0, 232.0, 48.0, "#0d1117").set_attr("stroke", col);
+    scene.text(x + 140.0, 348.0, 13.5, badge, col).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  }
+
+  ar_card(40.0,  "prod-containers",        "Format: DOCKER", "[PASS] Immutable Tags: ON",   "[PASS] Vuln Scanning: ON",   "[PASS] Cleanup Policies: 3", "64 images (4,280 MB)", "HARDENED (SLSA)", "#3fb950");
+  ar_card(340.0, "go-internal-modules",    "Format: GO",     "[PASS] Immutable Versions",   "[PASS] Vuln Scanning: ON",   "[PASS] Cleanup Policies: 2", "28 modules (340 MB)",  "HARDENED (GO)",   "#3fb950");
+  ar_card(640.0, "staging-scratch-images", "Format: DOCKER", "[FAIL] Mutable Tags Allowed", "[FAIL] Vuln Scanning: OFF",  "[WARN] Cleanup Policies: 0", "42 images (1,890 MB)", "REMEDIATE",       "#ff7b72");
+
+  scene.rect(40.0, 410.0, 880.0, 80.0, "#161b22").set_attr("stroke", "#58a6ff");
+  scene.text(60.0, 440.0, 14.0, "Ephemeral Supply-Chain Test: lmgcp-containers (DOCKER, ImmutableTags=true)", "#58a6ff").set_attr("font-weight", "700");
+  scene.text(60.0, 468.0, 12.5, "Provisioned in us-central1 -> verified immutable_tags() & vulnerability_scanning() -> deleted cleanly.", "#c9d1d9");
+
+  scene.render_png("images/20_artifact_registry_supply_chain.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/20_artifact_registry_supply_chain_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/20_artifact_registry_supply_chain_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/20_artifact_registry_supply_chain.png", "docs/images/20_artifact_registry_supply_chain.png");
+println("ok 20_artifact_registry_supply_chain - wrote images/20_artifact_registry_supply_chain.png");

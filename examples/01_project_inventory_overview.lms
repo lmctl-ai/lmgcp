@@ -1,0 +1,84 @@
+# Multi-service GCP estate inventory across 16 resource types in masked project gcp-proj-****8f2a.
+# Queries Compute, VPC, Subnets, Firewalls, GCS, Pub/Sub, Cloud Run, Cloud SQL, BigQuery, GKE,
+# Artifact Registry, Cloud DNS, Secret Manager metadata, Log Sinks, and Alert Policies.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let proj = gcp.masked_project();
+  let mode = gcp.auth_mode();
+  let inv = gcp.inventory_summary();
+
+  let n_vm = str_to_int(inv.get("compute_instances"));
+  let n_vpc = str_to_int(inv.get("vpc_networks"));
+  let n_sub = str_to_int(inv.get("subnets"));
+  let n_fw = str_to_int(inv.get("firewall_rules"));
+  let n_bkt = str_to_int(inv.get("storage_buckets"));
+  let n_top = str_to_int(inv.get("pubsub_topics"));
+  let n_run = str_to_int(inv.get("cloud_run"));
+  let n_sql = str_to_int(inv.get("sql_instances"));
+  let n_gke = str_to_int(inv.get("gke_clusters"));
+  let n_sec = str_to_int(inv.get("secrets_metadata"));
+
+  assert_close(float(n_vm), 7.0, 0.01);
+  assert_close(float(n_vpc), 3.0, 0.01);
+  assert_close(float(n_sub), 5.0, 0.01);
+  assert_close(float(n_fw), 6.0, 0.01);
+  assert_close(float(n_bkt), 5.0, 0.01);
+  assert_close(float(n_top), 3.0, 0.01);
+  assert_close(float(n_run), 3.0, 0.01);
+  assert_close(float(n_sql), 3.0, 0.01);
+  assert_close(float(n_gke), 3.0, 0.01);
+  assert_close(float(n_sec), 5.0, 0.01);
+
+  let csv = "service,count\n"
+    + "Compute VMs," + str(n_vm) + "\n"
+    + "Firewall Rules," + str(n_fw) + "\n"
+    + "VPC Subnets," + str(n_sub) + "\n"
+    + "GCS Buckets," + str(n_bkt) + "\n"
+    + "Secrets Meta," + str(n_sec) + "\n"
+    + "VPC Networks," + str(n_vpc) + "\n"
+    + "PubSub Topics," + str(n_top) + "\n"
+    + "Cloud Run," + str(n_run) + "\n"
+    + "Cloud SQL," + str(n_sql) + "\n"
+    + "GKE Clusters," + str(n_gke) + "\n";
+  file_write("build/examples/01_inventory.csv", csv);
+  print("project=" + proj + " mode=" + mode + " total_vms=" + str(n_vm));
+end _dsl_
+savedsl(p, "build/examples/01_project_inventory_overview.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/01_project_inventory_overview.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "GCP Multi-Service Estate Inventory (Project: gcp-proj-****8f2a)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Read-only Google Cloud Go SDK discovery across 10 core service families | 43 baseline resources", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 76.0, 880.0, 430.0, "#161b22").set_attr("stroke", "#30363d");
+
+  fn bar(y: float, label: string, count: int, max_w: float, col: string, detail: string) -> void {
+    scene.text(200.0, y + 16.0, 13.0, label, "#c9d1d9").set_attr("text-anchor", "end").set_attr("font-weight", "600");
+    let w = float(count) * max_w / 8.0;
+    scene.rect(215.0, y, w, 24.0, col);
+    scene.text(225.0 + w, y + 16.0, 12.5, str(count) + "  (" + detail + ")", "#e6edf3");
+  }
+
+  bar(96.0,  "Compute Engine VMs", 7, 460.0, "#58a6ff", "us-central1, us-east1, us-west1");
+  bar(136.0, "VPC Firewall Rules", 6, 460.0, "#f0883e", "3 hardened, 3 open-world flagged");
+  bar(176.0, "VPC Subnetworks",    5, 460.0, "#3fb950", "4 with Private Google Access");
+  bar(216.0, "Cloud Storage (GCS)",5, 460.0, "#a371f7", "STANDARD, NEARLINE, COLDLINE, ARCHIVE");
+  bar(256.0, "Secret Manager Meta",5, 460.0, "#d2a8ff", "metadata only; payloads never read");
+  bar(296.0, "VPC Networks",       3, 460.0, "#79c0ff", "prod-vpc, staging-vpc, analytics-vpc");
+  bar(336.0, "Pub/Sub Topics",     3, 460.0, "#56d364", "order-events-v1, dlq, security-audit");
+  bar(376.0, "Cloud Run Services", 3, 460.0, "#ffa657", "payments-authorizer, catalog-search");
+  bar(416.0, "Cloud SQL Instances",3, 460.0, "#ff7b72", "2 REGIONAL HA PG15, 1 ZONAL MySQL8");
+  bar(456.0, "GKE K8s Clusters",   3, 460.0, "#39d353", "2 Autopilot hardened, 1 Standard");
+
+  scene.render_png("images/01_project_inventory_overview.png", 960, 540, 1);
+end _dsl_
+savedsl(draw, "build/examples/01_project_inventory_overview_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/01_project_inventory_overview_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/01_project_inventory_overview.png", "docs/images/01_project_inventory_overview.png");
+println("ok 01_project_inventory_overview - wrote images/01_project_inventory_overview.png");

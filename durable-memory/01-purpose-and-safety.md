@@ -1,0 +1,13 @@
+# 01 — Purpose & Binding Cloud Safety Guardrails
+
+`lmgcp` is the Google Cloud Platform scripting host for `lmscript` (`lmctl`), built on `github.com/lmctl-ai/lmcode-go` and the official Google Cloud Go SDK (`cloud.google.com/go` + `google.golang.org/api`, Apache-2.0).
+
+## 7 Binding Cloud Safety Rules (`internal/safety/`)
+
+1. **Fake-by-Default Endpoint Gate**: Unless `LMGCP_LIVE=1` is explicitly set in the environment, `lmgcp` starts an in-process HTTP REST server (`internal/fakegcp`) on `127.0.0.1:0` and routes all 16 Google Cloud SDK clients to it with `option.WithoutAuthentication()`. Ambient `gcloud` credentials are never touched during unit tests, CI, or default `.lms` execution.
+2. **Secret Redaction (`RedactSecrets`)**: `AccessSecretVersion` is intentionally excluded from the DSL. All strings, error messages, log entries, Pub/Sub messages, and Firestore document values pass through `safety.RedactSecrets()`, masking OAuth tokens (`ya29.*`), Google API keys (`AIza*`), PEM private keys, JWTs, and password parameters.
+3. **Project & Account ID Masking (`MaskProjectID`)**: `gcp.project()` and `gcp.masked_project()` return masked identifiers (`gcp-proj-****8f2a`).
+4. **Mandatory `lmgcp_` / `lmgcp-` Prefix**: Every resource creation method calls `safety.ValidateResourcePrefix()`, rejecting any resource name that does not start with `lmgcp_` or `lmgcp-`. Created resources automatically carry `lmgcp_test=<run-id>` and `lmgcp_created_at=<epoch>` labels.
+5. **Compute & SQL Cost Guardrails (`ValidateMachineType`, `ValidateSqlTier`)**: Only small/free-tier shapes (`e2-micro`, `e2-small`, `e2-medium`, `f1-micro`, `g1-small`, `db-f1-micro`, `db-g1-small`) are permitted. GPU (`a2-*`, `g2-*`) and large shapes are blocked pre-flight.
+6. **`RunLedger` Ownership Enforcement**: Modifying or deleting any resource requires both the `lmgcp_` / `lmgcp-` prefix and an entry in the current run's `RunLedger`. Pre-existing resources are 100% immune to modification or deletion. `gcp.cleanup_ledger()` tears down all ledger-recorded resources in reverse dependency order (LIFO).
+7. **Orphan Sweeper (`--sweep`)**: `lmgcp --sweep [--older-than-hours N] [--delete]` lists or deletes stale `lmgcp-*` resources carrying the `lmgcp_test` label.

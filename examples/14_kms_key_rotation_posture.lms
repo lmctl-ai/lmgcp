@@ -1,0 +1,65 @@
+# Cloud KMS key rings, HSM vs Software protection levels, and CryptoKey rotation schedule audit.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  gcp.set_run_id("kms-posture-14");
+
+  let rings = gcp.kms_list_keyrings("us-central1");
+  assert_close(float(rings.len()), 1.0, 0.01);
+
+  let k1 = gcp.kms_get_key("us-central1", "prod-ring", "storage-cmek");
+  let k2 = gcp.kms_get_key("us-central1", "prod-ring", "sql-cmek");
+  let k3 = gcp.kms_get_key("us-central1", "prod-ring", "artifact-signing-key");
+  let k4 = gcp.kms_get_key("us-east1", "dr-ring", "archive-cmek");
+
+  assert_close(float(k1.rotation_days()), 90.0, 0.01);
+  check(k1.protection_level() == "HSM");
+  assert_close(float(k2.rotation_days()), 90.0, 0.01);
+  assert_close(float(k3.rotation_days()), 0.0, 0.01);
+  assert_close(float(k4.rotation_days()), 180.0, 0.01);
+
+  let ek = gcp.kms_create_key("us-central1", "prod-ring", "lmgcp-ephemeral-cmek", "ENCRYPT_DECRYPT", 30);
+  assert_close(float(ek.rotation_days()), 30.0, 0.01);
+  gcp.cleanup_ledger();
+end _dsl_
+savedsl(p, "build/examples/14_kms_key_rotation_posture.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/14_kms_key_rotation_posture.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud KMS CryptoKey Rotation & HSM Protection Level Audit", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "CIS Benchmark Threshold: Symmetric Encryption Key Rotation <= 90 Days | KeyRings: prod-ring, dr-ring", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 82.0, 880.0, 400.0, "#161b22").set_attr("stroke", "#30363d");
+
+  let x90 = 310.0 + 90.0 * 2.2;
+  scene.line(x90, 110.0, x90, 430.0, "#3fb950", 2.0);
+  scene.text(x90, 454.0, 12.0, "90-Day CIS Max Rotation Threshold", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  fn kms_bar(y: float, name: string, days: float, col: string, detail: string) -> void {
+    scene.text(295.0, y + 20.0, 13.0, name, "#e6edf3").set_attr("text-anchor", "end").set_attr("font-weight", "600");
+    let w = days * 2.2;
+    if (w < 12.0) {
+      w = 12.0;
+    }
+    scene.rect(310.0, y, w, 30.0, col);
+    scene.text(322.0 + w, y + 20.0, 12.0, detail, "#c9d1d9");
+  }
+
+  kms_bar(130.0, "lmgcp-ephemeral-cmek", 30.0,  "#58a6ff", "30d | SOFTWARE | Ephemeral Test Key (PASS)");
+  kms_bar(190.0, "prod-ring/storage-cmek", 90.0,"#3fb950", "90d | HSM | ENCRYPT_DECRYPT (PASS)");
+  kms_bar(250.0, "prod-ring/sql-cmek",     90.0,"#3fb950", "90d | HSM | ENCRYPT_DECRYPT (PASS)");
+  kms_bar(310.0, "prod-ring/artifact-sign",5.0, "#a371f7", "Manual | HSM | ASYMMETRIC_SIGN (Exempt)");
+  kms_bar(370.0, "dr-ring/archive-cmek",  180.0,"#ff7b72", "180d | SOFTWARE | Exceeds 90d CIS Max (FAIL)");
+
+  scene.render_png("images/14_kms_key_rotation_posture.png", 960, 520, 1);
+end _dsl_
+savedsl(draw, "build/examples/14_kms_key_rotation_posture_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/14_kms_key_rotation_posture_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/14_kms_key_rotation_posture.png", "docs/images/14_kms_key_rotation_posture.png");
+println("ok 14_kms_key_rotation_posture - wrote images/14_kms_key_rotation_posture.png");

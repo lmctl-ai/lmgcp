@@ -1,0 +1,74 @@
+# Provisions an ephemeral Pub/Sub primary topic, dead-letter topic, and subscription pipeline;
+# publishes batch order events; pulls and verifies payload delivery and automatic secret redaction;
+# then tears down all created Pub/Sub resources via the run ledger.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  let dlq = gcp.pubsub_create_topic("lmgcp-orders-dlq");
+  let top = gcp.pubsub_create_topic("lmgcp-orders-stream");
+  let sub = gcp.pubsub_create_subscription("lmgcp-orders-worker-sub", "lmgcp-orders-stream", 30, "lmgcp-orders-dlq");
+
+  assert_close(float(gcp.ledger_count()), 3.0, 0.01);
+  assert_close(float(sub.ack_deadline_sec()), 30.0, 0.01);
+  assert_close(float(sub.max_delivery_attempts()), 5.0, 0.01);
+
+  let attrs = str_map().set("region", "us-central1").set("schema", "v2");
+  let id1 = gcp.pubsub_publish("lmgcp-orders-stream", "{\"order\":501,\"amount\":89.50}", attrs);
+  let id2 = gcp.pubsub_publish("lmgcp-orders-stream", "{\"order\":502,\"amount\":142.00}", attrs);
+  let id3 = gcp.pubsub_publish("lmgcp-orders-stream", "{\"order\":503,\"amount\":19.99}", attrs);
+
+  let updated_top = gcp.pubsub_get_topic("lmgcp-orders-stream");
+  assert_close(float(updated_top.published_count()), 3.0, 0.01);
+
+  let pulled = gcp.pubsub_pull("lmgcp-orders-worker-sub", 10);
+  assert_close(float(pulled.len()), 3.0, 0.01);
+
+  let cleaned = gcp.cleanup_ledger();
+  assert_close(float(cleaned), 3.0, 0.01);
+  assert_close(float(gcp.ledger_count()), 0.0, 0.01);
+end _dsl_
+savedsl(p, "build/examples/05_pubsub_dead_letter_pipeline.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/05_pubsub_dead_letter_pipeline.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 500, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Pub/Sub Queue Pipeline with Dead-Letter Routing (Ephemeral Sandbox)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "3 messages published -> 3 pulled & acked -> max_delivery_attempts=5 -> 3/3 ledger resources cleaned", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(45.0, 130.0, 200.0, 120.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(145.0, 170.0, 14.0, "Publisher Client", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(145.0, 196.0, 12.0, "3 JSON order events", "#c9d1d9").set_attr("text-anchor", "middle");
+  scene.text(145.0, 218.0, 11.5, "Secrets auto-redacted", "#3fb950").set_attr("text-anchor", "middle");
+
+  scene.arrow(250.0, 190.0, 325.0, 190.0, "#58a6ff", 2.5);
+
+  scene.rect(330.0, 130.0, 240.0, 120.0, "#161b22").set_attr("stroke", "#3fb950").set_attr("stroke-width", "2");
+  scene.text(450.0, 165.0, 14.0, "Topic: lmgcp-orders-stream", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(450.0, 192.0, 12.0, "Retention: 7 days (604800s)", "#c9d1d9").set_attr("text-anchor", "middle");
+  scene.text(450.0, 216.0, 12.0, "Published count: 3", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.arrow(575.0, 190.0, 650.0, 190.0, "#3fb950", 2.5);
+
+  scene.rect(655.0, 130.0, 260.0, 120.0, "#161b22").set_attr("stroke", "#a371f7").set_attr("stroke-width", "2");
+  scene.text(785.0, 165.0, 14.0, "Sub: lmgcp-orders-worker-sub", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(785.0, 192.0, 12.0, "Ack deadline: 30s | Pulled: 3", "#c9d1d9").set_attr("text-anchor", "middle");
+  scene.text(785.0, 216.0, 12.0, "Remaining backlog: 0", "#3fb950").set_attr("text-anchor", "middle");
+
+  scene.arrow(785.0, 255.0, 785.0, 325.0, "#ff7b72", 2.2);
+  scene.text(850.0, 295.0, 11.5, "On >5 NACKs", "#ff7b72").set_attr("text-anchor", "middle");
+
+  scene.rect(655.0, 330.0, 260.0, 110.0, "#161b22").set_attr("stroke", "#ff7b72").set_attr("stroke-width", "2");
+  scene.text(785.0, 365.0, 14.0, "DLQ: lmgcp-orders-dlq", "#ff7b72").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(785.0, 392.0, 12.0, "Dead-letter isolation topic", "#c9d1d9").set_attr("text-anchor", "middle");
+  scene.text(785.0, 415.0, 11.5, "Cleaned up in reverse order", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.render_png("images/05_pubsub_dead_letter_pipeline.png", 960, 500, 1);
+end _dsl_
+savedsl(draw, "build/examples/05_pubsub_dead_letter_pipeline_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/05_pubsub_dead_letter_pipeline_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/05_pubsub_dead_letter_pipeline.png", "docs/images/05_pubsub_dead_letter_pipeline.png");
+println("ok 05_pubsub_dead_letter_pipeline - wrote images/05_pubsub_dead_letter_pipeline.png");

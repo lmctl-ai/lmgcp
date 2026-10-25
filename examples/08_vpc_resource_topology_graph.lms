@@ -1,0 +1,86 @@
+# Cross-service dependency graph & architecture topology diagram: discovers directed edges
+# across VPCs, Subnets, Compute VMs, GKE clusters, IAM Service Accounts, and Pub/Sub topics.
+mkdir("build/examples");
+mkdir("images");
+mkdir("docs/images");
+
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+  fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
+  let edges = gcp.resource_graph_edges();
+  let vpcs = gcp.network_list_vpcs();
+  let subs_c1 = gcp.network_list_subnets("us-central1");
+  let subs_e1 = gcp.network_list_subnets("us-east1");
+  let subs_w1 = gcp.network_list_subnets("us-west1");
+  let gke = gcp.gke_list_clusters("-");
+
+  assert_close(float(vpcs.len()), 3.0, 0.01);
+  assert_close(float(subs_c1.len() + subs_e1.len() + subs_w1.len()), 5.0, 0.01);
+  assert_close(float(gke.len()), 3.0, 0.01);
+  check(edges.len() >= 14);
+end _dsl_
+savedsl(p, "build/examples/08_vpc_resource_topology_graph.dslb");
+r = system ${dsl_cli(p)} --dsl build/examples/08_vpc_resource_topology_graph.dslb;
+assert(r.code == 0);
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+  scene.canvas(960, 560, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "GCP Resource Dependency Graph & Multi-VPC Topology", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "17 directed edges discovered via gcp.resource_graph_edges() across VPC, Subnet, Compute, GKE, IAM & Pub/Sub", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.text(115.0, 92.0, 12.0, "VPC NETWORKS", "#8b949e").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(355.0, 92.0, 12.0, "REGIONAL SUBNETS", "#8b949e").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(605.0, 92.0, 12.0, "COMPUTE & GKE", "#8b949e").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(845.0, 92.0, 12.0, "IAM & MESSAGING", "#8b949e").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  fn node(x: float, y: float, title: string, sub: string, border: string) -> void {
+    scene.rect(x, y, 190.0, 62.0, "#161b22").set_attr("stroke", border).set_attr("stroke-width", "2");
+    scene.text(x + 95.0, y + 26.0, 13.0, title, "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+    scene.text(x + 95.0, y + 46.0, 11.0, sub, "#8b949e").set_attr("text-anchor", "middle");
+  }
+
+  scene.arrow(210.0, 155.0, 260.0, 145.0, "#58a6ff", 2.0);
+  scene.arrow(210.0, 155.0, 260.0, 235.0, "#58a6ff", 2.0);
+  scene.arrow(210.0, 155.0, 260.0, 325.0, "#58a6ff", 2.0);
+  scene.arrow(210.0, 325.0, 260.0, 415.0, "#d29922", 2.0);
+  scene.arrow(210.0, 445.0, 260.0, 495.0, "#a371f7", 2.0);
+
+  scene.arrow(450.0, 145.0, 510.0, 145.0, "#58a6ff", 2.0);
+  scene.arrow(450.0, 235.0, 510.0, 235.0, "#3fb950", 2.0);
+  scene.arrow(450.0, 325.0, 510.0, 325.0, "#58a6ff", 2.0);
+  scene.arrow(450.0, 415.0, 510.0, 415.0, "#d29922", 2.0);
+  scene.arrow(450.0, 495.0, 510.0, 495.0, "#a371f7", 2.0);
+
+  scene.arrow(700.0, 145.0, 750.0, 155.0, "#3fb950", 2.0);
+  scene.arrow(700.0, 235.0, 750.0, 265.0, "#3fb950", 2.0);
+  scene.arrow(700.0, 325.0, 750.0, 155.0, "#58a6ff", 2.0);
+  scene.arrow(700.0, 415.0, 750.0, 375.0, "#ff7b72", 2.0);
+  scene.arrow(700.0, 495.0, 750.0, 475.0, "#a371f7", 2.0);
+
+  node(20.0,  124.0, "prod-vpc",        "GLOBAL | MTU 1460",   "#58a6ff");
+  node(20.0,  294.0, "staging-vpc",     "REGIONAL | MTU 1460", "#d29922");
+  node(20.0,  414.0, "analytics-vpc",   "GLOBAL | MTU 1500",   "#a371f7");
+
+  node(260.0, 114.0, "prod-app-subnet",       "10.10.0.0/20 | FlowLogs", "#58a6ff");
+  node(260.0, 204.0, "prod-db-subnet",        "10.10.16.0/22 | PGA On",  "#3fb950");
+  node(260.0, 294.0, "prod-dr-subnet",        "10.20.0.0/21 | us-east1", "#58a6ff");
+  node(260.0, 384.0, "staging-app-subnet",    "10.30.0.0/22 | No Logs",  "#d29922");
+  node(260.0, 464.0, "analytics-batch-sub",   "10.40.0.0/19 | us-west1", "#a371f7");
+
+  node(510.0, 114.0, "prod-api-gw-01/02",     "2x e2-standard-4 (vTPM)", "#3fb950");
+  node(510.0, 204.0, "prod-autopilot-core",   "GKE Autopilot (18 nodes)","#3fb950");
+  node(510.0, 294.0, "dr-standby-api-01",     "e2-small (Cold Standby)", "#58a6ff");
+  node(510.0, 384.0, "staging-test-runner",   "e2-standard-2 (Ext IP)",  "#ff7b72");
+  node(510.0, 464.0, "analytics-etl-node-01", "n2-highmem-4 (200GB PD)", "#a371f7");
+
+  node(750.0, 124.0, "sa-prod-api",           "0 user keys | Least-Priv","#3fb950");
+  node(750.0, 234.0, "order-events-v1",       "Pub/Sub + DLQ Sub",       "#3fb950");
+  node(750.0, 344.0, "default-compute SA",    "roles/editor (310d key)", "#ff7b72");
+  node(750.0, 444.0, "sa-analytics-etl",      "BQ DataEditor (42d key)", "#a371f7");
+
+  scene.render_png("images/08_vpc_resource_topology_graph.png", 960, 560, 1);
+end _dsl_
+savedsl(draw, "build/examples/08_vpc_resource_topology_graph_draw.dslb");
+rd = system ${dsl_cli(draw)} --dsl build/examples/08_vpc_resource_topology_graph_draw.dslb;
+assert(rd.code == 0);
+copy_file("images/08_vpc_resource_topology_graph.png", "docs/images/08_vpc_resource_topology_graph.png");
+println("ok 08_vpc_resource_topology_graph - wrote images/08_vpc_resource_topology_graph.png");
