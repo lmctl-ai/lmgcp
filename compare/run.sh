@@ -60,12 +60,21 @@ resolve_examples() {
   exit 1
 }
 
-mapfile -t EXAMPLES < <(resolve_examples "$TARGET")
+EXAMPLES=()
+while IFS= read -r line; do
+  if [[ -n "$line" ]]; then
+    EXAMPLES+=("$line")
+  fi
+done < <(resolve_examples "$TARGET")
 
 HAVE_LMCLOUD=0
 if command -v lmcloud >/dev/null 2>&1; then
   HAVE_LMCLOUD=1
 fi
+
+now_ms() {
+  python3 -c 'import time; print(int(time.time() * 1000))'
+}
 
 mkdir -p "$ROOT_DIR/build/compare"
 
@@ -77,16 +86,16 @@ printf "%-44s-+-%-9s-+-%-11s-+-%-9s-+-%-15s-+-%-6s\n" \
 for ex in "${EXAMPLES[@]}"; do
   mkdir -p "$ROOT_DIR/build/compare/$ex"
 
-  t0_ms="$(date +%s%3N)"
+  t0_ms="$(now_ms)"
   lmgcp_out="$(lmscript "examples/${ex}.lms" 2>&1)"
-  t1_ms="$(date +%s%3N)"
+  t1_ms="$(now_ms)"
   lmgcp_ms="$(( t1_ms - t0_ms ))"
   printf "%s\n" "$lmgcp_out" > "$ROOT_DIR/build/compare/$ex/lmgcp.stdout"
 
   if [[ "$HAVE_LMCLOUD" -eq 1 ]]; then
-    t2_ms="$(date +%s%3N)"
+    t2_ms="$(now_ms)"
     lmcloud_out="$(lmscript "compare/${ex}/${ex}.lms" 2>&1)"
-    t3_ms="$(date +%s%3N)"
+    t3_ms="$(now_ms)"
     lmcloud_ms="$(( t3_ms - t2_ms ))"
     printf "%s\n" "$lmcloud_out" > "$ROOT_DIR/build/compare/$ex/lmcloud.stdout"
   else
