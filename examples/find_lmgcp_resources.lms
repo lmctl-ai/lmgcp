@@ -3,7 +3,7 @@ mkdir("images"); mkdir("data");
 p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
 let rows = gcp.find_prefix("lmgcp");
 file_write("data/find_lmgcp_resources.txt", "category,count\nmatching," + str(rows.len()) + "\n");
-print("matching resources: ", str(rows.len()));
+print("matching resources: " + str(rows.len()));
 end _dsl_
 savedsl(p, "find_lmgcp_resources.dslb");
 r = system ${dsl_cli(p)} --dsl "find_lmgcp_resources.dslb";
