@@ -800,6 +800,14 @@
             "returns": "float"
           }
         ],
+        "find_prefix": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
         "firestore_delete_doc": [
           {
             "params": [

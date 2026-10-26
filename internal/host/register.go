@@ -1572,6 +1572,11 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
+	if err := m("Gcp", "find_prefix", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+		return makeStrList(reg, self.(*Host).FindPrefix(a[0].Str))
+	}); err != nil {
+		return err
+	}
 	if err := m("Gcp", "audit_label_compliance", []string{"StrList"}, "StrMap", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, self.(*Host).AuditLabelCompliance(extractStrList(a[0])))
 	}); err != nil {

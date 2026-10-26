@@ -126,7 +126,7 @@ Every example in [`examples/`](examples/) measures its own cloud cost using the 
 5. **Compute & SQL Cost/Shape Guardrails**: Only small/free-tier test shapes are permitted (`e2-micro`, `e2-small`, `e2-medium`, `f1-micro`, `g1-small`, `db-f1-micro`, `db-g1-small`, `db-custom-1-3840`). GPU shapes (`a2-*`, `g2-*`) and large shapes (`n2-standard-64`, `db-n1-highmem-32`) are rejected pre-flight.
 6. **RunLedger Ownership Enforcement**: Mutating or deleting a resource requires **both** the `lmgcp_` / `lmgcp-` prefix **and** ownership in the current run's `RunLedger`. Pre-existing resources cannot be modified or deleted. `gcp.cleanup_ledger()` tears down all run-owned resources in reverse dependency order (LIFO).
 7. **Per-Example Cost Cap (`$0.05` Default / `$0.25` Hard Ceiling)**: The ledger prices every mutating resource and API request before creation and refuses to create the next resource if the running estimate would pass the example's cap.
-8. **Orphan Sweeper (`--sweep`)**: `lmgcp --sweep [--older-than-hours N] [--delete]` scans for stale `lmgcp-*` resources carrying `lmgcp_test` labels and supports dry-run listing (default) or age-gated deletion.
+8. **Prefix search and orphan sweeper**: `gcp.find_prefix("lmgcp")` searches the account-wide fake/live inventory for every name beginning with the supplied prefix. `lmgcp --sweep [--older-than-hours N] [--delete]` remains ledger/tag guarded.
 
 ---
 

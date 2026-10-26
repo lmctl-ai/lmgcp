@@ -1,0 +1,20 @@
+# Account-wide read-only prefix search. Synthetic fake transport by default.
+mkdir("images"); mkdir("data");
+p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+let rows = gcp.find_prefix("lmgcp");
+file_write("data/find_lmgcp_resources.txt", "category,count\nmatching," + str(rows.len()) + "\n");
+print("matching resources: ", str(rows.len()));
+end _dsl_
+savedsl(p, "find_lmgcp_resources.dslb");
+r = system ${dsl_cli(p)} --dsl "find_lmgcp_resources.dslb";
+assert(r.code == 0);
+plot = _dsl_ cli="lmplot" install="github:lmctl-ai/lmplot@latest";
+plot.png("images/find_lmgcp_resources.png", 900, 560);
+plot.cmd("set title 'GCP resources starting with lmgcp'; set style data histograms");
+plot.cmd("plot 'data/find_lmgcp_resources.txt' using 2:xtic(1) title 'matches'");
+plot.close();
+end _dsl_
+savedsl(plot, "find_lmgcp_resources_plot.dslb");
+r = system ${dsl_cli(plot)} --dsl "find_lmgcp_resources_plot.dslb";
+assert(r.code == 0);
+print("estimated cost: $0.00");

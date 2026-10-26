@@ -2777,6 +2777,43 @@ func (h *Host) MonitoringDeleteAlertPolicy(name string) bool {
 
 // --- 12. Cross-Service Inventory, Compliance & Topology Graph ---
 
+// FindPrefix returns account-wide metadata rows whose resource name starts with prefix.
+// It is read-only and uses the same fake transport as the ordinary inventory methods.
+// Rows are pipe-delimited service|kind|name|id, with provider identifiers already
+// redacted by the host. The caller must treat an empty result as a completed scan,
+// not authorization evidence; live provider errors are recorded in LastError.
+func (h *Host) FindPrefix(prefix string) []string {
+	if prefix == "" {
+		return nil
+	}
+	groups := []struct {
+		name   string
+		values []string
+	}{
+		{"compute", h.ComputeListInstances(h.zone)}, {"disks", h.ComputeListDisks(h.zone)},
+		{"vpc", h.NetworkListVPCs()}, {"subnet", h.NetworkListSubnets(h.region)}, {"firewall", h.NetworkListFirewalls()},
+		{"storage", h.StorageListBuckets()}, {"pubsub_topic", h.PubsubListTopics()}, {"pubsub_subscription", h.PubsubListSubscriptions()},
+		{"run", h.RunListServices(h.region)}, {"sql", h.SQLListInstances()}, {"firestore", h.FirestoreListCollections()},
+		{"bigquery", h.BQListDatasets()}, {"iam", h.IAMListServiceAccounts()}, {"secret", h.SecretsList()},
+		{"kms", h.KMSListKeyRings(h.region)}, {"gke", h.GKEListClusters(h.region)}, {"artifact_registry", h.ARListRepositories(h.region)},
+		{"dns", h.DNSListZones()}, {"logging", h.LoggingListSinks()}, {"monitoring", h.MonitoringListAlertPolicies()},
+	}
+	rows := make([]string, 0)
+	for _, group := range groups {
+		for _, raw := range group.values {
+			name := raw
+			if i := strings.LastIndex(raw, "/"); i >= 0 {
+				name = raw[i+1:]
+			}
+			if strings.HasPrefix(name, prefix) {
+				rows = append(rows, group.name+"|resource|"+name+"|"+safety.RedactSecrets(raw))
+			}
+		}
+	}
+	sort.Strings(rows)
+	return rows
+}
+
 func (h *Host) InventorySummary() map[string]string {
 	m := map[string]string{
 		"compute_instances": strconv.Itoa(len(h.ComputeListInstances("all"))),

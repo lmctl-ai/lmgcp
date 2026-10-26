@@ -28,3 +28,10 @@
 14. **Artifact Registry (`ar_*`)**: `ar_list_repositories`, `ar_get_repository`, `ar_create_repository`, `ar_delete_repository`.
 15. **Cloud DNS (`dns_*`)**: `dns_list_zones`, `dns_get_zone`, `dns_create_zone`, `dns_delete_zone`, `dns_list_records`, `dns_add_record`, `dns_delete_record`.
 16. **Cloud Logging & Cloud Monitoring (`logging_*`, `monitoring_*`)**: `logging_list_sinks`, `logging_get_sink`, `logging_create_sink`, `logging_delete_sink`, `logging_write_entry`, `logging_severity_counts`, `monitoring_list_metrics`, `monitoring_query_series`, `monitoring_list_alert_policies`, `monitoring_get_alert_policy`, `monitoring_create_alert_policy`, `monitoring_delete_alert_policy`.
+# Account-wide prefix search
+
+`gcp.find_prefix(prefix)` is read-only and scans the configured fake/live
+inventory methods, returning redacted `service|resource|name|id` rows. Matching
+uses the literal starts-with prefix, so `lmgcp`, `lmgcp_`, `lmgcp-`, and other
+names beginning with `lmgcp` are all included. The fake transport is deterministic;
+live calls remain opt-in through `LMGCP_LIVE=1` and use the normal cost ledger.

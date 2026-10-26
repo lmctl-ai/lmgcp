@@ -50,6 +50,26 @@ func TestHostSignatureParity(t *testing.T) {
 	}
 }
 
+func TestFindPrefixUsesFakeAccountInventory(t *testing.T) {
+	h, err := NewHost()
+	if err != nil {
+		t.Fatalf("NewHost failed: %v", err)
+	}
+	defer h.Close()
+	rows := h.FindPrefix("prod")
+	if len(rows) == 0 {
+		t.Fatal("expected fake account prefix search to find seeded prod resources")
+	}
+	for _, row := range rows {
+		if !strings.HasPrefix(row, "") || !strings.Contains(row, "|resource|") {
+			t.Fatalf("malformed prefix row %q", row)
+		}
+	}
+	if got := h.FindPrefix("definitely-no-such-prefix"); len(got) != 0 {
+		t.Fatalf("unexpected rows: %v", got)
+	}
+}
+
 func TestHostEndToEndFakeServicesAndSafety(t *testing.T) {
 	h, err := NewHost()
 	if err != nil {
