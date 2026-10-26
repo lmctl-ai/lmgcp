@@ -74,9 +74,12 @@ echo "$notices_out" | grep -q "lmcode-go" || fail "--notices missing lmcode-go"
 ok "--notices prints embedded third-party notices"
 
 # 4. Schema & signature parity
+sdk_lock_prefix="$(awk '{print substr($2,1,12)}' sdk.lock | tr -d '\r')"
+go_mod_prefix="$(awk '/github\.com\/lmctl-ai\/lmcode-go/ {sub(/.*-/, "", $2); print $2}' go.mod | tr -d '\r')"
+[ -n "$sdk_lock_prefix" ] && [ "$sdk_lock_prefix" = "$go_mod_prefix" ] || fail "sdk.lock ($sdk_lock_prefix) does not match go.mod lmcode-go ($go_mod_prefix)"
 LMSCRIPT="$(scripts/select-compiler.sh)"
 diff -u <("$LMSCRIPT" --dsl-signatures schema/lmgcp.dsl.json | tr -d '\r') <("$HOST" --dsl-signatures | tr -d '\r') >/dev/null || fail "schema/host signature drift"
-ok "host signatures match schema/lmgcp.dsl.json"
+ok "host signatures match schema/lmgcp.dsl.json (and sdk.lock matches go.mod)"
 diff -u <("$LMSCRIPT" --dsl-signatures schema/lmgcp.dsl.json --without-std | tr -d '\r') <("$HOST" --dsl-signatures --without-std | tr -d '\r') >/dev/null || fail "host-only signature drift"
 ok "host-only compiler/registry signature parity"
 
