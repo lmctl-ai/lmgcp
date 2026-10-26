@@ -11,7 +11,7 @@
   PATH="$PWD/bin:$PATH" lmscript examples/04_gcs_bucket_lifecycle_ephemeral.lms
 
   # Zero-setup execution from an empty directory (auto-installs lmgcp@latest + lmdraw@latest):
-  lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/04_gcs_bucket_lifecycle_ephemeral.lms
+  lmctl https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/04_gcs_bucket_lifecycle_ephemeral.lms
   ```
 - **README Cost Labels**: Every example section in [`README.md`](../README.md) includes the picture first, the `lmctl autorun` raw URL, and `"Running this example costs about $X (estimated from price table, not yet measured live)"` with a note on how estimates are computed from the `us-central1` price table.
 
