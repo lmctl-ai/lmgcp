@@ -176,7 +176,7 @@ go build -o bin/lmgcp ./cmd/lmgcp
 
 ### Optional Live GCP Testing (Requires Explicit Opt-In)
 
-By default, `lmgcp` never touches a live GCP project. To test against a dedicated non-production GCP project:
+By default, `lmgcp` never touches a live GCP project. See [`docs/LIVE_TESTING.md`](docs/LIVE_TESTING.md) for the complete user-run live testing procedure. To test against a dedicated non-production GCP project:
 
 ```bash
 export LMGCP_PROJECT="your-sandbox-project-id"
