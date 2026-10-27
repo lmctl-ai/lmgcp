@@ -7,6 +7,16 @@
 
 ---
 
+## Install lmctl
+
+Everything in this repository runs through [lmctl](https://lmctl.com), the core tool of the lmctl family. Install it once, then run any `.lms` file or raw URL:
+
+```bash
+npm install -g @lmctl-ai/lmctl
+lmctl autorun path/to/example.lms
+lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/example.lms
+```
+
 ## Visual Gallery (40 Self-Executing `.lms` Cloud Stories)
 
 Every image below is generated directly by its `.lms` script in [`examples/`](examples/) against the deterministic in-process GCP REST emulator and rendered via [`lmdraw`](https://github.com/lmctl-ai/lmdraw). Every example measures its own cost using the `RunLedger` price table, enforces a per-example cost cap (default **`$0.05`**, hard ceiling **`$0.25`** per run), and prints `estimated cost: $0.00xx` (or `estimated cost: $0.00` for cost-free read-only stories) at the end. See [Cost per Example & Ledger Price Table](#cost-per-example--ledger-price-table) for how estimates are computed (`us-central1` list pricing; prices vary by region and change over time).
