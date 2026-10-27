@@ -13,8 +13,8 @@ Everything in this repository runs through [lmctl](https://lmctl.com), the core 
 
 ```bash
 npm install -g @lmctl-ai/lmctl
-lmctl autorun path/to/example.lms
-lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/example.lms
+lmctl autorun examples/01_project_inventory_overview.lms
+lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/01_project_inventory_overview.lms
 ```
 
 ## Visual Gallery (40 Self-Executing `.lms` Cloud Stories)
