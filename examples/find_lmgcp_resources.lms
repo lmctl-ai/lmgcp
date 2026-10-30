@@ -17,4 +17,4 @@ end _dsl_
 savedsl(plot, "find_lmgcp_resources_plot.dslb");
 r = system ${dsl_cli(plot)} --dsl "find_lmgcp_resources_plot.dslb";
 assert(r.code == 0);
-print("estimated cost: $0.00");
+print("ok find_lmgcp_resources (estimated cost: $0.00)");

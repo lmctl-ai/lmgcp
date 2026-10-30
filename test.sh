@@ -155,7 +155,7 @@ ok "Go unit tests pass (internal/safety, internal/host)"
 
 # 10. Verify all examples compile and run
 shopt -s nullglob
-example_files=(examples/*.lms)
+example_files=(examples/[0-9][0-9]_*.lms)
 [ "${#example_files[@]}" -ge 40 ] || fail "expected at least 40 examples, found ${#example_files[@]}"
 for f in "${example_files[@]}"; do
   base="$(basename "$f" .lms)"
@@ -166,6 +166,11 @@ for f in "${example_files[@]}"; do
   [ -s "build/evidence/live-cost-${base}.json" ] || fail "$f did not write build/evidence/live-cost-${base}.json"
   ok "$f ($cost_line)"
 done
+
+# The account inventory example is outside the 40 numbered comparison/cost labs.
+out="$("$LMSCRIPT" examples/find_lmgcp_resources.lms 2>&1)" || { echo "$out" >&2; fail "prefix inventory example failed"; }
+echo "$out" | grep -q '^ok ' || fail "prefix inventory example printed no ok line"
+ok "account inventory and plot example"
 
 # 11. Verify gallery images in docs/images/ exist and have valid PNG magic bytes
 img_files=(docs/images/*.png)
