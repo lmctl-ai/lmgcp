@@ -39,6 +39,8 @@ Options:
 Environment & Resource Limits:
   LMGCP_MAX_MEMORY_MB        Total memory budget in whole MiB (default: 4096; invalid = exit 2)
   LMGCP_LIVE                 Set to 1 to use Google Application Default Credentials (default: 0, in-process fake GCP)
+  LMGCP_ENDPOINT            Loopback HTTP emulator origin (mutually exclusive with live mode)
+  LMGCP_ACCESS_TOKEN        Optional dummy bearer token for the emulator
   LMGCP_PROJECT              Target GCP project ID (masked in all outputs)
   LMGCP_REGION               Default GCP region (default: us-central1)
   LMGCP_ZONE                 Default GCP zone (default: us-central1-a)
@@ -227,6 +229,9 @@ func realMain(args []string) int {
 			})
 			runErr := prog.Run(ctx, reg)
 			stopWatchdog()
+			if h.AuthError() != "" {
+				return lmcode.ReportAppFailure(h.AuthError())
+			}
 			if runErr != nil {
 				_ = h.CleanupLedger()
 				if strings.Contains(runErr.Error(), membudget.EnvVarName) {

@@ -221,3 +221,15 @@ Run [`./compare/run.sh <example>`](compare/run.sh) (or `./compare/run.sh all`) t
 MIT License — see [`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES) for Apache-2.0 and BSD-3-Clause notices of the Google Cloud Go SDK and transitive dependencies.
 
 The compiler minimum is lmscript 0.2.420; the built-in standard is supplied by the SDK and omitted from the host schema.
+
+### External emulator
+
+Set `LMGCP_ENDPOINT=http://127.0.0.1:4588`, `LMGCP_PROJECT=gcpsim-local`,
+and optionally `LMGCP_ACCESS_TOKEN=<dummy-token>` to use an external emulator.
+The endpoint must be a loopback HTTP origin and cannot be combined with
+`LMGCP_LIVE=1`. All SDK requests stay on that origin; redirects and proxies are
+not followed. No ADC lookup occurs. The default remains the in-process fake.
+GCS upload/download use the SDK when an external endpoint is selected; reads
+are limited to 16 MiB. Authentication/permission failures (401/403) are retained
+across subsequent operations and make DSL execution fail with an application
+error. Configured dummy tokens are redacted from provider errors.

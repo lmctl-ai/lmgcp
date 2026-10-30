@@ -5,13 +5,19 @@ package host
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"google.golang.org/api/googleapi"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/auth/credentials"
 	"cloud.google.com/go/compute/metadata"
@@ -45,6 +51,7 @@ type Host struct {
 	liveMode    bool
 	autoCleanup bool
 	lastError   string
+	authError   string
 	ledger      *safety.RunLedger
 	fakeSrv     *fakegcp.Server
 
@@ -93,7 +100,27 @@ func NewHost() (*Host, error) {
 	}
 
 	ctx := context.Background()
-	if !live {
+	if endpoint := os.Getenv("LMGCP_ENDPOINT"); endpoint != "" {
+		u, err := url.Parse(endpoint)
+		if err != nil || u.Scheme != "http" || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost" && u.Hostname() != "::1") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || live {
+			return nil, fmt.Errorf("LMGCP_ENDPOINT requires a loopback HTTP origin and cannot be combined with LMGCP_LIVE")
+		}
+		token := os.Getenv("LMGCP_ACCESS_TOKEN")
+		if strings.ContainsAny(token, "\r\n") {
+			return nil, fmt.Errorf("invalid LMGCP_ACCESS_TOKEN")
+		}
+		client := &http.Client{Timeout: 30 * time.Second, Transport: emulatorTransport{origin: u.Host, token: token}, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+		h.autoCleanup = false
+		if err := h.initClients(ctx, func(svc string) []option.ClientOption {
+			path := "/"
+			if svc == "storage" {
+				path = "/storage/v1/"
+			}
+			return []option.ClientOption{option.WithEndpoint(strings.TrimRight(endpoint, "/") + path), option.WithHTTPClient(client), option.WithoutAuthentication()}
+		}); err != nil {
+			return nil, err
+		}
+	} else if !live {
 		srv, err := fakegcp.NewServer()
 		if err != nil {
 			return nil, fmt.Errorf("failed to start in-process fake GCP server: %w", err)
@@ -192,10 +219,36 @@ func (h *Host) fail(err error) {
 		return
 	}
 	h.lastError = safety.RedactSecrets(err.Error())
+	if token := os.Getenv("LMGCP_ACCESS_TOKEN"); token != "" {
+		h.lastError = strings.ReplaceAll(h.lastError, token, "[REDACTED]")
+	}
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) && (apiErr.Code == 401 || apiErr.Code == 403) {
+		h.authError = h.lastError
+	}
 }
 
 func (h *Host) clearErr() {
 	h.lastError = ""
+}
+
+// AuthError retains authentication/permission failures even if a later operation succeeds.
+func (h *Host) AuthError() string { return h.authError }
+
+type emulatorTransport struct{ origin, token string }
+
+func (t emulatorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Scheme != "http" || req.URL.Host != t.origin {
+		return nil, fmt.Errorf("emulator request escaped configured origin")
+	}
+	clone := req.Clone(req.Context())
+	if t.token != "" {
+		clone.Header.Set("Authorization", "Bearer "+t.token)
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	defer transport.CloseIdleConnections()
+	return transport.RoundTrip(clone)
 }
 
 // --- Core & Safety ---
@@ -1173,6 +1226,12 @@ func (h *Host) StoragePutObject(bucket, objName, content, contentType string) bo
 			h.fail(err)
 			return false
 		}
+	} else {
+		_, err := h.storageSvc.Objects.Insert(bucket, &storage.Object{Name: objName, ContentType: contentType}).Media(strings.NewReader(content), googleapi.ContentType(contentType)).Do()
+		if err != nil {
+			h.fail(err)
+			return false
+		}
 	}
 	h.clearErr()
 	return true
@@ -1207,7 +1266,23 @@ func (h *Host) StorageReadObject(bucket, objName string) string {
 		h.clearErr()
 		return safety.RedactSecrets(data)
 	}
-	return ""
+	response, err := h.storageSvc.Objects.Get(bucket, objName).Download()
+	if err != nil {
+		h.fail(err)
+		return ""
+	}
+	defer response.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(response.Body, 16*1024*1024+1))
+	if err != nil {
+		h.fail(err)
+		return ""
+	}
+	if len(data) > 16*1024*1024 {
+		h.fail(fmt.Errorf("object exceeds 16 MiB read limit"))
+		return ""
+	}
+	h.clearErr()
+	return safety.RedactSecrets(string(data))
 }
 
 func (h *Host) StorageObjectSize(bucket, objName string) int64 {
