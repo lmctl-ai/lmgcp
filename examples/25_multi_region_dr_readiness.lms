@@ -34,7 +34,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/25_multi_region_dr_readiness.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/25_multi_region_dr_readiness.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/25_multi_region_dr_readiness.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -68,7 +68,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/25_multi_region_dr_readiness.png", 960, 540, 1);
 end _dsl_
 savedsl(draw, "build/examples/25_multi_region_dr_readiness_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/25_multi_region_dr_readiness_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/25_multi_region_dr_readiness_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/25_multi_region_dr_readiness.png", "docs/images/25_multi_region_dr_readiness.png");
 println("ok 25_multi_region_dr_readiness - wrote images/25_multi_region_dr_readiness.png");

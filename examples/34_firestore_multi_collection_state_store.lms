@@ -38,7 +38,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/34_firestore_multi_collection_state_store.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/34_firestore_multi_collection_state_store.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/34_firestore_multi_collection_state_store.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -68,7 +68,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/34_firestore_multi_collection_state_store.png", 960, 500, 1);
 end _dsl_
 savedsl(draw, "build/examples/34_firestore_multi_collection_state_store_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/34_firestore_multi_collection_state_store_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/34_firestore_multi_collection_state_store_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/34_firestore_multi_collection_state_store.png", "docs/images/34_firestore_multi_collection_state_store.png");
 println("ok 34_firestore_multi_collection_state_store - wrote images/34_firestore_multi_collection_state_store.png");

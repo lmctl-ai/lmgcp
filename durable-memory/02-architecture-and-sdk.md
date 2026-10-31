@@ -2,7 +2,7 @@
 
 ## Repository Structure
 
-- [`cmd/lmgcp/main.go`](../cmd/lmgcp/main.go): CLI entrypoint handling `--version`, `--help`, `--notices`, `--dsl-schema [--json]`, `--dsl-signatures [--without-std]`, `--dsl [--dry-run] FILE...`, and `--sweep [--older-than-hours N] [--delete]`. Embeds `cmd/lmgcp/VERSION` and `THIRD_PARTY_NOTICES`.
+- [`cmd/lmgcp/main.go`](../cmd/lmgcp/main.go): CLI entrypoint handling `--version`, `--help`, `--notices`, `--lmcode-schema [--json]`, `--lmcode-signatures [--without-std]`, `--lmcode [--dry-run] FILE...`, and `--sweep [--older-than-hours N] [--delete]`. Embeds `cmd/lmgcp/VERSION` and `THIRD_PARTY_NOTICES`.
 - [`internal/membudget/membudget.go`](../internal/membudget/membudget.go): `LMGCP_MAX_MEMORY_MB` parser, byte charge tracker, Go runtime memory limit, and 2ms heap watchdog.
 - [`internal/safety/safety.go`](../internal/safety/safety.go) & [`safety_test.go`](../internal/safety/safety_test.go): Secret redaction, project ID masking, prefix/shape/tier allowlists, `RunLedger` ownership, and `us-central1` cost price table.
 - [`internal/fakegcp/seed.go`](../internal/fakegcp/seed.go) & [`server.go`](../internal/fakegcp/server.go): Deterministic in-process HTTP REST server emulating 16 Google Cloud service domains pre-seeded with 43 baseline resources across `prod-vpc`, `staging-vpc`, and `analytics-vpc`.

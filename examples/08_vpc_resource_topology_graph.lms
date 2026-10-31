@@ -22,7 +22,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/08_vpc_resource_topology_graph.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/08_vpc_resource_topology_graph.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/08_vpc_resource_topology_graph.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -83,7 +83,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/08_vpc_resource_topology_graph.png", 960, 560, 1);
 end _dsl_
 savedsl(draw, "build/examples/08_vpc_resource_topology_graph_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/08_vpc_resource_topology_graph_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/08_vpc_resource_topology_graph_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/08_vpc_resource_topology_graph.png", "docs/images/08_vpc_resource_topology_graph.png");
 println("ok 08_vpc_resource_topology_graph - wrote images/08_vpc_resource_topology_graph.png");

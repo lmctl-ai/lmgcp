@@ -28,7 +28,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/02_label_compliance_audit.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/02_label_compliance_audit.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/02_label_compliance_audit.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -62,7 +62,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/02_label_compliance_audit.png", 960, 540, 1);
 end _dsl_
 savedsl(draw, "build/examples/02_label_compliance_audit_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/02_label_compliance_audit_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/02_label_compliance_audit_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/02_label_compliance_audit.png", "docs/images/02_label_compliance_audit.png");
 println("ok 02_label_compliance_audit - wrote images/02_label_compliance_audit.png");

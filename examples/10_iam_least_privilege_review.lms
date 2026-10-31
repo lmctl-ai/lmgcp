@@ -27,7 +27,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/10_iam_least_privilege_review.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/10_iam_least_privilege_review.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/10_iam_least_privilege_review.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -54,7 +54,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/10_iam_least_privilege_review.png", 960, 540, 1);
 end _dsl_
 savedsl(draw, "build/examples/10_iam_least_privilege_review_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/10_iam_least_privilege_review_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/10_iam_least_privilege_review_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/10_iam_least_privilege_review.png", "docs/images/10_iam_least_privilege_review.png");
 println("ok 10_iam_least_privilege_review - wrote images/10_iam_least_privilege_review.png");

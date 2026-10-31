@@ -33,9 +33,9 @@ func TestHostSignatureParity(t *testing.T) {
 	}
 
 	schemaPath := filepath.Join("..", "..", "schema", "lmgcp.dsl.json")
-	out, err := exec.Command(lmscriptBin, "--dsl-signatures", schemaPath).CombinedOutput()
+	out, err := exec.Command(lmscriptBin, "--lmcode-signatures", schemaPath).CombinedOutput()
 	if err != nil {
-		t.Fatalf("lmscript --dsl-signatures failed: %v\n%s", err, string(out))
+		t.Fatalf("lmscript --lmcode-signatures failed: %v\n%s", err, string(out))
 	}
 
 	wantLines := strings.Split(strings.TrimSpace(string(out)), "\n")

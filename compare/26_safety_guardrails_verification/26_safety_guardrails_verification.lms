@@ -33,7 +33,7 @@ p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
   file_write("build/compare/26_safety_guardrails_verification/lmcloud-evidence.json", "{\n  \"example\": \"26_safety_guardrails_verification\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"safety-verify-26\",\n  \"estimated_cost_usd\": 0.0009,\n  \"estimated_cost_formatted\": \"$0.0009\",\n  \"cost_report\": \"estimated cost: $0.0009 (resources=1, minutes_alive=5, requests=1, cap=$0.0020)\",\n  \"resource_count\": 1,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"compute_instance_lmgcp_safe_vm_1\",\n      \"kind\": \"compute_instance\",\n      \"google_type\": \"google_compute_instance\",\n      \"subtype\": \"e2-micro\",\n      \"name\": \"lmgcp-safe-vm\",\n      \"lmgcp_test\": \"safety-verify-26\",\n      \"cost_usd\": 0.0009\n    }\n  ]\n}");
 end _dsl_
 savedsl(p, "build/compare/26_safety_guardrails_verification/26_safety_guardrails_verification.dslb");
-r = system ${dsl_cli(p)} --dsl build/compare/26_safety_guardrails_verification/26_safety_guardrails_verification.dslb;
+r = system ${dsl_cli(p)} --lmcode build/compare/26_safety_guardrails_verification/26_safety_guardrails_verification.dslb;
 assert(r.code == 0);
 assert(trim(read_file("build/compare/26_safety_guardrails_verification/status.txt")) == "OK");
 println("ok compare/26_safety_guardrails_verification - tofu init/plan/apply/destroy verified (resources=1, leftovers=0)");

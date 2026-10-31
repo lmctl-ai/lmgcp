@@ -33,7 +33,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/03_vpc_firewall_security_review.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/03_vpc_firewall_security_review.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/03_vpc_firewall_security_review.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -63,7 +63,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/03_vpc_firewall_security_review.png", 960, 560, 1);
 end _dsl_
 savedsl(draw, "build/examples/03_vpc_firewall_security_review_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/03_vpc_firewall_security_review_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/03_vpc_firewall_security_review_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/03_vpc_firewall_security_review.png", "docs/images/03_vpc_firewall_security_review.png");
 println("ok 03_vpc_firewall_security_review - wrote images/03_vpc_firewall_security_review.png");

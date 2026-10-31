@@ -4,8 +4,8 @@
 
 - **Schema file**: [`schema/lmgcp.dsl.json`](../schema/lmgcp.dsl.json) (`dsl_version: "1"`, `compiler_min_version: "0.2.420"`, context `gcp: Gcp`).
 - **Host object types (`20`)**: `Gcp`, `AlertPolicy`, `ArtifactRepo`, `BqDataset`, `BqTable`, `CloudRunService`, `ComputeInstance`, `DnsZone`, `FirewallRule`, `GkeCluster`, `KmsKey`, `LogSink`, `PubsubSubscription`, `PubsubTopic`, `SecretMetadata`, `ServiceAccount`, `SqlInstance`, `StorageBucket`, `Subnet`, `VpcNetwork`.
-- **Host-only signatures (`298`)**: `./bin/lmgcp --dsl-signatures --without-std` outputs the 298 GCP host signatures embedded in `schema/lmgcp.dsl.json`.
-- **Total runtime signatures (`370`)**: `./bin/lmgcp --dsl-signatures` outputs all 370 registered signatures (298 host signatures + 72 `lmcode_std_v1` collection/string/math/file/JSON and testing built-ins `StrList`, `IntList`, `FloatList`, `StrMap`, `assert_close`, `print`). Compiler `lmscript >= 0.2.420` supplies the built-in standard library implicitly.
+- **Host-only signatures (`298`)**: `./bin/lmgcp --lmcode-signatures --without-std` outputs the 298 GCP host signatures embedded in `schema/lmgcp.dsl.json`.
+- **Total runtime signatures (`370`)**: `./bin/lmgcp --lmcode-signatures` outputs all 370 registered signatures (298 host signatures + 72 `lmcode_std_v1` collection/string/math/file/JSON and testing built-ins `StrList`, `IntList`, `FloatList`, `StrMap`, `assert_close`, `print`). Compiler `lmscript >= 0.2.420` supplies the built-in standard library implicitly.
 
 ## Curated 16-Domain GCP Service Set (`internal/host/host.go`)
 

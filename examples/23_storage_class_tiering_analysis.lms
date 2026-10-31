@@ -28,7 +28,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/23_storage_class_tiering_analysis.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/23_storage_class_tiering_analysis.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/23_storage_class_tiering_analysis.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -57,7 +57,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/23_storage_class_tiering_analysis.png", 960, 540, 1);
 end _dsl_
 savedsl(draw, "build/examples/23_storage_class_tiering_analysis_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/23_storage_class_tiering_analysis_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/23_storage_class_tiering_analysis_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/23_storage_class_tiering_analysis.png", "docs/images/23_storage_class_tiering_analysis.png");
 println("ok 23_storage_class_tiering_analysis - wrote images/23_storage_class_tiering_analysis.png");

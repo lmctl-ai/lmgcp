@@ -20,7 +20,7 @@ if [[ "${LMGCP_LIVE:-0}" != "1" ]]; then
   unset LMGCP_LIVE
 fi
 
-export PATH="/home/mma/repos/dsl/lmcloud/bin:$ROOT_DIR/bin:$PATH"
+export PATH="$ROOT_DIR/bin:$PATH"
 
 if [[ ! -x "$ROOT_DIR/bin/lmgcp" ]]; then
   mkdir -p "$ROOT_DIR/bin"

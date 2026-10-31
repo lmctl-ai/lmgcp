@@ -26,6 +26,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 
 [ -x "$HOST" ] || fail "$HOST not executable"
 ok "binary exists and is executable ($HOST)"
+python3 tests/check-host-flags.py schema/lmgcp.dsl.json "$HOST" || fail "hard flag cutover"
 
 # 1. Platform linkage check (Rule 14: static or dynamic glibc allowlist only on Linux)
 uname_s="$(uname -s)"
@@ -78,19 +79,19 @@ sdk_lock_prefix="$(awk '{print substr($2,1,12)}' sdk.lock | tr -d '\r')"
 go_mod_prefix="$(awk '/github\.com\/lmctl-ai\/lmcode-go/ {sub(/.*-/, "", $2); print $2}' go.mod | tr -d '\r')"
 [ -n "$sdk_lock_prefix" ] && [ "$sdk_lock_prefix" = "$go_mod_prefix" ] || fail "sdk.lock ($sdk_lock_prefix) does not match go.mod lmcode-go ($go_mod_prefix)"
 LMSCRIPT="$(scripts/select-compiler.sh)"
-diff -u <("$LMSCRIPT" --dsl-signatures schema/lmgcp.dsl.json | tr -d '\r') <("$HOST" --dsl-signatures | tr -d '\r') >/dev/null || fail "schema/host signature drift"
+diff -u <("$LMSCRIPT" --lmcode-signatures schema/lmgcp.dsl.json | tr -d '\r') <("$HOST" --lmcode-signatures | tr -d '\r') >/dev/null || fail "schema/host signature drift"
 ok "host signatures match schema/lmgcp.dsl.json (and sdk.lock matches go.mod)"
-diff -u <("$LMSCRIPT" --dsl-signatures schema/lmgcp.dsl.json --without-std | tr -d '\r') <("$HOST" --dsl-signatures --without-std | tr -d '\r') >/dev/null || fail "host-only signature drift"
+diff -u <("$LMSCRIPT" --lmcode-signatures schema/lmgcp.dsl.json --without-std | tr -d '\r') <("$HOST" --lmcode-signatures --without-std | tr -d '\r') >/dev/null || fail "host-only signature drift"
 ok "host-only compiler/registry signature parity"
 
-cmp <("$HOST" --dsl-schema --json) schema/lmgcp.dsl.json >/dev/null || fail "embedded schema differs from schema/lmgcp.dsl.json"
+cmp <("$HOST" --lmcode-schema --json) schema/lmgcp.dsl.json >/dev/null || fail "embedded schema differs from schema/lmgcp.dsl.json"
 ok "embedded schema is byte-identical"
 
-schema_summary="$("$HOST" --dsl-schema | tr -d '\r')"
+schema_summary="$("$HOST" --lmcode-schema | tr -d '\r')"
 echo "$schema_summary" | grep -q "context gcp: Gcp" || fail "schema summary missing context gcp: Gcp"
 echo "$schema_summary" | grep -q "ComputeInstance:" || fail "schema summary missing ComputeInstance"
 echo "$schema_summary" | grep -q "StorageBucket:" || fail "schema summary missing StorageBucket"
-ok "--dsl-schema summary formats context and types"
+ok "--lmcode-schema summary formats context and types"
 
 # 5. Sweeper CLI check
 sweep_out="$("$HOST" --sweep --older-than-hours 1 | tr -d '\r')"
@@ -121,7 +122,7 @@ bad_code="$(mktemp build/bad_code.XXXXXX)"
 trap 'rm -f "$bad_code"' EXIT
 echo "not valid dslb bytecode" > "$bad_code"
 set +e
-bad_out="$("$HOST" --dsl "$bad_code" 2>&1)"
+bad_out="$("$HOST" --lmcode "$bad_code" 2>&1)"
 bad_rc=$?
 set -e
 [ "$bad_rc" -eq 3 ] || fail "corrupt bytecode exited $bad_rc, want 3"
@@ -139,7 +140,7 @@ savedsl(p, "$mem_dir/oom.dslb");
 LMS
 "$LMSCRIPT" "$mem_dir/oom.lms" >/dev/null 2>&1
 set +e
-oom_stdout="$(LMGCP_MAX_MEMORY_MB=8 "$HOST" --dsl "$mem_dir/oom.dslb" 2>"$mem_dir/oom.stderr")"
+oom_stdout="$(LMGCP_MAX_MEMORY_MB=8 "$HOST" --lmcode "$mem_dir/oom.dslb" 2>"$mem_dir/oom.stderr")"
 oom_rc=$?
 set -e
 oom_stderr="$(cat "$mem_dir/oom.stderr")"

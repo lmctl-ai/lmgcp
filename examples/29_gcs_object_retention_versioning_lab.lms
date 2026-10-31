@@ -37,7 +37,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/29_gcs_object_retention_versioning_lab.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/29_gcs_object_retention_versioning_lab.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/29_gcs_object_retention_versioning_lab.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -62,7 +62,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/29_gcs_object_retention_versioning_lab.png", 960, 520, 1);
 end _dsl_
 savedsl(draw, "build/examples/29_gcs_object_retention_versioning_lab_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/29_gcs_object_retention_versioning_lab_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/29_gcs_object_retention_versioning_lab_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/29_gcs_object_retention_versioning_lab.png", "docs/images/29_gcs_object_retention_versioning_lab.png");
 println("ok 29_gcs_object_retention_versioning_lab - wrote images/29_gcs_object_retention_versioning_lab.png");

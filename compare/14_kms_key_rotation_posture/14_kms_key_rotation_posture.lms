@@ -33,7 +33,7 @@ p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
   file_write("build/compare/14_kms_key_rotation_posture/lmcloud-evidence.json", "{\n  \"example\": \"14_kms_key_rotation_posture\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"kms-posture-14\",\n  \"estimated_cost_usd\": 0.001,\n  \"estimated_cost_formatted\": \"$0.0010\",\n  \"cost_report\": \"estimated cost: $0.0010 (resources=1, minutes_alive=5, requests=1, cap=$0.05)\",\n  \"resource_count\": 1,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"kms_key_lmgcp_ephemeral_cmek_1\",\n      \"kind\": \"kms_key\",\n      \"google_type\": \"google_kms_crypto_key\",\n      \"subtype\": \"ENCRYPT_DECRYPT\",\n      \"name\": \"lmgcp-ephemeral-cmek\",\n      \"lmgcp_test\": \"kms-posture-14\",\n      \"cost_usd\": 0.001\n    }\n  ]\n}");
 end _dsl_
 savedsl(p, "build/compare/14_kms_key_rotation_posture/14_kms_key_rotation_posture.dslb");
-r = system ${dsl_cli(p)} --dsl build/compare/14_kms_key_rotation_posture/14_kms_key_rotation_posture.dslb;
+r = system ${dsl_cli(p)} --lmcode build/compare/14_kms_key_rotation_posture/14_kms_key_rotation_posture.dslb;
 assert(r.code == 0);
 assert(trim(read_file("build/compare/14_kms_key_rotation_posture/status.txt")) == "OK");
 println("ok compare/14_kms_key_rotation_posture - tofu init/plan/apply/destroy verified (resources=1, leftovers=0)");

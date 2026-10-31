@@ -172,8 +172,8 @@ go build -o bin/lmgcp ./cmd/lmgcp
 # Inspect CLI flags, version, schema, and 370 DSL signatures
 ./bin/lmgcp --version
 ./bin/lmgcp --help
-./bin/lmgcp --dsl-schema --json
-./bin/lmgcp --dsl-signatures
+./bin/lmgcp --lmcode-schema --json
+./bin/lmgcp --lmcode-signatures
 ./bin/lmgcp --notices
 
 # Run full offline test suite + all 40 examples (uses in-process fake GCP server)

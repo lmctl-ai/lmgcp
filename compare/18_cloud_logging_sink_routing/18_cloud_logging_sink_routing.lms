@@ -33,7 +33,7 @@ p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
   file_write("build/compare/18_cloud_logging_sink_routing/lmcloud-evidence.json", "{\n  \"example\": \"18_cloud_logging_sink_routing\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"logging-sink-18\",\n  \"estimated_cost_usd\": 0.0002,\n  \"estimated_cost_formatted\": \"$0.0002\",\n  \"cost_report\": \"estimated cost: $0.0002 (resources=2, minutes_alive=2, requests=2, cap=$0.05)\",\n  \"resource_count\": 2,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"log_entry_lmgcp_audit_log_1\",\n      \"kind\": \"log_entry\",\n      \"google_type\": \"terraform_data\",\n      \"subtype\": \"WARNING\",\n      \"name\": \"lmgcp-audit-log\",\n      \"lmgcp_test\": \"logging-sink-18\",\n      \"cost_usd\": 0.0001\n    },\n    {\n      \"index\": 2,\n      \"ident\": \"log_sink_lmgcp_siem_sink_2\",\n      \"kind\": \"log_sink\",\n      \"google_type\": \"google_logging_project_sink\",\n      \"subtype\": \"global\",\n      \"name\": \"lmgcp-siem-sink\",\n      \"lmgcp_test\": \"logging-sink-18\",\n      \"cost_usd\": 0.0001\n    }\n  ]\n}");
 end _dsl_
 savedsl(p, "build/compare/18_cloud_logging_sink_routing/18_cloud_logging_sink_routing.dslb");
-r = system ${dsl_cli(p)} --dsl build/compare/18_cloud_logging_sink_routing/18_cloud_logging_sink_routing.dslb;
+r = system ${dsl_cli(p)} --lmcode build/compare/18_cloud_logging_sink_routing/18_cloud_logging_sink_routing.dslb;
 assert(r.code == 0);
 assert(trim(read_file("build/compare/18_cloud_logging_sink_routing/status.txt")) == "OK");
 println("ok compare/18_cloud_logging_sink_routing - tofu init/plan/apply/destroy verified (resources=2, leftovers=0)");

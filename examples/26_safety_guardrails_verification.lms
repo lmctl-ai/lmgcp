@@ -49,7 +49,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/26_safety_guardrails_verification.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/26_safety_guardrails_verification.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/26_safety_guardrails_verification.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -80,7 +80,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/26_safety_guardrails_verification.png", 960, 600, 1);
 end _dsl_
 savedsl(draw, "build/examples/26_safety_guardrails_verification_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/26_safety_guardrails_verification_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/26_safety_guardrails_verification_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/26_safety_guardrails_verification.png", "docs/images/26_safety_guardrails_verification.png");
 println("ok 26_safety_guardrails_verification - wrote images/26_safety_guardrails_verification.png");

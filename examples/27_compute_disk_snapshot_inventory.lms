@@ -24,7 +24,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/27_compute_disk_snapshot_inventory.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/27_compute_disk_snapshot_inventory.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/27_compute_disk_snapshot_inventory.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -55,7 +55,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/27_compute_disk_snapshot_inventory.png", 960, 540, 1);
 end _dsl_
 savedsl(draw, "build/examples/27_compute_disk_snapshot_inventory_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/27_compute_disk_snapshot_inventory_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/27_compute_disk_snapshot_inventory_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/27_compute_disk_snapshot_inventory.png", "docs/images/27_compute_disk_snapshot_inventory.png");
 println("ok 27_compute_disk_snapshot_inventory - wrote images/27_compute_disk_snapshot_inventory.png");

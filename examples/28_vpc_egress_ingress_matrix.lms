@@ -25,7 +25,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/28_vpc_egress_ingress_matrix.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/28_vpc_egress_ingress_matrix.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/28_vpc_egress_ingress_matrix.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -54,7 +54,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/28_vpc_egress_ingress_matrix.png", 960, 540, 1);
 end _dsl_
 savedsl(draw, "build/examples/28_vpc_egress_ingress_matrix_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/28_vpc_egress_ingress_matrix_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/28_vpc_egress_ingress_matrix_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/28_vpc_egress_ingress_matrix.png", "docs/images/28_vpc_egress_ingress_matrix.png");
 println("ok 28_vpc_egress_ingress_matrix - wrote images/28_vpc_egress_ingress_matrix.png");

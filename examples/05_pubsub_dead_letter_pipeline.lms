@@ -34,7 +34,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/05_pubsub_dead_letter_pipeline.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/05_pubsub_dead_letter_pipeline.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/05_pubsub_dead_letter_pipeline.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -72,7 +72,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/05_pubsub_dead_letter_pipeline.png", 960, 500, 1);
 end _dsl_
 savedsl(draw, "build/examples/05_pubsub_dead_letter_pipeline_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/05_pubsub_dead_letter_pipeline_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/05_pubsub_dead_letter_pipeline_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/05_pubsub_dead_letter_pipeline.png", "docs/images/05_pubsub_dead_letter_pipeline.png");
 println("ok 05_pubsub_dead_letter_pipeline - wrote images/05_pubsub_dead_letter_pipeline.png");

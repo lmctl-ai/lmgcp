@@ -35,7 +35,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/18_cloud_logging_sink_routing.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/18_cloud_logging_sink_routing.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/18_cloud_logging_sink_routing.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -78,7 +78,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/18_cloud_logging_sink_routing.png", 960, 520, 1);
 end _dsl_
 savedsl(draw, "build/examples/18_cloud_logging_sink_routing_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/18_cloud_logging_sink_routing_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/18_cloud_logging_sink_routing_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/18_cloud_logging_sink_routing.png", "docs/images/18_cloud_logging_sink_routing.png");
 println("ok 18_cloud_logging_sink_routing - wrote images/18_cloud_logging_sink_routing.png");

@@ -23,7 +23,7 @@ var rawVersion string
 //go:embed THIRD_PARTY_NOTICES
 var embeddedNotices string
 
-const usageText = `usage: lmgcp --version | --help | --notices | --dsl-schema [--json] | --dsl-signatures [--without-std] | --dsl [--dry-run] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete]
+const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | --lmcode [--dry-run] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete]
 
 Google Cloud Go SDK host for lmscript (Apache-2.0 SDK on lmcode-go).
 
@@ -31,9 +31,9 @@ Options:
   --version                  Print version (lmgcp X.Y.Z)
   --help, -h                 Print this usage and safety overview
   --notices                  Print embedded third-party license notices
-  --dsl-schema [--json]      Print human-readable schema summary or raw JSON schema
-  --dsl-signatures           Print sorted canonical DSL signatures
-  --dsl [--dry-run] FILE...  Load, verify, and execute compiled .dslb bytecode files
+  --lmcode-schema [--json]      Print human-readable schema summary or raw JSON schema
+  --lmcode-signatures           Print sorted canonical DSL signatures
+  --lmcode [--dry-run] FILE...  Load, verify, and execute compiled .dslb bytecode files
   --sweep                    List (dry-run default) or delete (--delete) lmgcp_ leftovers
 
 Environment & Resource Limits:
@@ -106,6 +106,11 @@ func realMain(args []string) int {
 		return 0
 	}
 
+	// Reject unrecognized operations before starting the fake or live transport.
+	if len(args) < 2 || (args[1] != "--lmcode-schema" && args[1] != "--lmcode-signatures" && args[1] != "--lmcode" && args[1] != "--sweep") {
+		fmt.Fprint(os.Stderr, usageText)
+		return 2
+	}
 	h, err := host.NewHost()
 	if err != nil {
 		return lmcode.ReportAppFailure("failed to initialize GCP host: " + safety.RedactSecrets(err.Error()))
@@ -117,7 +122,7 @@ func realMain(args []string) int {
 		return lmcode.ReportAppFailure("failed to register host: " + err.Error())
 	}
 
-	if len(args) >= 2 && args[1] == "--dsl-schema" {
+	if len(args) >= 2 && args[1] == "--lmcode-schema" {
 		if len(args) == 2 {
 			printSchemaSummary(reg)
 			return 0
@@ -132,13 +137,13 @@ func realMain(args []string) int {
 		return 2
 	}
 
-	if len(args) == 3 && args[1] == "--dsl-signatures" && args[2] == "--without-std" {
+	if len(args) == 3 && args[1] == "--lmcode-signatures" && args[2] == "--without-std" {
 		for _, s := range reg.HostSignatures() {
 			fmt.Println(s)
 		}
 		return 0
 	}
-	if len(args) == 2 && args[1] == "--dsl-signatures" {
+	if len(args) == 2 && args[1] == "--lmcode-signatures" {
 		for _, s := range reg.Signatures() {
 			fmt.Println(s)
 		}
@@ -182,7 +187,7 @@ func realMain(args []string) int {
 		return 0
 	}
 
-	if len(args) >= 3 && args[1] == "--dsl" {
+	if len(args) >= 3 && args[1] == "--lmcode" {
 		dryRun := false
 		startIdx := 2
 		if args[2] == "--dry-run" {

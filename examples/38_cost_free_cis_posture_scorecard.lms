@@ -19,7 +19,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/38_cost_free_cis_posture_scorecard.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/38_cost_free_cis_posture_scorecard.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/38_cost_free_cis_posture_scorecard.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -47,7 +47,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/38_cost_free_cis_posture_scorecard.png", 960, 540, 1);
 end _dsl_
 savedsl(draw, "build/examples/38_cost_free_cis_posture_scorecard_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/38_cost_free_cis_posture_scorecard_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/38_cost_free_cis_posture_scorecard_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/38_cost_free_cis_posture_scorecard.png", "docs/images/38_cost_free_cis_posture_scorecard.png");
 println("ok 38_cost_free_cis_posture_scorecard - wrote images/38_cost_free_cis_posture_scorecard.png");

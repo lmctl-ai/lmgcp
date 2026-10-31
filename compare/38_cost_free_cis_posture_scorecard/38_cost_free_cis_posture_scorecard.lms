@@ -33,7 +33,7 @@ p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
   file_write("build/compare/38_cost_free_cis_posture_scorecard/lmcloud-evidence.json", "{\n  \"example\": \"38_cost_free_cis_posture_scorecard\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"run-20261024\",\n  \"estimated_cost_usd\": 0,\n  \"estimated_cost_formatted\": \"$0.00\",\n  \"cost_report\": \"estimated cost: $0.00 (read-only; resources=0, minutes_alive=0, requests=0)\",\n  \"resource_count\": 0,\n  \"leftover_count\": 0,\n  \"resources\": []\n}");
 end _dsl_
 savedsl(p, "build/compare/38_cost_free_cis_posture_scorecard/38_cost_free_cis_posture_scorecard.dslb");
-r = system ${dsl_cli(p)} --dsl build/compare/38_cost_free_cis_posture_scorecard/38_cost_free_cis_posture_scorecard.dslb;
+r = system ${dsl_cli(p)} --lmcode build/compare/38_cost_free_cis_posture_scorecard/38_cost_free_cis_posture_scorecard.dslb;
 assert(r.code == 0);
 assert(trim(read_file("build/compare/38_cost_free_cis_posture_scorecard/status.txt")) == "OK");
 println("ok compare/38_cost_free_cis_posture_scorecard - tofu init/plan/apply/destroy verified (resources=0, leftovers=0)");

@@ -33,7 +33,7 @@ p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
   file_write("build/compare/19_cloud_monitoring_slo_burn_rate/lmcloud-evidence.json", "{\n  \"example\": \"19_cloud_monitoring_slo_burn_rate\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"monitoring-slo-19\",\n  \"estimated_cost_usd\": 0.0002,\n  \"estimated_cost_formatted\": \"$0.0002\",\n  \"cost_report\": \"estimated cost: $0.0002 (resources=1, minutes_alive=2, requests=1, cap=$0.05)\",\n  \"resource_count\": 1,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"alert_policy_lmgcp_slo_latency_alert_1\",\n      \"kind\": \"alert_policy\",\n      \"google_type\": \"google_monitoring_alert_policy\",\n      \"subtype\": \"run.googleapis.com/request_latencies_p95_ms\",\n      \"name\": \"lmgcp-slo-latency-alert\",\n      \"lmgcp_test\": \"monitoring-slo-19\",\n      \"cost_usd\": 0.0002\n    }\n  ]\n}");
 end _dsl_
 savedsl(p, "build/compare/19_cloud_monitoring_slo_burn_rate/19_cloud_monitoring_slo_burn_rate.dslb");
-r = system ${dsl_cli(p)} --dsl build/compare/19_cloud_monitoring_slo_burn_rate/19_cloud_monitoring_slo_burn_rate.dslb;
+r = system ${dsl_cli(p)} --lmcode build/compare/19_cloud_monitoring_slo_burn_rate/19_cloud_monitoring_slo_burn_rate.dslb;
 assert(r.code == 0);
 assert(trim(read_file("build/compare/19_cloud_monitoring_slo_burn_rate/status.txt")) == "OK");
 println("ok compare/19_cloud_monitoring_slo_burn_rate - tofu init/plan/apply/destroy verified (resources=1, leftovers=0)");

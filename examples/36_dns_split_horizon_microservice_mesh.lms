@@ -27,7 +27,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/36_dns_split_horizon_microservice_mesh.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/36_dns_split_horizon_microservice_mesh.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/36_dns_split_horizon_microservice_mesh.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -51,7 +51,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/36_dns_split_horizon_microservice_mesh.png", 960, 500, 1);
 end _dsl_
 savedsl(draw, "build/examples/36_dns_split_horizon_microservice_mesh_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/36_dns_split_horizon_microservice_mesh_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/36_dns_split_horizon_microservice_mesh_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/36_dns_split_horizon_microservice_mesh.png", "docs/images/36_dns_split_horizon_microservice_mesh.png");
 println("ok 36_dns_split_horizon_microservice_mesh - wrote images/36_dns_split_horizon_microservice_mesh.png");

@@ -37,7 +37,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/24_serverless_event_driven_mesh.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/24_serverless_event_driven_mesh.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/24_serverless_event_driven_mesh.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -73,7 +73,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/24_serverless_event_driven_mesh.png", 960, 520, 1);
 end _dsl_
 savedsl(draw, "build/examples/24_serverless_event_driven_mesh_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/24_serverless_event_driven_mesh_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/24_serverless_event_driven_mesh_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/24_serverless_event_driven_mesh.png", "docs/images/24_serverless_event_driven_mesh.png");
 println("ok 24_serverless_event_driven_mesh - wrote images/24_serverless_event_driven_mesh.png");

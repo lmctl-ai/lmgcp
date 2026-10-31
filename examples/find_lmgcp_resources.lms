@@ -6,7 +6,7 @@ file_write("data/find_lmgcp_resources.txt", "category,count\nmatching," + str(ro
 print("matching resources: " + str(rows.len()));
 end _dsl_
 savedsl(p, "find_lmgcp_resources.dslb");
-r = system ${dsl_cli(p)} --dsl "find_lmgcp_resources.dslb";
+r = system ${dsl_cli(p)} --lmcode "find_lmgcp_resources.dslb";
 assert(r.code == 0);
 plot = _dsl_ cli="lmplot" install="github:lmctl-ai/lmplot@latest";
 plot.png("images/find_lmgcp_resources.png", 900, 560);
@@ -15,6 +15,6 @@ plot.cmd("plot 'data/find_lmgcp_resources.txt' using 2:xtic(1) title 'matches'")
 plot.close();
 end _dsl_
 savedsl(plot, "find_lmgcp_resources_plot.dslb");
-r = system ${dsl_cli(plot)} --dsl "find_lmgcp_resources_plot.dslb";
+r = system ${dsl_cli(plot)} --lmcode "find_lmgcp_resources_plot.dslb";
 assert(r.code == 0);
 print("ok find_lmgcp_resources (estimated cost: $0.00)");

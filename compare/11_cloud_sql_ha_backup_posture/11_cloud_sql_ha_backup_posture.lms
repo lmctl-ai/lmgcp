@@ -33,7 +33,7 @@ p = _dsl_ cli="lmcloud" install="github:lmctl-ai/lmcloud@latest";
   file_write("build/compare/11_cloud_sql_ha_backup_posture/lmcloud-evidence.json", "{\n  \"example\": \"11_cloud_sql_ha_backup_posture\",\n  \"host\": \"lmcloud\",\n  \"provider\": \"hashicorp/google\",\n  \"run_id\": \"sql-posture-11\",\n  \"estimated_cost_usd\": 0.0027,\n  \"estimated_cost_formatted\": \"$0.0027\",\n  \"cost_report\": \"estimated cost: $0.0027 (resources=1, minutes_alive=10, requests=1, cap=$0.05)\",\n  \"resource_count\": 1,\n  \"leftover_count\": 0,\n  \"resources\": [\n    {\n      \"index\": 1,\n      \"ident\": \"sql_instance_lmgcp_sql_demo_1\",\n      \"kind\": \"sql_instance\",\n      \"google_type\": \"google_sql_database_instance\",\n      \"subtype\": \"db-f1-micro\",\n      \"name\": \"lmgcp-sql-demo\",\n      \"lmgcp_test\": \"sql-posture-11\",\n      \"cost_usd\": 0.0027\n    }\n  ]\n}");
 end _dsl_
 savedsl(p, "build/compare/11_cloud_sql_ha_backup_posture/11_cloud_sql_ha_backup_posture.dslb");
-r = system ${dsl_cli(p)} --dsl build/compare/11_cloud_sql_ha_backup_posture/11_cloud_sql_ha_backup_posture.dslb;
+r = system ${dsl_cli(p)} --lmcode build/compare/11_cloud_sql_ha_backup_posture/11_cloud_sql_ha_backup_posture.dslb;
 assert(r.code == 0);
 assert(trim(read_file("build/compare/11_cloud_sql_ha_backup_posture/status.txt")) == "OK");
 println("ok compare/11_cloud_sql_ha_backup_posture - tofu init/plan/apply/destroy verified (resources=1, leftovers=0)");

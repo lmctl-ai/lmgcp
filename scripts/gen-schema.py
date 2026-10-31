@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate schema/lmgcp.dsl.json from lmgcp --dsl-signatures."""
+"""Generate schema/lmgcp.dsl.json from lmgcp --lmcode-signatures."""
 import json
 import re
 import subprocess
@@ -23,7 +23,7 @@ def parse_params(raw: str):
 
 def main():
     bin_path = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "bin" / "lmgcp")
-    out = subprocess.check_output([bin_path, "--dsl-signatures", "--without-std"], text=True)
+    out = subprocess.check_output([bin_path, "--lmcode-signatures", "--without-std"], text=True)
     context = {}
     functions = {}
     types = {}

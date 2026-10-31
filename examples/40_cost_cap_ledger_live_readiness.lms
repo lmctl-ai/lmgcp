@@ -42,7 +42,7 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   print(gcp.cost_report());
 end _dsl_
 savedsl(p, "build/examples/40_cost_cap_ledger_live_readiness.dslb");
-r = system ${dsl_cli(p)} --dsl build/examples/40_cost_cap_ledger_live_readiness.dslb;
+r = system ${dsl_cli(p)} --lmcode build/examples/40_cost_cap_ledger_live_readiness.dslb;
 assert(r.code == 0);
 
 draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
@@ -73,7 +73,7 @@ draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
   scene.render_png("images/40_cost_cap_ledger_live_readiness.png", 960, 540, 1);
 end _dsl_
 savedsl(draw, "build/examples/40_cost_cap_ledger_live_readiness_draw.dslb");
-rd = system ${dsl_cli(draw)} --dsl build/examples/40_cost_cap_ledger_live_readiness_draw.dslb;
+rd = system ${dsl_cli(draw)} --lmcode build/examples/40_cost_cap_ledger_live_readiness_draw.dslb;
 assert(rd.code == 0);
 copy_file("images/40_cost_cap_ledger_live_readiness.png", "docs/images/40_cost_cap_ledger_live_readiness.png");
 println("ok 40_cost_cap_ledger_live_readiness - wrote images/40_cost_cap_ledger_live_readiness.png");

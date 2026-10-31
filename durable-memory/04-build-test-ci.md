@@ -20,11 +20,11 @@ CGO_ENABLED=0 go build -o bin/lmgcp ./cmd/lmgcp
 ## What `./test.sh` Verifies (57 Checks)
 
 1. Executable existence and Linux Rule 14 linkage (`CGO_ENABLED=0` static Go binary / glibc allowlist, zero GPL/LGPL libraries).
-2. CLI contracts: `--version`, `--help`, `--notices`, `--dsl-schema`, `--dsl-schema --json`, `--dsl-signatures`, `--dsl-signatures --without-std`, and `--sweep`.
+2. CLI contracts: `--version`, `--help`, `--notices`, `--lmcode-schema`, `--lmcode-schema --json`, `--lmcode-signatures`, `--lmcode-signatures --without-std`, and `--sweep`.
 3. Schema & signature parity:
-   - `lmscript --dsl-signatures --without-std schema/lmgcp.dsl.json` matches `./bin/lmgcp --dsl-signatures --without-std` (298 host signatures).
-   - `lmscript --dsl-signatures schema/lmgcp.dsl.json` matches `./bin/lmgcp --dsl-signatures` (370 total signatures).
-   - `./bin/lmgcp --dsl-schema --json` is byte-identical to `schema/lmgcp.dsl.json`.
+   - `lmscript --lmcode-signatures --without-std schema/lmgcp.dsl.json` matches `./bin/lmgcp --lmcode-signatures --without-std` (298 host signatures).
+   - `lmscript --lmcode-signatures schema/lmgcp.dsl.json` matches `./bin/lmgcp --lmcode-signatures` (370 total signatures).
+   - `./bin/lmgcp --lmcode-schema --json` is byte-identical to `schema/lmgcp.dsl.json`.
 4. Error & memory budget exit codes:
    - Invalid CLI flags exit `2`.
    - Invalid `LMGCP_MAX_MEMORY_MB` values (`""`, `0`, `-5`, `abc`) exit `2` and name `LMGCP_MAX_MEMORY_MB` on `stderr`.
@@ -46,3 +46,7 @@ CGO_ENABLED=0 go build -o bin/lmgcp ./cmd/lmgcp
 - **`v0.1.2`**: Added `RunLedger` price table, per-example cost cap enforcement (`$0.05` default / `$0.25` hard ceiling), `estimated cost: $0.00xx` output, and README cost notes.
 - **`v0.1.4`**: Expanded gallery to 40 `.lms` cloud stories and updated `schema/lmgcp.dsl.json` to omit built-in `lmcode_std_v1` definitions for `lmscript >= 0.2.420`.
 - **`v0.1.6` (Latest)**: Added all 40 `lmcloud` (OpenTofu) equivalents under `compare/`, `compare/run.sh` (portable to macOS Bash 3.2 and BSD userland), `compare/RESULTS.md`, and KMS ledger cleanup in `CleanupLedger()`.
+
+## Host flag cutover
+
+Only the lmcode host option family is accepted; retired spellings are refused before initializing fake or live transports. The full gate checks exact schema bytes, signatures, new loader dispatch and retired-option refusal in a scratch HOME. SDK pin 65f0ef2 supports source-compiler v6; compiler selection checks emitted capability. DSLB and .dslb names are unchanged. Cross-tool comparison uses explicit caller PATH rather than a shared checkout.
