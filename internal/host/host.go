@@ -44,16 +44,18 @@ import (
 
 // Host manages Google Cloud Go SDK clients, safety guardrails, run ledger, and fake/live transport.
 type Host struct {
-	mu          sync.Mutex
-	projectID   string
-	region      string
-	zone        string
-	liveMode    bool
-	autoCleanup bool
-	lastError   string
-	authError   string
-	ledger      *safety.RunLedger
-	fakeSrv     *fakegcp.Server
+	mu           sync.Mutex
+	projectID    string
+	region       string
+	zone         string
+	liveMode     bool
+	autoCleanup  bool
+	lastError    string
+	authError    string
+	ledger       *safety.RunLedger
+	fakeSrv      *fakegcp.Server
+	ownsFake     bool
+	recoveryPath string
 
 	computeSvc    *compute.Service
 	storageSvc    *storage.Service
@@ -75,7 +77,12 @@ type Host struct {
 // NewHost initializes the lmgcp Host.
 // Unless LMGCP_LIVE=1 is set in the environment, it starts an in-process fake GCP server
 // and binds all Google Cloud Go SDK clients to loopback HTTP with option.WithoutAuthentication().
-func NewHost(dry bool) (*Host, error) {
+func NewHost(dry bool) (*Host, error) { return newHost(dry, true, nil) }
+
+// NewHostForSweep opens a host without starting a new recovery journal.
+func NewHostForSweep() (*Host, error) { return newHost(false, false, nil) }
+
+func newHost(dry, journalEnabled bool, sharedFake *fakegcp.Server) (*Host, error) {
 	proj := strings.TrimSpace(os.Getenv("LMGCP_PROJECT"))
 	if proj == "" {
 		proj = "lmgcp-sandbox-8f2a"
@@ -96,7 +103,7 @@ func NewHost(dry bool) (*Host, error) {
 		zone:        zn,
 		liveMode:    live,
 		autoCleanup: live,
-		ledger:      safety.NewRunLedger("run-20261024"),
+		ledger:      safety.NewRunLedger(""),
 	}
 
 	ctx := context.Background()
@@ -121,9 +128,14 @@ func NewHost(dry bool) (*Host, error) {
 			return nil, err
 		}
 	} else if !live {
-		srv, err := fakegcp.NewServer()
-		if err != nil {
-			return nil, fmt.Errorf("failed to start in-process fake GCP server: %w", err)
+		srv := sharedFake
+		if srv == nil {
+			var err error
+			srv, err = fakegcp.NewServer()
+			if err != nil {
+				return nil, fmt.Errorf("failed to start in-process fake GCP server: %w", err)
+			}
+			h.ownsFake = true
 		}
 		h.fakeSrv = srv
 		if err := h.initClients(ctx, func(svc string) []option.ClientOption {
@@ -132,7 +144,9 @@ func NewHost(dry bool) (*Host, error) {
 				option.WithoutAuthentication(),
 			}
 		}); err != nil {
-			srv.Close()
+			if h.ownsFake {
+				srv.Close()
+			}
 			return nil, err
 		}
 	} else {
@@ -150,6 +164,21 @@ func NewHost(dry bool) (*Host, error) {
 		}); err != nil {
 			return nil, err
 		}
+	}
+	if journalEnabled && !dry && (live || strings.TrimSpace(os.Getenv("LMGCP_STATE_DIR")) != "" || strings.TrimSpace(os.Getenv("LMGCP_LEDGER")) != "") {
+		path := strings.TrimSpace(os.Getenv("LMGCP_LEDGER"))
+		if path == "" {
+			path = safety.JournalPath(safety.DefaultStateDir(), h.ledger.RunID())
+		}
+		journal, err := safety.OpenJournal(path, h.journalMeta())
+		if err != nil {
+			if h.fakeSrv != nil {
+				h.fakeSrv.Close()
+			}
+			return nil, fmt.Errorf("open recovery journal: %w", err)
+		}
+		h.ledger.AttachJournal(journal)
+		h.recoveryPath = path
 	}
 	return h, nil
 }
@@ -204,11 +233,72 @@ func (h *Host) initClients(ctx context.Context, optsFor func(svc string) []optio
 	return nil
 }
 
+func (h *Host) journalMeta() safety.JournalMeta {
+	endpoint := "in-process-fake"
+	if h.liveMode {
+		endpoint = "https://googleapis.com"
+	} else if raw := strings.TrimSpace(os.Getenv("LMGCP_ENDPOINT")); raw != "" {
+		endpoint = raw
+	}
+	return safety.JournalMeta{
+		RunID:    h.ledger.RunID(),
+		Provider: "gcp",
+		Account:  h.projectID,
+		Tenant:   h.projectID,
+		Scope:    h.region,
+		Endpoint: endpoint,
+	}
+}
+
+// RecoveryPath returns the durable journal path for this run, if enabled.
+func (h *Host) RecoveryPath() string { return h.recoveryPath }
+
+// LoadRecovery reopens a journal, validates its provider binding and rebuilds ownership.
+func (h *Host) LoadRecovery(path string) error {
+	loaded, err := safety.LoadJournal(path)
+	if err != nil {
+		return fmt.Errorf("load recovery journal: %w", err)
+	}
+	if loaded.Meta.RunID == "" {
+		return fmt.Errorf("recovery journal has no metadata")
+	}
+	want := h.journalMeta()
+	if loaded.Meta.Provider != want.Provider || loaded.Meta.Account != want.Account ||
+		loaded.Meta.Tenant != want.Tenant || loaded.Meta.Scope != want.Scope ||
+		loaded.Meta.Endpoint != want.Endpoint {
+		return fmt.Errorf("recovery journal binding mismatch: run=%s provider=%s account=%s scope=%s endpoint=%s", loaded.Meta.RunID, loaded.Meta.Provider, loaded.Meta.Account, loaded.Meta.Scope, loaded.Meta.Endpoint)
+	}
+	journal, err := safety.OpenJournal(path, loaded.Meta)
+	if err != nil {
+		return err
+	}
+	h.ledger.AttachJournal(journal)
+	h.ledger.ReplaceFromJournal(loaded.Records)
+	h.recoveryPath = path
+	return nil
+}
+
+func (h *Host) beginResource(kind, location, name string) bool {
+	if err := h.ledger.Begin(kind, location, name); err != nil {
+		h.fail(err)
+		return false
+	}
+	return true
+}
+
+func (h *Host) confirmResource(kind, location, name string) {
+	createdAt := time.Now().Unix()
+	if h.fakeSrv != nil {
+		createdAt = fakegcp.DefaultEpoch
+	}
+	h.ledger.Record(kind, location, name, createdAt)
+}
 func (h *Host) Close() {
+	defer h.ledger.CloseJournal()
 	if h.autoCleanup {
 		_ = h.CleanupLedger()
 	}
-	if h.fakeSrv != nil {
+	if h.fakeSrv != nil && h.ownsFake {
 		h.fakeSrv.Close()
 	}
 }
@@ -317,7 +407,12 @@ func (h *Host) LastError() string {
 	return h.lastError
 }
 
-func (h *Host) SetAutoCleanup(enabled bool) { h.autoCleanup = enabled }
+func (h *Host) SetAutoCleanup(enabled bool) {
+	h.autoCleanup = enabled
+	if err := h.ledger.SetRetention(!enabled); err != nil {
+		h.fail(err)
+	}
+}
 
 func (h *Host) LedgerCount() int64 { return int64(h.ledger.Count()) }
 
@@ -378,54 +473,28 @@ func (h *Host) WriteCostEvidence(exampleName, path string) bool {
 
 // CleanupLedger deletes all resources recorded in the current run's ledger in reverse order.
 func (h *Host) CleanupLedger() int64 {
+	if h.ledger.Retention() {
+		for _, e := range h.ledger.Snapshot() {
+			h.ledger.RetainRecord(e.Kind, e.Location, e.Name, "retention policy")
+		}
+		return 0
+	}
 	snap := h.ledger.Snapshot()
 	var deleted int64
 	for i := len(snap) - 1; i >= 0; i-- {
 		e := snap[i]
-		var ok bool
-		switch e.Kind {
-		case "compute_instance":
-			ok = h.ComputeDeleteInstance(e.Location, e.Name)
-		case "firewall":
-			ok = h.NetworkDeleteFirewall(e.Name)
-		case "subnet":
-			ok = h.NetworkDeleteSubnet(e.Location, e.Name)
-		case "vpc":
-			ok = h.NetworkDeleteVPC(e.Name)
-		case "bucket":
-			ok = h.StorageDeleteBucket(e.Name)
-		case "pubsub_sub":
-			ok = h.PubsubDeleteSubscription(e.Name)
-		case "pubsub_topic":
-			ok = h.PubsubDeleteTopic(e.Name)
-		case "cloud_run":
-			ok = h.RunDeleteService(e.Location, e.Name)
-		case "sql_instance":
-			ok = h.SQLDeleteInstance(e.Name)
-		case "bq_table":
-			parts := strings.SplitN(e.Name, "/", 2)
-			if len(parts) == 2 {
-				ok = h.BQDeleteTable(parts[0], parts[1])
-			}
-		case "bq_dataset":
-			ok = h.BQDeleteDataset(e.Name)
-		case "secret":
-			ok = h.SecretsDelete(e.Name)
-		case "kms_key":
-			h.ledger.Remove("kms_key", e.Location, e.Name)
-			ok = true
-		case "artifact_repo":
-			ok = h.ARDeleteRepository(e.Location, e.Name)
-		case "dns_zone":
-			ok = h.DNSDeleteZone(e.Name)
-		case "log_sink":
-			ok = h.LoggingDeleteSink(e.Name)
-		case "alert_policy":
-			ok = h.MonitoringDeleteAlertPolicy(e.Name)
-		}
+		ok, reason := h.deleteResource(e)
 		if ok {
+			if h.ledger.Owns(e.Kind, e.Name) {
+				h.ledger.Remove(e.Kind, e.Location, e.Name)
+			}
 			deleted++
+			continue
 		}
+		if reason == "" {
+			reason = "cleanup failed"
+		}
+		h.ledger.RetainRecord(e.Kind, e.Location, e.Name, reason)
 	}
 	return deleted
 }
@@ -442,80 +511,148 @@ func (h *Host) SeedDemoAge(kind, name string, ageHours int64) bool {
 	return true
 }
 
-// SweepDryRun lists lmgcp_ / lmgcp- resources in the ledger whose age >= maxAgeHours.
-func (h *Host) SweepDryRun(maxAgeHours int64) []string {
+func (h *Host) deleteResource(e safety.LedgerEntry) (bool, string) {
+	switch e.Kind {
+	case "compute_instance":
+		return deletionResult(h.ComputeDeleteInstance(e.Location, e.Name), h.LastError())
+	case "firewall":
+		return deletionResult(h.NetworkDeleteFirewall(e.Name), h.LastError())
+	case "subnet":
+		return deletionResult(h.NetworkDeleteSubnet(e.Location, e.Name), h.LastError())
+	case "vpc":
+		return deletionResult(h.NetworkDeleteVPC(e.Name), h.LastError())
+	case "bucket":
+		return deletionResult(h.StorageDeleteBucket(e.Name), h.LastError())
+	case "pubsub_sub":
+		return deletionResult(h.PubsubDeleteSubscription(e.Name), h.LastError())
+	case "pubsub_topic":
+		return deletionResult(h.PubsubDeleteTopic(e.Name), h.LastError())
+	case "cloud_run":
+		return deletionResult(h.RunDeleteService(e.Location, e.Name), h.LastError())
+	case "sql_instance":
+		return deletionResult(h.SQLDeleteInstance(e.Name), h.LastError())
+	case "bq_table":
+		parts := strings.SplitN(e.Name, "/", 2)
+		if len(parts) != 2 {
+			return false, "bq_table name is not dataset/table"
+		}
+		return deletionResult(h.BQDeleteTable(parts[0], parts[1]), h.LastError())
+	case "bq_dataset":
+		return deletionResult(h.BQDeleteDataset(e.Name), h.LastError())
+	case "firestore_doc":
+		parts := strings.SplitN(e.Name, "/", 2)
+		if len(parts) != 2 {
+			return false, "firestore_doc name is not collection/document"
+		}
+		return deletionResult(h.FirestoreDeleteDoc(parts[0], parts[1]), h.LastError())
+	case "secret":
+		return deletionResult(h.SecretsDelete(e.Name), h.LastError())
+	case "kms_key":
+		if h.fakeSrv != nil {
+			// The fake has no KMS destroy API; forgetting ownership is its terminal deletion.
+			h.ledger.Remove("kms_key", e.Location, e.Name)
+			return true, ""
+		}
+		return false, "KMS CryptoKey cannot be deleted directly; retain and destroy key versions manually"
+	case "artifact_repo":
+		return deletionResult(h.ARDeleteRepository(e.Location, e.Name), h.LastError())
+	case "dns_zone":
+		return deletionResult(h.DNSDeleteZone(e.Name), h.LastError())
+	case "log_sink":
+		return deletionResult(h.LoggingDeleteSink(e.Name), h.LastError())
+	case "alert_policy":
+		return deletionResult(h.MonitoringDeleteAlertPolicy(e.Name), h.LastError())
+	default:
+		return false, "unsupported resource kind for automatic cleanup"
+	}
+}
+
+func deletionResult(ok bool, lastError string) (bool, string) {
+	if ok || isTerminalAbsence(lastError) {
+		return true, ""
+	}
+	if lastError == "" {
+		return false, "cleanup did not confirm deletion"
+	}
+	return false, "cleanup failed: " + lastError
+}
+
+func isTerminalAbsence(message string) bool {
+	lower := strings.ToLower(message)
+	return strings.Contains(lower, "404") || strings.Contains(lower, "not found") ||
+		strings.Contains(lower, "notfound") || strings.Contains(lower, "no such")
+}
+
+func (h *Host) resourceAgeHours(e safety.LedgerEntry) int64 {
+	if h.fakeSrv != nil && (e.CreatedAtUnix == 0 || e.CreatedAtUnix == fakegcp.DefaultEpoch) {
+		return h.fakeSrv.GetResourceAgeHours(e.Kind, e.Name)
+	}
+	if e.CreatedAtUnix <= 0 {
+		return 0
+	}
+	hours := (time.Now().Unix() - e.CreatedAtUnix) / 3600
+	if hours < 0 {
+		return 0
+	}
+	return hours
+}
+
+func (h *Host) sweepCandidates(maxAgeHours int64) []safety.LedgerEntry {
 	snap := h.ledger.Snapshot()
-	var candidates []string
+	candidates := make([]safety.LedgerEntry, 0, len(snap))
 	for _, e := range snap {
 		if !safety.HasSafePrefix(e.Name) {
 			continue
 		}
-		var age int64
-		if h.fakeSrv != nil {
-			age = h.fakeSrv.GetResourceAgeHours(e.Kind, e.Name)
-		}
-		if age >= maxAgeHours {
-			candidates = append(candidates, fmt.Sprintf("%s:%s:%s (age=%dh)", e.Kind, e.Location, e.Name, age))
+		if h.resourceAgeHours(e) >= maxAgeHours {
+			candidates = append(candidates, e)
 		}
 	}
 	return candidates
 }
 
-// SweepDelete deletes lmgcp_ / lmgcp- resources in the ledger whose age >= maxAgeHours.
+// SweepDryRun lists run-owned resources whose age >= maxAgeHours.
+func (h *Host) SweepDryRun(maxAgeHours int64) []string {
+	candidates := h.sweepCandidates(maxAgeHours)
+	out := make([]string, 0, len(candidates))
+	for _, e := range candidates {
+		state := e.State
+		if state == "" {
+			state = "confirmed"
+		}
+		line := fmt.Sprintf("%s:%s:%s (age=%dh,state=%s)", e.Kind, e.Location, e.Name, h.resourceAgeHours(e), state)
+		if e.Reason != "" {
+			line += " reason=" + e.Reason
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+// SweepDelete deletes run-owned resources in reverse journal order and tombstones only confirmed cleanup.
 func (h *Host) SweepDelete(maxAgeHours int64) int64 {
-	snap := h.ledger.Snapshot()
+	if h.ledger.Retention() {
+		for _, e := range h.sweepCandidates(maxAgeHours) {
+			h.ledger.RetainRecord(e.Kind, e.Location, e.Name, "retention policy")
+		}
+		return 0
+	}
+	candidates := h.sweepCandidates(maxAgeHours)
 	var deleted int64
-	for i := len(snap) - 1; i >= 0; i-- {
-		e := snap[i]
-		if !safety.HasSafePrefix(e.Name) {
-			continue
-		}
-		var age int64
-		if h.fakeSrv != nil {
-			age = h.fakeSrv.GetResourceAgeHours(e.Kind, e.Name)
-		}
-		if age < maxAgeHours {
-			continue
-		}
-		var ok bool
-		switch e.Kind {
-		case "compute_instance":
-			ok = h.ComputeDeleteInstance(e.Location, e.Name)
-		case "firewall":
-			ok = h.NetworkDeleteFirewall(e.Name)
-		case "subnet":
-			ok = h.NetworkDeleteSubnet(e.Location, e.Name)
-		case "vpc":
-			ok = h.NetworkDeleteVPC(e.Name)
-		case "bucket":
-			ok = h.StorageDeleteBucket(e.Name)
-		case "pubsub_sub":
-			ok = h.PubsubDeleteSubscription(e.Name)
-		case "pubsub_topic":
-			ok = h.PubsubDeleteTopic(e.Name)
-		case "cloud_run":
-			ok = h.RunDeleteService(e.Location, e.Name)
-		case "sql_instance":
-			ok = h.SQLDeleteInstance(e.Name)
-		case "bq_dataset":
-			ok = h.BQDeleteDataset(e.Name)
-		case "secret":
-			ok = h.SecretsDelete(e.Name)
-		case "kms_key":
-			h.ledger.Remove("kms_key", e.Location, e.Name)
-			ok = true
-		case "artifact_repo":
-			ok = h.ARDeleteRepository(e.Location, e.Name)
-		case "dns_zone":
-			ok = h.DNSDeleteZone(e.Name)
-		case "log_sink":
-			ok = h.LoggingDeleteSink(e.Name)
-		case "alert_policy":
-			ok = h.MonitoringDeleteAlertPolicy(e.Name)
-		}
+	for i := len(candidates) - 1; i >= 0; i-- {
+		e := candidates[i]
+		ok, reason := h.deleteResource(e)
 		if ok {
+			if h.ledger.Owns(e.Kind, e.Name) {
+				h.ledger.Remove(e.Kind, e.Location, e.Name)
+			}
 			deleted++
+			continue
 		}
+		if reason == "" {
+			reason = "cleanup failed"
+		}
+		h.ledger.RetainRecord(e.Kind, e.Location, e.Name, reason)
 	}
 	return deleted
 }
@@ -662,6 +799,9 @@ func (h *Host) ComputeCreateInstance(zone, name, machineType, imageFamily string
 		h.fail(err)
 		return &ComputeInstance{NameVal: name, ZoneVal: zone, StatusVal: "ERROR", LabelsVal: map[string]string{}}
 	}
+	if !h.beginResource("compute_instance", zone, name) {
+		return nil
+	}
 	labels := h.ledger.EnrichLabels(map[string]string{"image_family": imageFamily}, fakegcp.DefaultEpoch)
 	req := &compute.Instance{
 		Name:        name,
@@ -681,7 +821,7 @@ func (h *Host) ComputeCreateInstance(zone, name, machineType, imageFamily string
 		h.fail(err)
 		return &ComputeInstance{NameVal: name, ZoneVal: zone, StatusVal: "ERROR", LabelsVal: map[string]string{}}
 	}
-	h.ledger.Record("compute_instance", zone, name, fakegcp.DefaultEpoch)
+	h.confirmResource("compute_instance", zone, name)
 	h.clearErr()
 	return h.ComputeGetInstance(zone, name)
 }
@@ -809,6 +949,9 @@ func (h *Host) NetworkCreateVPC(name string, autoSubnets bool) *VpcNetwork {
 		h.fail(err)
 		return &VpcNetwork{NameVal: name}
 	}
+	if !h.beginResource("vpc", "global", name) {
+		return nil
+	}
 	req := &compute.Network{
 		Name:                  name,
 		AutoCreateSubnetworks: autoSubnets,
@@ -819,7 +962,7 @@ func (h *Host) NetworkCreateVPC(name string, autoSubnets bool) *VpcNetwork {
 		h.fail(err)
 		return &VpcNetwork{NameVal: name}
 	}
-	h.ledger.Record("vpc", "global", name, fakegcp.DefaultEpoch)
+	h.confirmResource("vpc", "global", name)
 	h.clearErr()
 	return h.NetworkGetVPC(name)
 }
@@ -888,6 +1031,9 @@ func (h *Host) NetworkCreateSubnet(region, name, vpcName, cidr string, privGoogl
 		h.fail(err)
 		return &Subnet{NameVal: name, RegionVal: region}
 	}
+	if !h.beginResource("subnet", region, name) {
+		return nil
+	}
 	req := &compute.Subnetwork{
 		Name:                  name,
 		Region:                region,
@@ -900,7 +1046,7 @@ func (h *Host) NetworkCreateSubnet(region, name, vpcName, cidr string, privGoogl
 		h.fail(err)
 		return &Subnet{NameVal: name, RegionVal: region}
 	}
-	h.ledger.Record("subnet", region, name, fakegcp.DefaultEpoch)
+	h.confirmResource("subnet", region, name)
 	h.clearErr()
 	return h.NetworkGetSubnet(region, name)
 }
@@ -990,6 +1136,9 @@ func (h *Host) NetworkCreateFirewall(name, vpcName, direction string, priority i
 		h.fail(err)
 		return &FirewallRule{NameVal: name}
 	}
+	if !h.beginResource("firewall", "global", name) {
+		return nil
+	}
 	req := &compute.Firewall{
 		Name:         name,
 		Network:      vpcName,
@@ -1005,7 +1154,7 @@ func (h *Host) NetworkCreateFirewall(name, vpcName, direction string, priority i
 		h.fail(err)
 		return &FirewallRule{NameVal: name}
 	}
-	h.ledger.Record("firewall", "global", name, fakegcp.DefaultEpoch)
+	h.confirmResource("firewall", "global", name)
 	h.clearErr()
 	return h.NetworkGetFirewall(name)
 }
@@ -1117,6 +1266,9 @@ func (h *Host) StorageCreateBucket(name, location, storageClass string) *Storage
 		h.fail(err)
 		return &StorageBucket{NameVal: name, LabelsVal: map[string]string{}}
 	}
+	if !h.beginResource("bucket", location, name) {
+		return nil
+	}
 	labels := h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch)
 	req := &storage.Bucket{
 		Name:         name,
@@ -1134,7 +1286,7 @@ func (h *Host) StorageCreateBucket(name, location, storageClass string) *Storage
 		h.fail(err)
 		return &StorageBucket{NameVal: name, LabelsVal: map[string]string{}}
 	}
-	h.ledger.Record("bucket", location, name, fakegcp.DefaultEpoch)
+	h.confirmResource("bucket", location, name)
 	h.clearErr()
 	return h.toStorageBucket(b)
 }
@@ -1407,6 +1559,9 @@ func (h *Host) PubsubCreateTopic(name string) *PubsubTopic {
 		h.fail(err)
 		return &PubsubTopic{NameVal: name, LabelsVal: map[string]string{}}
 	}
+	if !h.beginResource("pubsub_topic", "global", name) {
+		return nil
+	}
 	labels := h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch)
 	t, err := h.pubsubSvc.Projects.Topics.Create(fmt.Sprintf("projects/%s/topics/%s", h.projectID, name), &pubsub.Topic{
 		Labels:                   labels,
@@ -1416,7 +1571,7 @@ func (h *Host) PubsubCreateTopic(name string) *PubsubTopic {
 		h.fail(err)
 		return &PubsubTopic{NameVal: name, LabelsVal: map[string]string{}}
 	}
-	h.ledger.Record("pubsub_topic", "global", name, fakegcp.DefaultEpoch)
+	h.confirmResource("pubsub_topic", "global", name)
 	h.clearErr()
 	return h.toPubsubTopic(t)
 }
@@ -1513,6 +1668,9 @@ func (h *Host) PubsubCreateSubscription(name, topicName string, ackSec int64, dl
 		h.fail(err)
 		return &PubsubSubscription{NameVal: name}
 	}
+	if !h.beginResource("pubsub_sub", "global", name) {
+		return nil
+	}
 	req := &pubsub.Subscription{
 		Topic:              fmt.Sprintf("projects/%s/topics/%s", h.projectID, topicName),
 		AckDeadlineSeconds: ackSec,
@@ -1529,7 +1687,7 @@ func (h *Host) PubsubCreateSubscription(name, topicName string, ackSec int64, dl
 		h.fail(err)
 		return &PubsubSubscription{NameVal: name}
 	}
-	h.ledger.Record("pubsub_sub", "global", name, fakegcp.DefaultEpoch)
+	h.confirmResource("pubsub_sub", "global", name)
 	h.clearErr()
 	return h.toPubsubSub(sb)
 }
@@ -1701,6 +1859,9 @@ func (h *Host) RunDeployService(region, name, image string, cpuMilli, memMB, max
 		h.fail(err)
 		return &CloudRunService{NameVal: name, RegionVal: region, LabelsVal: map[string]string{}}
 	}
+	if !h.beginResource("cloud_run", region, name) {
+		return nil
+	}
 	parent := fmt.Sprintf("projects/%s/locations/%s", h.projectID, region)
 	labels := h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch)
 	req := &run.GoogleCloudRunV2Service{
@@ -1720,7 +1881,7 @@ func (h *Host) RunDeployService(region, name, image string, cpuMilli, memMB, max
 	if h.fakeSrv != nil {
 		h.fakeSrv.SetRunMeta(region, name, cpuMilli, memMB, 1, 100, 0)
 	}
-	h.ledger.Record("cloud_run", region, name, fakegcp.DefaultEpoch)
+	h.confirmResource("cloud_run", region, name)
 	h.clearErr()
 	return h.RunGetService(region, name)
 }
@@ -1877,6 +2038,9 @@ func (h *Host) SQLCreateInstance(name, dbVer, tier, region string, ha bool) *Sql
 		h.fail(err)
 		return &SqlInstance{NameVal: name, LabelsVal: map[string]string{}}
 	}
+	if !h.beginResource("sql_instance", region, name) {
+		return nil
+	}
 	avail := "ZONAL"
 	if ha {
 		avail = "REGIONAL"
@@ -1905,7 +2069,7 @@ func (h *Host) SQLCreateInstance(name, dbVer, tier, region string, ha bool) *Sql
 		h.fail(err)
 		return &SqlInstance{NameVal: name, LabelsVal: map[string]string{}}
 	}
-	h.ledger.Record("sql_instance", region, name, fakegcp.DefaultEpoch)
+	h.confirmResource("sql_instance", region, name)
 	h.clearErr()
 	return h.SQLGetInstance(name)
 }
@@ -1941,10 +2105,13 @@ func (h *Host) FirestorePutDoc(col, docID string, fields map[string]string) bool
 		h.fail(err)
 		return false
 	}
+	if !h.beginResource("firestore_doc", col, docID) {
+		return false
+	}
 	if h.fakeSrv != nil {
 		h.fakeSrv.FirestorePutDoc(col, docID, fields)
 	}
-	h.ledger.Record("firestore_doc", col, docID, fakegcp.DefaultEpoch)
+	h.confirmResource("firestore_doc", col, docID)
 	h.clearErr()
 	return true
 }
@@ -2026,6 +2193,9 @@ func (h *Host) BQCreateDataset(dsID, location string) *BqDataset {
 		h.fail(err)
 		return &BqDataset{DatasetIDVal: dsID, LabelsVal: map[string]string{}}
 	}
+	if !h.beginResource("bq_dataset", location, dsID) {
+		return nil
+	}
 	req := &bigquery.Dataset{
 		DatasetReference:         &bigquery.DatasetReference{DatasetId: dsID, ProjectId: h.projectID},
 		Location:                 location,
@@ -2036,7 +2206,7 @@ func (h *Host) BQCreateDataset(dsID, location string) *BqDataset {
 		h.fail(err)
 		return &BqDataset{DatasetIDVal: dsID, LabelsVal: map[string]string{}}
 	}
-	h.ledger.Record("bq_dataset", location, dsID, fakegcp.DefaultEpoch)
+	h.confirmResource("bq_dataset", location, dsID)
 	h.clearErr()
 	return h.BQGetDataset(dsID)
 }
@@ -2050,6 +2220,9 @@ func (h *Host) BQCreateTable(dsID, tblID, schemaSpec, partField string) *BqTable
 		h.fail(err)
 		return &BqTable{DatasetIDVal: dsID, TableIDVal: tblID}
 	}
+	if !h.beginResource("bq_table", "US", dsID+"/"+tblID) {
+		return nil
+	}
 	req := &bigquery.Table{
 		TableReference: &bigquery.TableReference{DatasetId: dsID, TableId: tblID, ProjectId: h.projectID},
 		Description:    schemaSpec,
@@ -2061,7 +2234,7 @@ func (h *Host) BQCreateTable(dsID, tblID, schemaSpec, partField string) *BqTable
 		h.fail(err)
 		return &BqTable{DatasetIDVal: dsID, TableIDVal: tblID}
 	}
-	h.ledger.Record("bq_table", "US", dsID+"/"+tblID, fakegcp.DefaultEpoch)
+	h.confirmResource("bq_table", "US", dsID+"/"+tblID)
 	h.clearErr()
 	return h.BQGetTable(dsID, tblID)
 }
@@ -2236,6 +2409,9 @@ func (h *Host) SecretsCreateMetadata(name, replPolicy string, rotDays int64, lab
 		h.fail(err)
 		return &SecretMetadata{NameVal: name, LabelsVal: map[string]string{}}
 	}
+	if !h.beginResource("secret", "global", name) {
+		return nil
+	}
 	enriched := h.ledger.EnrichLabels(labels, fakegcp.DefaultEpoch)
 	req := &secretmanager.Secret{
 		Labels:      enriched,
@@ -2248,7 +2424,7 @@ func (h *Host) SecretsCreateMetadata(name, replPolicy string, rotDays int64, lab
 	if h.fakeSrv != nil {
 		h.fakeSrv.SetSecretMeta(name, replPolicy, rotDays, 1, 1, true, false)
 	}
-	h.ledger.Record("secret", "global", name, fakegcp.DefaultEpoch)
+	h.confirmResource("secret", "global", name)
 	h.clearErr()
 	return h.SecretsGetMetadata(name)
 }
@@ -2349,6 +2525,9 @@ func (h *Host) KMSCreateKey(location, keyring, keyName, purpose string, rotDays 
 		h.fail(err)
 		return &KmsKey{NameVal: keyName, KeyRingVal: keyring, LocationVal: location}
 	}
+	if !h.beginResource("kms_key", location+"/"+keyring, keyName) {
+		return nil
+	}
 	parent := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s", h.projectID, location, keyring)
 	req := &cloudkms.CryptoKey{
 		Purpose:        purpose,
@@ -2362,7 +2541,7 @@ func (h *Host) KMSCreateKey(location, keyring, keyName, purpose string, rotDays 
 	if h.fakeSrv != nil {
 		h.fakeSrv.SetKMSRotDays(location, keyring, keyName, rotDays)
 	}
-	h.ledger.Record("kms_key", location+"/"+keyring, keyName, fakegcp.DefaultEpoch)
+	h.confirmResource("kms_key", location+"/"+keyring, keyName)
 	h.clearErr()
 	return h.KMSGetKey(location, keyring, keyName)
 }
@@ -2488,6 +2667,9 @@ func (h *Host) ARCreateRepository(location, name, format string, immutableTags b
 		h.fail(err)
 		return &ArtifactRepo{NameVal: name, LocationVal: location}
 	}
+	if !h.beginResource("artifact_repo", location, name) {
+		return nil
+	}
 	parent := fmt.Sprintf("projects/%s/locations/%s", h.projectID, location)
 	req := &artifactregistry.Repository{
 		Format: strings.ToUpper(format),
@@ -2500,7 +2682,7 @@ func (h *Host) ARCreateRepository(location, name, format string, immutableTags b
 	if h.fakeSrv != nil {
 		h.fakeSrv.SetARMeta(location, name, immutableTags, true, 1, 10, 1)
 	}
-	h.ledger.Record("artifact_repo", location, name, fakegcp.DefaultEpoch)
+	h.confirmResource("artifact_repo", location, name)
 	h.clearErr()
 	return h.ARGetRepository(location, name)
 }
@@ -2574,6 +2756,9 @@ func (h *Host) DNSCreateZone(name, dnsName, visibility string, dnssec bool) *Dns
 		h.fail(err)
 		return &DnsZone{NameVal: name}
 	}
+	if !h.beginResource("dns_zone", "global", name) {
+		return nil
+	}
 	state := "off"
 	if dnssec {
 		state = "on"
@@ -2589,7 +2774,7 @@ func (h *Host) DNSCreateZone(name, dnsName, visibility string, dnssec bool) *Dns
 		h.fail(err)
 		return &DnsZone{NameVal: name}
 	}
-	h.ledger.Record("dns_zone", "global", name, fakegcp.DefaultEpoch)
+	h.confirmResource("dns_zone", "global", name)
 	h.clearErr()
 	return h.DNSGetZone(name)
 }
@@ -2700,6 +2885,9 @@ func (h *Host) LoggingCreateSink(name, destination, filter string) *LogSink {
 		h.fail(err)
 		return &LogSink{NameVal: name}
 	}
+	if !h.beginResource("log_sink", "global", name) {
+		return nil
+	}
 	req := &logging.LogSink{
 		Name:        name,
 		Destination: destination,
@@ -2709,7 +2897,7 @@ func (h *Host) LoggingCreateSink(name, destination, filter string) *LogSink {
 		h.fail(err)
 		return &LogSink{NameVal: name}
 	}
-	h.ledger.Record("log_sink", "global", name, fakegcp.DefaultEpoch)
+	h.confirmResource("log_sink", "global", name)
 	h.clearErr()
 	return h.LoggingGetSink(name)
 }
@@ -2830,6 +3018,9 @@ func (h *Host) MonitoringCreateAlertPolicy(name, metricType string, threshold fl
 		h.fail(err)
 		return &AlertPolicy{NameVal: name}
 	}
+	if !h.beginResource("alert_policy", "global", name) {
+		return nil
+	}
 	req := &monitoring.AlertPolicy{
 		DisplayName:          name,
 		Enabled:              true,
@@ -2843,7 +3034,7 @@ func (h *Host) MonitoringCreateAlertPolicy(name, metricType string, threshold fl
 	if h.fakeSrv != nil {
 		h.fakeSrv.SetAlertMeta(name, metricType, threshold, durSec)
 	}
-	h.ledger.Record("alert_policy", "global", name, fakegcp.DefaultEpoch)
+	h.confirmResource("alert_policy", "global", name)
 	h.clearErr()
 	return h.MonitoringGetAlertPolicy(name)
 }

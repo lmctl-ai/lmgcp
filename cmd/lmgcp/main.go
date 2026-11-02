@@ -4,6 +4,7 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -25,7 +26,7 @@ var rawVersion string
 //go:embed THIRD_PARTY_NOTICES
 var embeddedNotices string
 
-const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | [--lmcode|--first|--last] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete]
+const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | [--lmcode|--first|--last] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete] [--run-id ID] [--ledger PATH]
 
 Google Cloud Go SDK host for lmscript (Apache-2.0 SDK on lmcode-go).
 
@@ -36,7 +37,8 @@ Options:
   --lmcode-schema [--json]      Print human-readable schema summary or raw JSON schema
   --lmcode-signatures           Print sorted canonical DSL signatures
   --lmcode|--first|--last FILE...  Load, verify, and execute compiled .dslb files
-  --sweep                    List (dry-run default) or delete (--delete) lmgcp_ leftovers
+  --sweep                    List (dry-run default) or delete (--delete) run-owned leftovers
+                             --run-id ID / --ledger PATH reload a durable recovery journal
 
 Dry mode comes from the lmcode invocation manifest; there is no --dry-run flag.
 
@@ -48,6 +50,8 @@ Environment & Resource Limits:
   LMGCP_PROJECT              Target GCP project ID (masked in all outputs)
   LMGCP_REGION               Default GCP region (default: us-central1)
   LMGCP_ZONE                 Default GCP zone (default: us-central1-a)
+  LMGCP_STATE_DIR            Durable recovery journal directory (default: user state dir)
+  LMGCP_LEDGER               Explicit recovery journal path (overrides LMGCP_STATE_DIR)
 
 Linux Runtime Note (Rule 14):
   Built with CGO_ENABLED=0 (or dynamic glibc >= 2.35 on Linux); zero GPL/LGPL code linked.
@@ -119,6 +123,7 @@ func realMain(args []string) int {
 
 	var results *lmcode.InvocationResults
 	var order []int
+	builderInvocation := false
 	if invocation {
 		type part struct {
 			file     string
@@ -163,6 +168,15 @@ func realMain(args []string) int {
 		}
 		results = collected
 		order = make([]int, len(parts))
+		builderInvocation = len(parts) > 1
+		if manifest := os.Getenv("LMCODE_INVOCATION_FILE"); manifest != "" {
+			var meta struct {
+				Mode string `json:"mode"`
+			}
+			if raw, err := os.ReadFile(manifest); err == nil && json.Unmarshal(raw, &meta) == nil {
+				builderInvocation = meta.Mode == "builder"
+			}
+		}
 		for i := range parts {
 			order[i] = i
 		}
@@ -176,7 +190,13 @@ func realMain(args []string) int {
 	}
 	dryInvocation := results != nil && results.Dry()
 
-	h, err := host.NewHost(dryInvocation)
+	var h *host.Host
+	var err error
+	if args[1] == "--sweep" {
+		h, err = host.NewHostForSweep()
+	} else {
+		h, err = host.NewHost(dryInvocation)
+	}
 	if err != nil {
 		return invoke.Failure("app", lmcode.NewError(lmcode.APP_FAIL, "failed to initialize GCP host: "+safety.RedactSecrets(err.Error())))
 	}
@@ -218,6 +238,7 @@ func realMain(args []string) int {
 	if args[1] == "--sweep" {
 		var maxAge int64 = 1
 		dryRun := true
+		runID, ledgerPath := "", ""
 		for i := 2; i < len(args); i++ {
 			switch args[i] {
 			case "--delete":
@@ -234,10 +255,34 @@ func realMain(args []string) int {
 				}
 				maxAge = val
 				i++
+			case "--run-id":
+				if i+1 >= len(args) {
+					fmt.Fprint(os.Stderr, usageText)
+					return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
+				}
+				runID = args[i+1]
+				i++
+			case "--ledger":
+				if i+1 >= len(args) {
+					fmt.Fprint(os.Stderr, usageText)
+					return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
+				}
+				ledgerPath = args[i+1]
+				i++
 			default:
 				fmt.Fprint(os.Stderr, usageText)
 				return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 			}
+		}
+		if runID != "" || ledgerPath != "" {
+			path := ledgerPath
+			if path == "" {
+				path = safety.JournalPath(safety.DefaultStateDir(), runID)
+			}
+			if err := h.LoadRecovery(path); err != nil {
+				return invoke.Failure("app", lmcode.NewError(lmcode.APP_FAIL, err.Error()))
+			}
+			fmt.Printf("recovery: run=%s ledger=%s\n", h.RunID(), h.RecoveryPath())
 		}
 		if dryRun {
 			items := h.SweepDryRun(maxAge)
@@ -263,13 +308,16 @@ func realMain(args []string) int {
 
 		var exitOnce sync.Once
 		runner := invoke.Runner{
-			Results:  results,
-			Registry: reg,
-			Schema:   schema.EmbeddedSchema,
-			Contract: contract,
-			Context:  ctx,
-			Order:    order,
-			Dry:      dryInvocation,
+			Results:      results,
+			Registry:     reg,
+			Schema:       schema.EmbeddedSchema,
+			Contract:     contract,
+			Context:      ctx,
+			Order:        order,
+			Dry:          dryInvocation,
+			Builder:      builderInvocation,
+			RecoveryID:   h.RunID(),
+			RecoveryPath: h.RecoveryPath(),
 			Hooks: invoke.Hooks{
 				BeforeRun: membudget.ResetRun,
 				OnRunError: func(runErr error) {

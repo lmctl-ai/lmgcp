@@ -16,17 +16,20 @@ func TestCleanupLedgerConcurrentLastError(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer h.Close()
+	if got := h.StorageCreateBucket("lmgcp-race-bucket", "US", "STANDARD"); got == nil || h.LastError() != "" {
+		t.Fatalf("seed owned bucket: %v", h.LastError())
+	}
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 50; i++ {
+		for i := 0; i < 1000; i++ {
 			_ = h.LastError()
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 50; i++ {
+		for i := 0; i < 20; i++ {
 			_ = h.CleanupLedger()
 		}
 	}()

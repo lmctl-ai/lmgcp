@@ -18,11 +18,11 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	m := func(typeName, name string, params []string, ret string, fn lmcode.Method) error {
-		if typeName != "Gcp" {
-			// Snapshot accessors are pure reads: use the same callback in dry.
-			return reg.Method(typeName, name, params, ret, fn, lmcode.Dry(fn))
-		}
 		return reg.Method(typeName, name, params, ret, fn)
+	}
+	mSnapshot := func(typeName, name string, params []string, ret string, fn lmcode.Method) error {
+		// Explicit purity declaration: snapshot accessors use the same callback in dry.
+		return reg.Method(typeName, name, params, ret, fn, lmcode.Dry(fn))
 	}
 	mLocal := func(typeName, name string, params []string, ret string, fn lmcode.Method) error {
 		// Local-only configuration updates are safe to execute in dry mode.
@@ -263,88 +263,88 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// ComputeInstance methods
-	if err := m("ComputeInstance", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ComputeInstance).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "zone", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "zone", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ComputeInstance).ZoneVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "machine_type", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "machine_type", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ComputeInstance).MachineTypeVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "status", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "status", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ComputeInstance).StatusVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "network", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "network", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ComputeInstance).NetworkVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "internal_ip", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "internal_ip", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ComputeInstance).InternalIPVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "external_ip", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "external_ip", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ComputeInstance).ExternalIPVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "cpu_platform", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "cpu_platform", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ComputeInstance).CPUPlatformVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "disk_gb", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "disk_gb", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*ComputeInstance).DiskGBVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "vcpus", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "vcpus", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*ComputeInstance).VCPUsVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "memory_mb", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "memory_mb", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*ComputeInstance).MemoryMBVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, s.(*ComputeInstance).LabelsVal)
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "has_label", []string{"string"}, "bool", func(s any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "has_label", []string{"string"}, "bool", func(s any, a []lmcode.Value) (lmcode.Value, error) {
 		_, ok := s.(*ComputeInstance).LabelsVal[a[0].Str]
 		return lmcode.Bool(ok), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "label", []string{"string"}, "string", func(s any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "label", []string{"string"}, "string", func(s any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ComputeInstance).LabelsVal[a[0].Str]), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "service_account", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "service_account", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ComputeInstance).ServiceAccountVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "shielded_vtpm", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "shielded_vtpm", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*ComputeInstance).ShieldedVTPMVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ComputeInstance", "deletion_protection", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ComputeInstance", "deletion_protection", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*ComputeInstance).DeletionProtectionVal), nil
 	}); err != nil {
 		return err
@@ -413,126 +413,126 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// VpcNetwork methods
-	if err := m("VpcNetwork", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("VpcNetwork", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*VpcNetwork).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("VpcNetwork", "auto_create_subnets", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("VpcNetwork", "auto_create_subnets", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*VpcNetwork).AutoCreateSubnetsVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("VpcNetwork", "routing_mode", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("VpcNetwork", "routing_mode", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*VpcNetwork).RoutingModeVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("VpcNetwork", "mtu", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("VpcNetwork", "mtu", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*VpcNetwork).MTUVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("VpcNetwork", "subnet_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("VpcNetwork", "subnet_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*VpcNetwork).SubnetCountVal), nil
 	}); err != nil {
 		return err
 	}
 
 	// Subnet methods
-	if err := m("Subnet", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("Subnet", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*Subnet).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Subnet", "region", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("Subnet", "region", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*Subnet).RegionVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Subnet", "network", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("Subnet", "network", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*Subnet).NetworkVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Subnet", "cidr", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("Subnet", "cidr", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*Subnet).CIDRVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Subnet", "private_ip_google_access", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("Subnet", "private_ip_google_access", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*Subnet).PrivateIPGoogleAccessVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Subnet", "flow_logs", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("Subnet", "flow_logs", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*Subnet).FlowLogsVal), nil
 	}); err != nil {
 		return err
 	}
 
 	// FirewallRule methods
-	if err := m("FirewallRule", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*FirewallRule).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "network", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "network", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*FirewallRule).NetworkVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "direction", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "direction", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*FirewallRule).DirectionVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "priority", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "priority", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*FirewallRule).PriorityVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "action", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "action", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*FirewallRule).ActionVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "protocol", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "protocol", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*FirewallRule).ProtocolVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "ports", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "ports", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*FirewallRule).PortsVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "source_cidr", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "source_cidr", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*FirewallRule).SourceCIDRVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "target_tags", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "target_tags", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*FirewallRule).TargetTagsVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "disabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "disabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*FirewallRule).DisabledVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "log_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "log_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*FirewallRule).LogEnabledVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "is_open_to_world", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "is_open_to_world", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*FirewallRule).IsOpenToWorld()), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("FirewallRule", "risk_score", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("FirewallRule", "risk_score", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*FirewallRule).RiskScore()), nil
 	}); err != nil {
 		return err
@@ -606,67 +606,67 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// StorageBucket methods
-	if err := m("StorageBucket", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*StorageBucket).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "location", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "location", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*StorageBucket).LocationVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "storage_class", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "storage_class", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*StorageBucket).StorageClassVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "versioning", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "versioning", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*StorageBucket).VersioningVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "uniform_access", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "uniform_access", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*StorageBucket).UniformAccessVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "public_access_prevention", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "public_access_prevention", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*StorageBucket).PublicAccessPreventionVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "lifecycle_delete_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "lifecycle_delete_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*StorageBucket).LifecycleDeleteDaysVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "lifecycle_nearline_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "lifecycle_nearline_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*StorageBucket).LifecycleNearlineDaysVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "encryption_type", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "encryption_type", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*StorageBucket).EncryptionTypeVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "object_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "object_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*StorageBucket).ObjectCountVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "total_bytes", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "total_bytes", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*StorageBucket).TotalBytesVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, s.(*StorageBucket).LabelsVal)
 	}); err != nil {
 		return err
 	}
-	if err := m("StorageBucket", "label", []string{"string"}, "string", func(s any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("StorageBucket", "label", []string{"string"}, "string", func(s any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*StorageBucket).LabelsVal[a[0].Str]), nil
 	}); err != nil {
 		return err
@@ -730,57 +730,57 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// PubsubTopic & PubsubSubscription methods
-	if err := m("PubsubTopic", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubTopic", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*PubsubTopic).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("PubsubTopic", "retention_sec", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubTopic", "retention_sec", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*PubsubTopic).RetentionSecVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("PubsubTopic", "published_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubTopic", "published_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*PubsubTopic).PublishedCountVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("PubsubTopic", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubTopic", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, s.(*PubsubTopic).LabelsVal)
 	}); err != nil {
 		return err
 	}
-	if err := m("PubsubSubscription", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubSubscription", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*PubsubSubscription).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("PubsubSubscription", "topic", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubSubscription", "topic", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*PubsubSubscription).TopicVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("PubsubSubscription", "ack_deadline_sec", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubSubscription", "ack_deadline_sec", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*PubsubSubscription).AckDeadlineSecVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("PubsubSubscription", "dead_letter_topic", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubSubscription", "dead_letter_topic", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*PubsubSubscription).DeadLetterTopicVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("PubsubSubscription", "max_delivery_attempts", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubSubscription", "max_delivery_attempts", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*PubsubSubscription).MaxDeliveryAttemptsVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("PubsubSubscription", "backlog_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubSubscription", "backlog_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*PubsubSubscription).BacklogCountVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("PubsubSubscription", "retain_acked", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("PubsubSubscription", "retain_acked", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*PubsubSubscription).RetainAckedVal), nil
 	}); err != nil {
 		return err
@@ -819,77 +819,77 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// CloudRunService methods
-	if err := m("CloudRunService", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*CloudRunService).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "region", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "region", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*CloudRunService).RegionVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "image", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "image", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*CloudRunService).ImageVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "uri", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "uri", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*CloudRunService).URIVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "cpu_milli", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "cpu_milli", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*CloudRunService).CPUMilliVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "memory_mb", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "memory_mb", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*CloudRunService).MemoryMBVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "min_instances", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "min_instances", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*CloudRunService).MinInstancesVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "max_instances", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "max_instances", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*CloudRunService).MaxInstancesVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "concurrency", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "concurrency", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*CloudRunService).ConcurrencyVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "ingress", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "ingress", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*CloudRunService).IngressVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "latest_revision", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "latest_revision", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*CloudRunService).LatestRevisionVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "revision_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "revision_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*CloudRunService).RevisionCountVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "stable_traffic_pct", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "stable_traffic_pct", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*CloudRunService).StableTrafficPctVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "canary_traffic_pct", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "canary_traffic_pct", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*CloudRunService).CanaryTrafficPctVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("CloudRunService", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("CloudRunService", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, s.(*CloudRunService).LabelsVal)
 	}); err != nil {
 		return err
@@ -918,62 +918,62 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// SqlInstance methods
-	if err := m("SqlInstance", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*SqlInstance).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "db_version", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "db_version", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*SqlInstance).DBVersionVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "tier", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "tier", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*SqlInstance).TierVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "region", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "region", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*SqlInstance).RegionVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "state", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "state", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*SqlInstance).StateVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "ha_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "ha_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*SqlInstance).HAEnabledVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "backup_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "backup_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*SqlInstance).BackupEnabledVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "pitr_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "pitr_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*SqlInstance).PITREnabledVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "require_ssl", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "require_ssl", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*SqlInstance).RequireSSLVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "public_ip_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "public_ip_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*SqlInstance).PublicIPEnabledVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "storage_gb", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "storage_gb", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*SqlInstance).StorageGBVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SqlInstance", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SqlInstance", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, s.(*SqlInstance).LabelsVal)
 	}); err != nil {
 		return err
@@ -1044,52 +1044,52 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// BqDataset & BqTable methods
-	if err := m("BqDataset", "dataset_id", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("BqDataset", "dataset_id", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*BqDataset).DatasetIDVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("BqDataset", "location", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("BqDataset", "location", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*BqDataset).LocationVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("BqDataset", "default_expiration_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("BqDataset", "default_expiration_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*BqDataset).DefaultExpirationDaysVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("BqDataset", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("BqDataset", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, s.(*BqDataset).LabelsVal)
 	}); err != nil {
 		return err
 	}
-	if err := m("BqTable", "dataset_id", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("BqTable", "dataset_id", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*BqTable).DatasetIDVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("BqTable", "table_id", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("BqTable", "table_id", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*BqTable).TableIDVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("BqTable", "schema_spec", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("BqTable", "schema_spec", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*BqTable).SchemaSpecVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("BqTable", "partition_field", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("BqTable", "partition_field", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*BqTable).PartitionFieldVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("BqTable", "row_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("BqTable", "row_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*BqTable).RowCountVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("BqTable", "bytes", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("BqTable", "bytes", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*BqTable).BytesVal), nil
 	}); err != nil {
 		return err
@@ -1113,42 +1113,42 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// ServiceAccount methods
-	if err := m("ServiceAccount", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ServiceAccount", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ServiceAccount).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ServiceAccount", "email", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ServiceAccount", "email", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ServiceAccount).EmailVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ServiceAccount", "display_name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ServiceAccount", "display_name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ServiceAccount).DisplayNameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ServiceAccount", "disabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ServiceAccount", "disabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*ServiceAccount).DisabledVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ServiceAccount", "user_managed_keys", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ServiceAccount", "user_managed_keys", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*ServiceAccount).UserManagedKeysVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ServiceAccount", "key_max_age_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ServiceAccount", "key_max_age_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*ServiceAccount).KeyMaxAgeDaysVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ServiceAccount", "is_default_compute", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ServiceAccount", "is_default_compute", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*ServiceAccount).IsDefaultVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ServiceAccount", "roles", nil, "StrList", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ServiceAccount", "roles", nil, "StrList", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, s.(*ServiceAccount).RolesVal)
 	}); err != nil {
 		return err
@@ -1177,42 +1177,42 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// SecretMetadata methods
-	if err := m("SecretMetadata", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SecretMetadata", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*SecretMetadata).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SecretMetadata", "replication_policy", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SecretMetadata", "replication_policy", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*SecretMetadata).ReplicationPolicyVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SecretMetadata", "version_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SecretMetadata", "version_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*SecretMetadata).VersionCountVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SecretMetadata", "enabled_versions", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SecretMetadata", "enabled_versions", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*SecretMetadata).EnabledVersionsVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SecretMetadata", "rotation_period_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SecretMetadata", "rotation_period_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*SecretMetadata).RotationDaysVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SecretMetadata", "cmek_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SecretMetadata", "cmek_enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*SecretMetadata).CMEKEnabledVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SecretMetadata", "has_expiration", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SecretMetadata", "has_expiration", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*SecretMetadata).HasExpirationVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("SecretMetadata", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("SecretMetadata", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, s.(*SecretMetadata).LabelsVal)
 	}); err != nil {
 		return err
@@ -1241,37 +1241,37 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// KmsKey methods
-	if err := m("KmsKey", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("KmsKey", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*KmsKey).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("KmsKey", "keyring", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("KmsKey", "keyring", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*KmsKey).KeyRingVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("KmsKey", "location", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("KmsKey", "location", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*KmsKey).LocationVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("KmsKey", "purpose", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("KmsKey", "purpose", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*KmsKey).PurposeVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("KmsKey", "rotation_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("KmsKey", "rotation_days", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*KmsKey).RotationDaysVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("KmsKey", "primary_state", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("KmsKey", "primary_state", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*KmsKey).PrimaryStateVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("KmsKey", "protection_level", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("KmsKey", "protection_level", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*KmsKey).ProtectionLevelVal), nil
 	}); err != nil {
 		return err
@@ -1290,67 +1290,67 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// GkeCluster methods
-	if err := m("GkeCluster", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*GkeCluster).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "location", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "location", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*GkeCluster).LocationVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "status", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "status", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*GkeCluster).StatusVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "k8s_version", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "k8s_version", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*GkeCluster).K8sVersionVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "release_channel", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "release_channel", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*GkeCluster).ReleaseChannelVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "autopilot", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "autopilot", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*GkeCluster).AutopilotVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "private_nodes", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "private_nodes", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*GkeCluster).PrivateNodesVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "workload_identity", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "workload_identity", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*GkeCluster).WorkloadIdentityVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "network_policy", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "network_policy", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*GkeCluster).NetworkPolicyVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "binary_auth", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "binary_auth", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*GkeCluster).BinaryAuthVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "node_pool_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "node_pool_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*GkeCluster).NodePoolCountVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "total_nodes", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "total_nodes", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*GkeCluster).TotalNodesVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("GkeCluster", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("GkeCluster", "labels", nil, "StrMap", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, s.(*GkeCluster).LabelsVal)
 	}); err != nil {
 		return err
@@ -1379,42 +1379,42 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// ArtifactRepo methods
-	if err := m("ArtifactRepo", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ArtifactRepo", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ArtifactRepo).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ArtifactRepo", "location", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ArtifactRepo", "location", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ArtifactRepo).LocationVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ArtifactRepo", "format", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ArtifactRepo", "format", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*ArtifactRepo).FormatVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ArtifactRepo", "immutable_tags", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ArtifactRepo", "immutable_tags", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*ArtifactRepo).ImmutableTagsVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ArtifactRepo", "cleanup_policy_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ArtifactRepo", "cleanup_policy_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*ArtifactRepo).CleanupPolicyCountVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ArtifactRepo", "vulnerability_scanning", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ArtifactRepo", "vulnerability_scanning", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*ArtifactRepo).VulnerabilityScanningVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ArtifactRepo", "size_mb", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ArtifactRepo", "size_mb", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*ArtifactRepo).SizeMBVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("ArtifactRepo", "package_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("ArtifactRepo", "package_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*ArtifactRepo).PackageCountVal), nil
 	}); err != nil {
 		return err
@@ -1458,27 +1458,27 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// DnsZone methods
-	if err := m("DnsZone", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("DnsZone", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*DnsZone).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("DnsZone", "dns_name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("DnsZone", "dns_name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*DnsZone).DNSNameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("DnsZone", "visibility", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("DnsZone", "visibility", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*DnsZone).VisibilityVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("DnsZone", "dnssec", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("DnsZone", "dnssec", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*DnsZone).DNSSECVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("DnsZone", "record_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("DnsZone", "record_count", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*DnsZone).RecordCountVal), nil
 	}); err != nil {
 		return err
@@ -1517,22 +1517,22 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// LogSink methods
-	if err := m("LogSink", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("LogSink", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*LogSink).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("LogSink", "destination", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("LogSink", "destination", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*LogSink).DestinationVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("LogSink", "filter", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("LogSink", "filter", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*LogSink).FilterVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("LogSink", "disabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("LogSink", "disabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*LogSink).DisabledVal), nil
 	}); err != nil {
 		return err
@@ -1571,32 +1571,32 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// AlertPolicy methods
-	if err := m("AlertPolicy", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("AlertPolicy", "name", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*AlertPolicy).NameVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("AlertPolicy", "metric_type", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("AlertPolicy", "metric_type", nil, "string", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(s.(*AlertPolicy).MetricTypeVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("AlertPolicy", "threshold", nil, "float", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("AlertPolicy", "threshold", nil, "float", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Float(s.(*AlertPolicy).ThresholdVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("AlertPolicy", "duration_sec", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("AlertPolicy", "duration_sec", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*AlertPolicy).DurationSecVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("AlertPolicy", "enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("AlertPolicy", "enabled", nil, "bool", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(s.(*AlertPolicy).EnabledVal), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("AlertPolicy", "notification_channels", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mSnapshot("AlertPolicy", "notification_channels", nil, "int", func(s any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(s.(*AlertPolicy).NotificationChannelsVal), nil
 	}); err != nil {
 		return err

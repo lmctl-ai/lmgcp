@@ -36,6 +36,11 @@ type Runner struct {
 	Order []int
 	// Dry copies the invocation mode for watchdog frames emitted outside the collector.
 	Dry bool
+	// Builder marks a builder-mode invocation even when it has one slot.
+	Builder bool
+	// RecoveryID/Path are appended to hard-abort failure messages.
+	RecoveryID   string
+	RecoveryPath string
 }
 
 // Execute returns the process exit code after writing one frame.
@@ -133,16 +138,25 @@ func (r *Runner) abort(index int, err error) {
 	if errors.As(err, &native) {
 		code, message = native.Code, native.Message
 	}
+	if r.RecoveryID != "" {
+		message += " (recovery run=" + r.RecoveryID
+		if r.RecoveryPath != "" {
+			message += " ledger=" + r.RecoveryPath
+		}
+		message += ")"
+	}
 	payload := `{"ok":false,"phase":"run","code":` + lmcode.JSONEscape(code) +
 		`,"message":` + lmcode.JSONEscape(message)
-	if len(r.Results.Registrations()) > 1 {
+	if r.Builder || len(r.Results.Registrations()) > 1 {
 		payload += `,"part":` + strconv.Itoa(index)
 	}
 	if r.Dry {
 		payload += `,"dry":true`
 	}
 	payload += "}"
-	_, _ = fmt.Fprintf(os.Stdout, "LMCODE_RETURN_BEGIN\n%s\nLMCODE_RETURN_END\n", payload)
+	if _, err := fmt.Fprintf(os.Stdout, "LMCODE_RETURN_BEGIN\n%s\nLMCODE_RETURN_END\n", payload); err != nil {
+		os.Exit(4)
+	}
 	os.Exit(3)
 }
 

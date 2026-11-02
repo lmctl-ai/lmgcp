@@ -227,6 +227,54 @@ grep -Fq '"dry":true' <<<"$watchdog_out" || fail "dry watchdog frame lost dry:tr
 grep -Fq '"ok":false' <<<"$watchdog_out" || fail "dry watchdog frame missing failure: $watchdog_out"
 ok "dry memory-limit watchdog emits a lmscript-accepted dry frame"
 
+# 8e. One-slot builder abort retains part:0 and dry:true
+builder_wd_dir="$(mktemp -d build/builder-wd.XXXXXX)"
+cat > "$builder_wd_dir/wd.lms" <<LMS
+s = load_schema(schema="$PWD/schema/lmgcp.dsl.json");
+p = _lmcode_ s;
+  let x = "x";
+  while (str_len(x) < 1000000000) { x = x + x; }
+end _lmcode_
+b = lmcode_build("$HOST");
+b.add(p);
+r = run_lmcode(b);
+LMS
+set +e
+builder_wd_out="$(LMGCP_MAX_MEMORY_MB=8 "$LMSCRIPT" --dry-run "$builder_wd_dir/wd.lms" 2>&1)"
+builder_wd_rc=$?
+set -e
+rm -rf "$builder_wd_dir"
+[ "$builder_wd_rc" -eq 0 ] || fail "one-slot builder abort exited $builder_wd_rc: $builder_wd_out"
+grep -Fq '"part":0' <<<"$builder_wd_out" || fail "one-slot builder abort lost part:0: $builder_wd_out"
+grep -Fq '"dry":true' <<<"$builder_wd_out" || fail "one-slot builder abort lost dry:true: $builder_wd_out"
+ok "one-slot builder abort retains part:0 and dry:true"
+
+# 8f. Durable abort journal and cross-process --sweep --ledger recovery
+abort_dir="$(mktemp -d build/abort.XXXXXX)"
+abort_state="$(mktemp -d build/abort-state.XXXXXX)"
+cat > "$abort_dir/abort.lms" <<LMS
+s = load_schema(schema="$PWD/schema/lmgcp.dsl.json");
+p = _lmcode_ s;
+  let x = "x";
+  while (str_len(x) < 1000000000) { x = x + x; }
+end _lmcode_
+r = run_lmcode(p, {command:["$HOST","--lmcode","\$DSLFILE"]});
+print(json_stringify(r));
+LMS
+abort_out="$(LMGCP_STATE_DIR="$abort_state" LMGCP_MAX_MEMORY_MB=8 "$LMSCRIPT" "$abort_dir/abort.lms" 2>&1)" || true
+rm -rf "$abort_dir"
+grep -Fq '"code":"RUN_HOST"' <<<"$abort_out" || fail "abort frame missing RUN_HOST: $abort_out"
+grep -Fq 'recovery run=' <<<"$abort_out" || fail "abort frame missing recovery run id: $abort_out"
+abort_ledger="$(grep -o 'ledger=[^ )]*' <<<"$abort_out" | tail -n 1 | cut -d= -f2-)"
+[ -s "$abort_ledger" ] || fail "abort journal missing or empty: $abort_ledger"
+"$HOST" --sweep --ledger "$abort_ledger" --older-than-hours 0 --delete > "$abort_state/sweep1.out" 2>&1 || fail "first recovery sweep failed"
+grep -Fq "recovery: run=" "$abort_state/sweep1.out" || fail "recovery sweep did not load journal"
+grep -Fq "deleted 0 resource(s)" "$abort_state/sweep1.out" || fail "empty journal sweep was not idempotent"
+"$HOST" --sweep --ledger "$abort_ledger" --older-than-hours 0 --delete > "$abort_state/sweep2.out" 2>&1 || fail "second recovery sweep failed"
+grep -Fq "deleted 0 resource(s)" "$abort_state/sweep2.out" || fail "second recovery sweep was not idempotent"
+rm -rf "$abort_state"
+ok "durable abort journal loads in a separate --sweep process"
+
 # 9. Go unit tests (safety & fake GCP SDK integration)
 go test ./internal/safety ./internal/host >/dev/null || fail "go test failed"
 ok "Go unit tests pass (internal/safety, internal/host)"

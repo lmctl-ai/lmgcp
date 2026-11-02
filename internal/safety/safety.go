@@ -3,6 +3,8 @@
 package safety
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -221,6 +223,8 @@ type LedgerEntry struct {
 	Name          string
 	RunID         string
 	CreatedAtUnix int64
+	State         string
+	Reason        string
 }
 
 func (e LedgerEntry) Key() string {
@@ -238,12 +242,17 @@ type RunLedger struct {
 	totalCostUSD  float64
 	totalRequests int64
 	costItems     []CostItem
+	journal       *Journal
+	journalErr    error
+	retain        bool
 }
 
 // NewRunLedger creates a new RunLedger for a run ID with the default $0.05 example cap.
 func NewRunLedger(runID string) *RunLedger {
-	if runID == "" {
-		runID = fmt.Sprintf("run-%d", time.Now().UnixNano()%1000000)
+	if strings.TrimSpace(runID) == "" {
+		var nonce [6]byte
+		_, _ = rand.Read(nonce[:])
+		runID = fmt.Sprintf("run-%d-%s", time.Now().UnixNano(), hex.EncodeToString(nonce[:]))
 	}
 	return &RunLedger{
 		runID:      runID,
@@ -381,6 +390,167 @@ func (l *RunLedger) SetRunID(id string) {
 	}
 }
 
+// AttachJournal binds this run to a durable recovery journal.
+func (l *RunLedger) AttachJournal(j *Journal) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.journal = j
+	if j != nil {
+		l.runID = j.meta.RunID
+	}
+}
+
+// JournalPath returns the attached recovery journal path, if any.
+func (l *RunLedger) JournalPath() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.journal == nil {
+		return ""
+	}
+	return l.journal.Path()
+}
+
+// CloseJournal closes the attached recovery journal.
+func (l *RunLedger) CloseJournal() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.journal == nil {
+		return nil
+	}
+	err := l.journal.Close()
+	l.journal = nil
+	return err
+}
+
+// SetRetention persists and applies the deliberate retention policy.
+func (l *RunLedger) SetRetention(retain bool) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.retain = retain
+	if l.journal != nil {
+		if err := l.journal.SetRetention(retain); err != nil {
+			l.journalErr = err
+			return err
+		}
+	}
+	return nil
+}
+
+// Retention reports whether recovery must leave entries for manual review.
+func (l *RunLedger) Retention() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.retain
+}
+
+// Begin journals a create INTENT before the provider request. A previous
+// journal failure poisons further mutations.
+func (l *RunLedger) Begin(kind, location, name string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.journalErr != nil {
+		return l.journalErr
+	}
+	if l.journal == nil {
+		return nil
+	}
+	if err := l.journal.Intent(kind, location, name, time.Now().Unix()); err != nil {
+		l.journalErr = err
+		return err
+	}
+	return nil
+}
+
+// RetainRecord keeps a resource with an explicit recovery reason.
+func (l *RunLedger) RetainRecord(kind, location, name, reason string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for k, e := range l.byKey {
+		if e.Kind == kind && e.Name == name && (location == "" || e.Location == location) {
+			e.State = "retained"
+			e.Reason = reason
+			l.byKey[k] = e
+			for i := range l.entries {
+				if l.entries[i].Key() == k {
+					l.entries[i] = e
+				}
+			}
+		}
+	}
+	if l.journal != nil {
+		if err := l.journal.Retain(kind, location, name, reason); err != nil {
+			l.journalErr = err
+		}
+	}
+}
+
+// Tombstone marks a confirmed cleanup; the journal is durable before memory is updated.
+func (l *RunLedger) Tombstone(kind, location, name string) {
+	l.Remove(kind, location, name)
+}
+
+// ReplaceFromJournal rebuilds ownership from a recovered append-only journal.
+func (l *RunLedger) ReplaceFromJournal(records []JournalRecord) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = nil
+	l.byKey = make(map[string]LedgerEntry)
+	order := make([]string, 0)
+	for _, r := range records {
+		if r.Kind == "" || r.Name == "" {
+			if r.Event == EventPolicy {
+				l.retain = r.Retain
+			}
+			continue
+		}
+		e := LedgerEntry{Kind: r.Kind, Location: r.Location, Name: r.Name, RunID: r.RunID, CreatedAtUnix: r.CreatedAtUnix, State: "pending"}
+		key := e.Key()
+		switch r.Event {
+		case EventIntent:
+			if _, exists := l.byKey[key]; !exists {
+				order = append(order, key)
+			}
+			l.byKey[key] = e
+		case EventConfirmed:
+			e.State = "confirmed"
+			if _, exists := l.byKey[key]; !exists {
+				order = append(order, key)
+			}
+			l.byKey[key] = e
+		case EventRetained:
+			e.State = "retained"
+			e.Reason = r.Reason
+			if _, exists := l.byKey[key]; !exists {
+				order = append(order, key)
+			}
+			l.byKey[key] = e
+		case EventDeleted:
+			delete(l.byKey, key)
+		}
+	}
+	for _, key := range order {
+		if e, ok := l.byKey[key]; ok {
+			l.entries = append(l.entries, e)
+		}
+	}
+}
+
+func (l *RunLedger) removeLocked(kind, location, name string) {
+	for k, e := range l.byKey {
+		if e.Kind == kind && e.Name == name && (location == "" || e.Location == location) {
+			delete(l.byKey, k)
+		}
+	}
+	kept := l.entries[:0]
+	for _, e := range l.entries {
+		if e.Kind == kind && e.Name == name && (location == "" || e.Location == location) {
+			continue
+		}
+		kept = append(kept, e)
+	}
+	l.entries = kept
+}
+
 // Record adds a newly created resource to the run's ledger.
 func (l *RunLedger) Record(kind, location, name string, createdAtUnix int64) {
 	l.mu.Lock()
@@ -395,30 +565,43 @@ func (l *RunLedger) Record(kind, location, name string, createdAtUnix int64) {
 		RunID:         l.runID,
 		CreatedAtUnix: createdAtUnix,
 	}
+	entry.State = "confirmed"
 	k := entry.Key()
 	if _, exists := l.byKey[k]; !exists {
 		l.entries = append(l.entries, entry)
 	}
 	l.byKey[k] = entry
+	if l.journal != nil {
+		providerID := kind + ":" + location + ":" + name
+		if err := l.journal.Confirm(kind, location, name, providerID, createdAtUnix); err != nil {
+			l.journalErr = err
+		}
+	}
 }
 
-// Remove removes a deleted resource from the active ledger.
+// Remove tombstones every matching confirmed deletion, then removes from memory.
 func (l *RunLedger) Remove(kind, location, name string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for k, e := range l.byKey {
-		if e.Kind == kind && e.Name == name && (location == "" || e.Location == location) {
-			delete(l.byKey, k)
-		}
-	}
-	kept := l.entries[:0]
+	var matched []LedgerEntry
 	for _, e := range l.entries {
 		if e.Kind == kind && e.Name == name && (location == "" || e.Location == location) {
-			continue
+			matched = append(matched, e)
 		}
-		kept = append(kept, e)
 	}
-	l.entries = kept
+	if len(matched) == 0 && l.journal != nil {
+		// Explicit deletes may target an entry already absent from memory.
+		matched = append(matched, LedgerEntry{Kind: kind, Location: location, Name: name})
+	}
+	if l.journal != nil {
+		for _, e := range matched {
+			if err := l.journal.Deleted(e.Kind, e.Location, e.Name); err != nil {
+				l.journalErr = err
+				return
+			}
+		}
+	}
+	l.removeLocked(kind, location, name)
 }
 
 // Owns reports whether the current run created the given resource.

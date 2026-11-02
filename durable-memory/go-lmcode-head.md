@@ -42,9 +42,10 @@ those, not the whole provider host.
   such as `pubsub_pull` stay previews. Never skip `Program.Run` in dry mode.
 - Watchdog goroutines cannot safely call the collector or provider cleanup
   while `Program.Run` is active. `invoke` emits the collector wire shape with
-  the dry/part metadata, never calls `Cleanup`, and exits; normal auth failures
-  still call `CleanupLedger`. `Host.fail/clearErr/LastError/AuthError` are
-  mutex-guarded so even the old cleanup-vs-read overlap is race-free.
+  dry/part metadata (including `part:0` for a one-slot builder), never calls
+  `Cleanup`, and exits; a stdout write failure exits 4. The hard-abort message
+  includes the durable recovery run ID/path. Normal auth failures still call
+  `CleanupLedger`. `Host.fail/clearErr/LastError/AuthError` are mutex-guarded.
 - CLI `--lmcode` accepts repeated selectors exactly as lmscript's default
   builder emits them (`--lmcode f0 --lmcode f1`) and the sample's
   `--first/--last FILE` pairs. Slots keep add order; execution order is stable
@@ -87,9 +88,62 @@ those, not the whole provider host.
   `ok N # SKIP ...`. Do not force the gallery: the released hosts are still on
   the retired protocol. `docs/images/*.png` remain the last renderings.
 
+## Durable recovery contract (required before LIVE)
+
+- Allocate a collision-resistant run ID before any mutation; never reuse a demo
+  ID. Bind the journal to provider/account/tenant/scope/endpoint and validate
+  that binding before recovery.
+- Journal **intent before the create request**, then fsync `confirmed` with the
+  concrete location/provider ID/real creation timestamp. A journal write failure
+  poisons further mutations. Journal files are append-only JSONL, 0600 in a 0700
+  directory (`LMGCP_STATE_DIR`, `LMGCP_LEDGER`).
+- `--sweep --run-id ID` or `--sweep --ledger PATH` loads ownership, includes
+  pending intents, computes real age from persisted timestamps (fake age only
+  for the seeded fake epoch), and deletes in reverse journal order.
+- Tombstone only after confirmed deletion or terminal absence (404/not-found).
+  Keep failed, uncertain, unsupported and deliberately retained records with a
+  reason. KMS CryptoKeys are retained in live mode (no direct delete); bq_table
+  and firestore_doc have explicit cleanup paths. `set_auto_cleanup(false)`
+  persists retention, so recovery reports rather than force-deletes.
+- Dry invocations create no live journal. A hard abort skips provider cleanup
+  but leaves the fsynced journal and prints its run ID/path; a separate sweep
+  process reclaims it. Tests cover intent-without-confirm, abort/recovery,
+  unrelated same-prefix safety, and an idempotent second sweep.
+
+## Per-host edit checklist (copying the skeleton)
+
+1. Module/cmd/import paths, embedded VERSION/notices, provider description,
+   SDK pins; keep selector parsing, result order, dry/preview policy, and frame
+   tests unchanged.
+2. Exact provider schema bytes and result contract; rename the context binding;
+   keep `--lmcode-schema --json` byte-identical.
+3. Replace `internal/host/register.go` domain types, `zeroHostObject` cases, and
+   explicit `mSnapshot`/`mRead`/`mPreview`/`mLocal`/`mSelf` purity declarations;
+   never infer purity from the receiver type.
+4. Replace `internal/host/host.go` clients/auth/transport and `LM<HOST>_LIVE`,
+   endpoint, memory, state-dir and ledger variables. Preserve dry-before-auth,
+   loopback-only endpoint guards, and fake-by-default.
+5. Supply provider cleanup/auth hooks to `internal/invoke`; fix the recovery
+   journal metadata, every resource kind delete/retain decision, and the
+   provider-specific retention/ownership rules in `internal/safety`.
+6. Rename `membudget.EnvVarName` and diagnostics. Keep the supervisor/recovery
+   outside the worker memory budget. Do not copy GCP ADC, project masking,
+   `lmgcp_` prefixes, the fixed demo epoch, or fake-only age logic.
+
+## LIVE gate
+
+Do not enable LIVE in another host until it has: durable journal with
+intent-before-create, cross-process `--sweep` recovery, real timestamps,
+retain/tombstone semantics, every kind covered, one-slot builder abort metadata,
+and an abort/recovery acceptance test against a persistent loopback emulator.
+Until the SDK exposes cooperative VM/request cancellation, the watchdog may not
+wait for `Program.Run`; recovery is via the durable journal and explicit sweep.
+
 ## Verification gate
 
-`go vet ./...`, `go test ./...`, and `./test.sh` with both the local mono
-`lmscript` and the published `@lmctl-ai/lmctl@0.2.453`. The suite covers the
-envelope, dry reads/dummy mutators/zero ledger writes, all 41 examples, the
-gallery skip probe, and the `lmcloud` comparison script.
+`go vet ./...`, `go test -race -count=3 ./...`, and `./test.sh` with both the
+local mono `lmscript` and the published `@lmctl-ai/lmctl@0.2.453` (3 runs each).
+The 64-check suite covers the envelope, dry reads/dummy mutators/zero ledger
+writes, repeated/selector builders, one-slot builder abort metadata, dry and
+real memory aborts, durable journal recovery through a separate `--sweep`
+process, all 41 examples, the gallery skip probe, and the `lmcloud` comparison.
