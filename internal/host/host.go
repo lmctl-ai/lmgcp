@@ -51,6 +51,10 @@ type Host struct {
 	liveMode     bool
 	autoCleanup  bool
 	lastError    string
+	lastAPIError *googleapi.Error
+	pendingKind  string
+	pendingLoc   string
+	pendingName  string
 	authError    string
 	ledger       *safety.RunLedger
 	fakeSrv      *fakegcp.Server
@@ -168,9 +172,19 @@ func newHost(dry, journalEnabled bool, sharedFake *fakegcp.Server) (*Host, error
 	if journalEnabled && !dry && (live || strings.TrimSpace(os.Getenv("LMGCP_STATE_DIR")) != "" || strings.TrimSpace(os.Getenv("LMGCP_LEDGER")) != "") {
 		path := strings.TrimSpace(os.Getenv("LMGCP_LEDGER"))
 		if path == "" {
-			path = safety.JournalPath(safety.DefaultStateDir(), h.ledger.RunID())
+			dir := safety.DefaultStateDir()
+			if err := safety.EnsureStateDir(dir); err != nil {
+				if h.fakeSrv != nil && h.ownsFake {
+					h.fakeSrv.Close()
+				}
+				return nil, fmt.Errorf("prepare recovery state: %w", err)
+			}
+			path = safety.JournalPath(dir, h.ledger.RunID())
+			if path == "" {
+				return nil, fmt.Errorf("invalid generated run ID %q", h.ledger.RunID())
+			}
 		}
-		journal, err := safety.OpenJournal(path, h.journalMeta())
+		journal, err := safety.OpenJournal(path, h.journalMeta(), true)
 		if err != nil {
 			if h.fakeSrv != nil {
 				h.fakeSrv.Close()
@@ -254,7 +268,10 @@ func (h *Host) journalMeta() safety.JournalMeta {
 func (h *Host) RecoveryPath() string { return h.recoveryPath }
 
 // LoadRecovery reopens a journal, validates its provider binding and rebuilds ownership.
-func (h *Host) LoadRecovery(path string) error {
+func (h *Host) LoadRecovery(path string) error { return h.LoadRecoveryForce(path, false) }
+
+// LoadRecoveryForce reopens a journal, optionally bypassing the writer lock.
+func (h *Host) LoadRecoveryForce(path string, force bool) error {
 	loaded, err := safety.LoadJournal(path)
 	if err != nil {
 		return fmt.Errorf("load recovery journal: %w", err)
@@ -268,7 +285,7 @@ func (h *Host) LoadRecovery(path string) error {
 		loaded.Meta.Endpoint != want.Endpoint {
 		return fmt.Errorf("recovery journal binding mismatch: run=%s provider=%s account=%s scope=%s endpoint=%s", loaded.Meta.RunID, loaded.Meta.Provider, loaded.Meta.Account, loaded.Meta.Scope, loaded.Meta.Endpoint)
 	}
-	journal, err := safety.OpenJournal(path, loaded.Meta)
+	journal, err := safety.OpenJournal(path, loaded.Meta, !force)
 	if err != nil {
 		return err
 	}
@@ -283,15 +300,67 @@ func (h *Host) beginResource(kind, location, name string) bool {
 		h.fail(err)
 		return false
 	}
+	h.mu.Lock()
+	h.pendingKind, h.pendingLoc, h.pendingName = kind, location, name
+	h.mu.Unlock()
 	return true
 }
 
-func (h *Host) confirmResource(kind, location, name string) {
-	createdAt := time.Now().Unix()
+func (h *Host) createdAt() int64 {
 	if h.fakeSrv != nil {
-		createdAt = fakegcp.DefaultEpoch
+		return fakegcp.DefaultEpoch
 	}
-	h.ledger.Record(kind, location, name, createdAt)
+	return time.Now().Unix()
+}
+
+func (h *Host) confirmResource(kind, location, name string) {
+	h.ledger.Record(kind, location, name, h.createdAt())
+	h.mu.Lock()
+	h.pendingKind, h.pendingLoc, h.pendingName = "", "", ""
+	h.mu.Unlock()
+}
+
+func (h *Host) absentError() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.lastAPIError == nil || h.lastAPIError.Code != 404 {
+		return false
+	}
+	for _, item := range h.lastAPIError.Errors {
+		switch strings.ToLower(item.Reason) {
+		case "notfound", "not_found", "resource_not_found":
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Host) verifyOwnership(e safety.LedgerEntry) (owned, absent bool, reason string) {
+	if e.Kind != "bucket" && h.fakeSrv != nil {
+		return true, false, ""
+	}
+	switch e.Kind {
+	case "bucket":
+		b := h.StorageGetBucket(e.Name)
+		if h.absentError() {
+			return false, true, ""
+		}
+		if h.LastError() != "" {
+			return false, false, "ownership GET failed: " + h.LastError()
+		}
+		if b == nil || b.LabelsVal[safety.TestLabelKey] != e.RunID {
+			return false, false, "ownership label mismatch"
+		}
+		if h.fakeSrv == nil {
+			created, _ := strconv.ParseInt(b.LabelsVal[safety.CreatedAtKey], 10, 64)
+			if created <= 0 || (e.CreatedAtUnix > 0 && created < e.CreatedAtUnix) {
+				return false, false, "creation time precedes journal intent"
+			}
+		}
+		return true, false, ""
+	default:
+		return false, false, "ownership check unsupported for resource kind"
+	}
 }
 func (h *Host) Close() {
 	defer h.ledger.CloseJournal()
@@ -308,21 +377,32 @@ func (h *Host) fail(err error) {
 	defer h.mu.Unlock()
 	if err == nil {
 		h.lastError = ""
+		h.lastAPIError = nil
 		return
 	}
 	h.lastError = safety.RedactSecrets(err.Error())
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) {
+		h.lastAPIError = apiErr
+	} else {
+		h.lastAPIError = nil
+	}
 	if token := os.Getenv("LMGCP_ACCESS_TOKEN"); token != "" {
 		h.lastError = strings.ReplaceAll(h.lastError, token, "[REDACTED]")
 	}
-	var apiErr *googleapi.Error
-	if errors.As(err, &apiErr) && (apiErr.Code == 401 || apiErr.Code == 403) {
+	if apiErr != nil && (apiErr.Code == 401 || apiErr.Code == 403) {
 		h.authError = h.lastError
+	}
+	if h.pendingKind != "" && apiErr != nil && apiErr.Code >= 400 && apiErr.Code < 500 {
+		h.ledger.FailIntent(h.pendingKind, h.pendingLoc, h.pendingName, h.lastError)
+		h.pendingKind, h.pendingLoc, h.pendingName = "", "", ""
 	}
 }
 
 func (h *Host) clearErr() {
 	h.mu.Lock()
 	h.lastError = ""
+	h.lastAPIError = nil
 	h.mu.Unlock()
 }
 
@@ -399,7 +479,14 @@ func (h *Host) Endpoint() string {
 
 func (h *Host) RunID() string { return h.ledger.RunID() }
 
-func (h *Host) SetRunID(id string) { h.ledger.SetRunID(id) }
+func (h *Host) SetRunID(id string) bool {
+	if h.ledger.JournalPath() != "" {
+		h.fail(fmt.Errorf("set_run_id is refused after the recovery journal is attached"))
+		return false
+	}
+	h.ledger.SetRunID(id)
+	return true
+}
 
 func (h *Host) LastError() string {
 	h.mu.Lock()
@@ -514,39 +601,42 @@ func (h *Host) SeedDemoAge(kind, name string, ageHours int64) bool {
 func (h *Host) deleteResource(e safety.LedgerEntry) (bool, string) {
 	switch e.Kind {
 	case "compute_instance":
-		return deletionResult(h.ComputeDeleteInstance(e.Location, e.Name), h.LastError())
+		return deletionResult(h.ComputeDeleteInstance(e.Location, e.Name), h.absentError(), h.LastError())
 	case "firewall":
-		return deletionResult(h.NetworkDeleteFirewall(e.Name), h.LastError())
+		return deletionResult(h.NetworkDeleteFirewall(e.Name), h.absentError(), h.LastError())
 	case "subnet":
-		return deletionResult(h.NetworkDeleteSubnet(e.Location, e.Name), h.LastError())
+		return deletionResult(h.NetworkDeleteSubnet(e.Location, e.Name), h.absentError(), h.LastError())
 	case "vpc":
-		return deletionResult(h.NetworkDeleteVPC(e.Name), h.LastError())
+		return deletionResult(h.NetworkDeleteVPC(e.Name), h.absentError(), h.LastError())
 	case "bucket":
-		return deletionResult(h.StorageDeleteBucket(e.Name), h.LastError())
+		if !h.emptyBucketObjects(e.Name) {
+			return false, "failed to empty bucket objects: " + h.LastError()
+		}
+		return deletionResult(h.StorageDeleteBucket(e.Name), h.absentError(), h.LastError())
 	case "pubsub_sub":
-		return deletionResult(h.PubsubDeleteSubscription(e.Name), h.LastError())
+		return deletionResult(h.PubsubDeleteSubscription(e.Name), h.absentError(), h.LastError())
 	case "pubsub_topic":
-		return deletionResult(h.PubsubDeleteTopic(e.Name), h.LastError())
+		return deletionResult(h.PubsubDeleteTopic(e.Name), h.absentError(), h.LastError())
 	case "cloud_run":
-		return deletionResult(h.RunDeleteService(e.Location, e.Name), h.LastError())
+		return deletionResult(h.RunDeleteService(e.Location, e.Name), h.absentError(), h.LastError())
 	case "sql_instance":
-		return deletionResult(h.SQLDeleteInstance(e.Name), h.LastError())
+		return deletionResult(h.SQLDeleteInstance(e.Name), h.absentError(), h.LastError())
 	case "bq_table":
 		parts := strings.SplitN(e.Name, "/", 2)
 		if len(parts) != 2 {
 			return false, "bq_table name is not dataset/table"
 		}
-		return deletionResult(h.BQDeleteTable(parts[0], parts[1]), h.LastError())
+		return deletionResult(h.BQDeleteTable(parts[0], parts[1]), h.absentError(), h.LastError())
 	case "bq_dataset":
-		return deletionResult(h.BQDeleteDataset(e.Name), h.LastError())
+		return deletionResult(h.BQDeleteDataset(e.Name), h.absentError(), h.LastError())
 	case "firestore_doc":
 		parts := strings.SplitN(e.Name, "/", 2)
 		if len(parts) != 2 {
 			return false, "firestore_doc name is not collection/document"
 		}
-		return deletionResult(h.FirestoreDeleteDoc(parts[0], parts[1]), h.LastError())
+		return deletionResult(h.FirestoreDeleteDoc(parts[0], parts[1]), h.absentError(), h.LastError())
 	case "secret":
-		return deletionResult(h.SecretsDelete(e.Name), h.LastError())
+		return deletionResult(h.SecretsDelete(e.Name), h.absentError(), h.LastError())
 	case "kms_key":
 		if h.fakeSrv != nil {
 			// The fake has no KMS destroy API; forgetting ownership is its terminal deletion.
@@ -555,32 +645,54 @@ func (h *Host) deleteResource(e safety.LedgerEntry) (bool, string) {
 		}
 		return false, "KMS CryptoKey cannot be deleted directly; retain and destroy key versions manually"
 	case "artifact_repo":
-		return deletionResult(h.ARDeleteRepository(e.Location, e.Name), h.LastError())
+		return deletionResult(h.ARDeleteRepository(e.Location, e.Name), h.absentError(), h.LastError())
 	case "dns_zone":
-		return deletionResult(h.DNSDeleteZone(e.Name), h.LastError())
+		return deletionResult(h.DNSDeleteZone(e.Name), h.absentError(), h.LastError())
 	case "log_sink":
-		return deletionResult(h.LoggingDeleteSink(e.Name), h.LastError())
+		return deletionResult(h.LoggingDeleteSink(e.Name), h.absentError(), h.LastError())
 	case "alert_policy":
-		return deletionResult(h.MonitoringDeleteAlertPolicy(e.Name), h.LastError())
+		return deletionResult(h.MonitoringDeleteAlertPolicy(e.Name), h.absentError(), h.LastError())
 	default:
 		return false, "unsupported resource kind for automatic cleanup"
 	}
 }
 
-func deletionResult(ok bool, lastError string) (bool, string) {
-	if ok || isTerminalAbsence(lastError) {
+func deletionResult(ok, absent bool, lastError string) (bool, string) {
+	if ok || absent {
 		return true, ""
 	}
-	if lastError == "" {
-		return false, "cleanup did not confirm deletion"
+	if lastError != "" {
+		return false, "cleanup failed: " + lastError
 	}
-	return false, "cleanup failed: " + lastError
+	return false, "cleanup did not confirm deletion"
 }
 
-func isTerminalAbsence(message string) bool {
-	lower := strings.ToLower(message)
-	return strings.Contains(lower, "404") || strings.Contains(lower, "not found") ||
-		strings.Contains(lower, "notfound") || strings.Contains(lower, "no such")
+func (h *Host) emptyBucketObjects(bucket string) bool {
+	res, err := h.storageSvc.Objects.List(bucket).Versions(true).Do()
+	if err != nil {
+		h.fail(err)
+		if h.absentError() {
+			h.clearErr()
+			return true
+		}
+		return false
+	}
+	for _, object := range res.Items {
+		call := h.storageSvc.Objects.Delete(bucket, object.Name)
+		if object.Generation > 0 {
+			call = call.Generation(object.Generation)
+		}
+		if err := call.Do(); err != nil {
+			h.fail(err)
+			if h.absentError() {
+				h.clearErr()
+				continue
+			}
+			return false
+		}
+	}
+	h.clearErr()
+	return true
 }
 
 func (h *Host) resourceAgeHours(e safety.LedgerEntry) int64 {
@@ -629,32 +741,57 @@ func (h *Host) SweepDryRun(maxAgeHours int64) []string {
 	return out
 }
 
-// SweepDelete deletes run-owned resources in reverse journal order and tombstones only confirmed cleanup.
+// SweepDelete deletes run-owned resources in reverse journal order.
 func (h *Host) SweepDelete(maxAgeHours int64) int64 {
+	deleted, absent, _ := h.SweepDeleteDetailed(maxAgeHours)
+	return deleted + absent
+}
+
+// SweepDeleteDetailed returns deleted, absent and retained counts.
+func (h *Host) SweepDeleteDetailed(maxAgeHours int64) (deleted, absent, retained int64) {
+	candidates := h.sweepCandidates(maxAgeHours)
 	if h.ledger.Retention() {
-		for _, e := range h.sweepCandidates(maxAgeHours) {
+		for _, e := range candidates {
 			h.ledger.RetainRecord(e.Kind, e.Location, e.Name, "retention policy")
 		}
-		return 0
+		return 0, 0, int64(len(candidates))
 	}
-	candidates := h.sweepCandidates(maxAgeHours)
-	var deleted int64
 	for i := len(candidates) - 1; i >= 0; i-- {
 		e := candidates[i]
+		owned, missing, reason := h.verifyOwnership(e)
+		if missing {
+			h.ledger.Remove(e.Kind, e.Location, e.Name)
+			absent++
+			continue
+		}
+		if !owned {
+			if reason == "" {
+				reason = "ownership not proven"
+			}
+			h.ledger.RetainRecord(e.Kind, e.Location, e.Name, reason)
+			retained++
+			continue
+		}
 		ok, reason := h.deleteResource(e)
 		if ok {
-			if h.ledger.Owns(e.Kind, e.Name) {
+			if h.absentError() {
 				h.ledger.Remove(e.Kind, e.Location, e.Name)
+				absent++
+			} else {
+				if h.ledger.Owns(e.Kind, e.Name) {
+					h.ledger.Remove(e.Kind, e.Location, e.Name)
+				}
+				deleted++
 			}
-			deleted++
 			continue
 		}
 		if reason == "" {
 			reason = "cleanup failed"
 		}
 		h.ledger.RetainRecord(e.Kind, e.Location, e.Name, reason)
+		retained++
 	}
-	return deleted
+	return deleted, absent, retained
 }
 
 // --- 1. Compute Engine ---
@@ -802,7 +939,7 @@ func (h *Host) ComputeCreateInstance(zone, name, machineType, imageFamily string
 	if !h.beginResource("compute_instance", zone, name) {
 		return nil
 	}
-	labels := h.ledger.EnrichLabels(map[string]string{"image_family": imageFamily}, fakegcp.DefaultEpoch)
+	labels := h.ledger.EnrichLabels(map[string]string{"image_family": imageFamily}, h.createdAt())
 	req := &compute.Instance{
 		Name:        name,
 		Zone:        zone,
@@ -834,7 +971,7 @@ func (h *Host) ComputeSetInstanceLabels(zone, name string, labels map[string]str
 		h.fail(err)
 		return false
 	}
-	enriched := h.ledger.EnrichLabels(labels, fakegcp.DefaultEpoch)
+	enriched := h.ledger.EnrichLabels(labels, h.createdAt())
 	_, err := h.computeSvc.Instances.SetLabels(h.projectID, zone, name, &compute.InstancesSetLabelsRequest{
 		Labels: enriched,
 	}).Do()
@@ -1267,9 +1404,9 @@ func (h *Host) StorageCreateBucket(name, location, storageClass string) *Storage
 		return &StorageBucket{NameVal: name, LabelsVal: map[string]string{}}
 	}
 	if !h.beginResource("bucket", location, name) {
-		return nil
+		return &StorageBucket{NameVal: name, LabelsVal: map[string]string{}}
 	}
-	labels := h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch)
+	labels := h.ledger.EnrichLabels(nil, h.createdAt())
 	req := &storage.Bucket{
 		Name:         name,
 		Location:     strings.ToUpper(location),
@@ -1362,7 +1499,7 @@ func (h *Host) StorageSetBucketLabels(name string, labels map[string]string) boo
 		h.fail(err)
 		return false
 	}
-	enriched := h.ledger.EnrichLabels(labels, fakegcp.DefaultEpoch)
+	enriched := h.ledger.EnrichLabels(labels, h.createdAt())
 	_, err := h.storageSvc.Buckets.Patch(name, &storage.Bucket{Labels: enriched}).Do()
 	if err != nil {
 		h.fail(err)
@@ -1562,7 +1699,7 @@ func (h *Host) PubsubCreateTopic(name string) *PubsubTopic {
 	if !h.beginResource("pubsub_topic", "global", name) {
 		return nil
 	}
-	labels := h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch)
+	labels := h.ledger.EnrichLabels(nil, h.createdAt())
 	t, err := h.pubsubSvc.Projects.Topics.Create(fmt.Sprintf("projects/%s/topics/%s", h.projectID, name), &pubsub.Topic{
 		Labels:                   labels,
 		MessageRetentionDuration: "604800s",
@@ -1581,7 +1718,7 @@ func (h *Host) PubsubSetTopicLabels(name string, labels map[string]string) bool 
 		h.fail(err)
 		return false
 	}
-	enriched := h.ledger.EnrichLabels(labels, fakegcp.DefaultEpoch)
+	enriched := h.ledger.EnrichLabels(labels, h.createdAt())
 	_, err := h.pubsubSvc.Projects.Topics.Patch(fmt.Sprintf("projects/%s/topics/%s", h.projectID, name), &pubsub.UpdateTopicRequest{
 		Topic:      &pubsub.Topic{Labels: enriched},
 		UpdateMask: "labels",
@@ -1674,7 +1811,7 @@ func (h *Host) PubsubCreateSubscription(name, topicName string, ackSec int64, dl
 	req := &pubsub.Subscription{
 		Topic:              fmt.Sprintf("projects/%s/topics/%s", h.projectID, topicName),
 		AckDeadlineSeconds: ackSec,
-		Labels:             h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch),
+		Labels:             h.ledger.EnrichLabels(nil, h.createdAt()),
 	}
 	if dlqTopic != "" {
 		req.DeadLetterPolicy = &pubsub.DeadLetterPolicy{
@@ -1863,7 +2000,7 @@ func (h *Host) RunDeployService(region, name, image string, cpuMilli, memMB, max
 		return nil
 	}
 	parent := fmt.Sprintf("projects/%s/locations/%s", h.projectID, region)
-	labels := h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch)
+	labels := h.ledger.EnrichLabels(nil, h.createdAt())
 	req := &run.GoogleCloudRunV2Service{
 		Name:    parent + "/services/" + name,
 		Ingress: "INGRESS_TRAFFIC_ALL",
@@ -1927,7 +2064,7 @@ func (h *Host) RunSetLabels(region, name string, labels map[string]string) bool 
 	}
 	full := fmt.Sprintf("projects/%s/locations/%s/services/%s", h.projectID, region, name)
 	_, err := h.runSvc.Projects.Locations.Services.Patch(full, &run.GoogleCloudRunV2Service{
-		Labels: h.ledger.EnrichLabels(labels, fakegcp.DefaultEpoch),
+		Labels: h.ledger.EnrichLabels(labels, h.createdAt()),
 	}).Do()
 	if err != nil {
 		h.fail(err)
@@ -2054,7 +2191,7 @@ func (h *Host) SQLCreateInstance(name, dbVer, tier, region string, ha bool) *Sql
 			Tier:             tier,
 			AvailabilityType: avail,
 			DataDiskSizeGb:   20,
-			UserLabels:       h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch),
+			UserLabels:       h.ledger.EnrichLabels(nil, h.createdAt()),
 			BackupConfiguration: &sqladmin.BackupConfiguration{
 				Enabled:                    true,
 				PointInTimeRecoveryEnabled: ha,
@@ -2200,7 +2337,7 @@ func (h *Host) BQCreateDataset(dsID, location string) *BqDataset {
 		DatasetReference:         &bigquery.DatasetReference{DatasetId: dsID, ProjectId: h.projectID},
 		Location:                 location,
 		DefaultTableExpirationMs: 30 * 86400 * 1000,
-		Labels:                   h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch),
+		Labels:                   h.ledger.EnrichLabels(nil, h.createdAt()),
 	}
 	if _, err := h.bqSvc.Datasets.Insert(h.projectID, req).Do(); err != nil {
 		h.fail(err)
@@ -2412,7 +2549,7 @@ func (h *Host) SecretsCreateMetadata(name, replPolicy string, rotDays int64, lab
 	if !h.beginResource("secret", "global", name) {
 		return nil
 	}
-	enriched := h.ledger.EnrichLabels(labels, fakegcp.DefaultEpoch)
+	enriched := h.ledger.EnrichLabels(labels, h.createdAt())
 	req := &secretmanager.Secret{
 		Labels:      enriched,
 		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
@@ -2673,7 +2810,7 @@ func (h *Host) ARCreateRepository(location, name, format string, immutableTags b
 	parent := fmt.Sprintf("projects/%s/locations/%s", h.projectID, location)
 	req := &artifactregistry.Repository{
 		Format: strings.ToUpper(format),
-		Labels: h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch),
+		Labels: h.ledger.EnrichLabels(nil, h.createdAt()),
 	}
 	if _, err := h.arSvc.Projects.Locations.Repositories.Create(parent, req).RepositoryId(name).Do(); err != nil {
 		h.fail(err)
@@ -2767,7 +2904,7 @@ func (h *Host) DNSCreateZone(name, dnsName, visibility string, dnssec bool) *Dns
 		Name:         name,
 		DnsName:      dnsName,
 		Visibility:   visibility,
-		Labels:       h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch),
+		Labels:       h.ledger.EnrichLabels(nil, h.createdAt()),
 		DnssecConfig: &dns.ManagedZoneDnsSecConfig{State: state},
 	}
 	if _, err := h.dnsSvc.ManagedZones.Create(h.projectID, req).Do(); err != nil {
@@ -2928,7 +3065,7 @@ func (h *Host) LoggingWriteEntry(logName, severity, message string, labels map[s
 	cleanMsg := safety.RedactSecrets(message)
 	_, err := h.loggingSvc.Entries.Write(&logging.WriteLogEntriesRequest{
 		LogName: fmt.Sprintf("projects/%s/logs/%s", h.projectID, logName),
-		Labels:  h.ledger.EnrichLabels(labels, fakegcp.DefaultEpoch),
+		Labels:  h.ledger.EnrichLabels(labels, h.createdAt()),
 		Entries: []*logging.LogEntry{
 			{Severity: strings.ToUpper(severity), TextPayload: cleanMsg},
 		},
@@ -3024,7 +3161,7 @@ func (h *Host) MonitoringCreateAlertPolicy(name, metricType string, threshold fl
 	req := &monitoring.AlertPolicy{
 		DisplayName:          name,
 		Enabled:              true,
-		UserLabels:           h.ledger.EnrichLabels(nil, fakegcp.DefaultEpoch),
+		UserLabels:           h.ledger.EnrichLabels(nil, h.createdAt()),
 		NotificationChannels: []string{"projects/" + h.projectID + "/notificationChannels/slack-sre"},
 	}
 	if _, err := h.monitoringSvc.Projects.AlertPolicies.Create("projects/"+h.projectID, req).Do(); err != nil {

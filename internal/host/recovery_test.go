@@ -3,7 +3,11 @@
 package host
 
 import (
+	"fmt"
+	"os"
 	"testing"
+
+	"google.golang.org/api/googleapi"
 
 	"github.com/lmctl-ai/lmgcp/internal/fakegcp"
 	"github.com/lmctl-ai/lmgcp/internal/safety"
@@ -19,7 +23,11 @@ func TestAbortRecoverySweep(t *testing.T) {
 	}
 	defer server.Close()
 	t.Setenv("LMGCP_LIVE", "")
-	t.Setenv("LMGCP_STATE_DIR", t.TempDir())
+	stateDir := t.TempDir()
+	if err := os.Chmod(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LMGCP_STATE_DIR", stateDir)
 
 	first, err := newHost(false, true, server)
 	if err != nil {
@@ -116,5 +124,21 @@ func TestSweepDeletesBQTable(t *testing.T) {
 	}
 	if got := h.ledger.Count(); got != 0 {
 		t.Fatalf("ledger count = %d, want 0", got)
+	}
+}
+
+func TestAbsentErrorRequiresTyped404Reason(t *testing.T) {
+	h := &Host{}
+	h.fail(&googleapi.Error{Code: 404, Errors: []googleapi.ErrorItem{{Reason: "notFound"}}})
+	if !h.absentError() {
+		t.Fatal("typed 404 notFound was not classified absent")
+	}
+	h.fail(&googleapi.Error{Code: 404, Errors: []googleapi.ErrorItem{{Reason: "forbidden"}}})
+	if h.absentError() {
+		t.Fatal("404 with non-notFound reason was classified absent")
+	}
+	h.fail(fmt.Errorf("404 not found: lmgcp-404-demo"))
+	if h.absentError() {
+		t.Fatal("message text was used for absence classification")
 	}
 }

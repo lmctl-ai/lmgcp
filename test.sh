@@ -8,17 +8,11 @@ cd "$HERE"
 unset LMGCP_LIVE
 
 BUILD_DIR="${BUILD_DIR:-bin}"
-HOST="$BUILD_DIR/lmgcp"
-if [ ! -x "$HOST" ] && [ -x "$HOST.exe" ]; then
-  HOST="$HOST.exe"
-fi
-if [ ! -x "$HOST" ]; then
-  mkdir -p "$BUILD_DIR"
-  ext=""
-  case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ext=".exe" ;; esac
-  CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "$BUILD_DIR/lmgcp$ext" ./cmd/lmgcp
-  HOST="$BUILD_DIR/lmgcp$ext"
-fi
+mkdir -p "$BUILD_DIR"
+ext=""
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ext=".exe" ;; esac
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "$BUILD_DIR/lmgcp$ext" ./cmd/lmgcp
+HOST="$BUILD_DIR/lmgcp$ext"
 
 pass=0
 ok() { pass=$((pass+1)); echo "ok $pass - $1"; }
@@ -274,6 +268,20 @@ grep -Fq "deleted 0 resource(s)" "$abort_state/sweep1.out" || fail "empty journa
 grep -Fq "deleted 0 resource(s)" "$abort_state/sweep2.out" || fail "second recovery sweep was not idempotent"
 rm -rf "$abort_state"
 ok "durable abort journal loads in a separate --sweep process"
+
+# 8g. Real kill -9 recovery against gcpsim when the optional binary exists
+sim_dir="${LMCLOUD_SIM_DIR:-/home/ubuntu/cloud/lmcloud-sims/.cache/sims}"
+if [ -x "$sim_dir/gcpsim" ]; then
+  sim_out="$(LMSCRIPT_BIN="$LMSCRIPT" ./scripts/recovery-gcpsim.sh 2>&1)" || { echo "$sim_out" >&2; fail "gcpsim kill-9 recovery failed"; }
+  if grep -q '^SKIP ' <<<"$sim_out"; then
+    skip "gcpsim not available"
+  else
+    grep -Fq "PASS gcpsim kill-9 recovery" <<<"$sim_out" || { echo "$sim_out" >&2; fail "gcpsim recovery did not report PASS"; }
+    ok "gcpsim kill-9 recovery reclaims owned bucket and keeps unowned sibling"
+  fi
+else
+  skip "gcpsim not available"
+fi
 
 # 9. Go unit tests (safety & fake GCP SDK integration)
 go test ./internal/safety ./internal/host >/dev/null || fail "go test failed"

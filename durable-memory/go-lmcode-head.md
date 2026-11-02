@@ -90,9 +90,14 @@ those, not the whole provider host.
 
 ## Durable recovery contract (required before LIVE)
 
-- Allocate a collision-resistant run ID before any mutation; never reuse a demo
-  ID. Bind the journal to provider/account/tenant/scope/endpoint and validate
-  that binding before recovery.
+- Allocate a collision-resistant run ID matching
+  `^run-[0-9]+-[0-9a-f]{12}$` before any mutation; never reuse a demo ID.
+  Validate the run ID and bind the journal to provider/account/tenant/scope/
+  endpoint on every record at load; reject mismatches and fail closed.
+- Journal directories are leaf directories the host created with 0700; refuse
+  existing group/world-accessible or foreign-owned dirs. Journal files are
+  regular files opened with O_NOFOLLOW, owned by the user, 0600. Never
+  MkdirAll/chmod an arbitrary parent. The no-config fallback is per-user 0700.
 - Journal **intent before the create request**, then fsync `confirmed` with the
   concrete location/provider ID/real creation timestamp. A journal write failure
   poisons further mutations. Journal files are append-only JSONL, 0600 in a 0700
@@ -100,15 +105,30 @@ those, not the whole provider host.
 - `--sweep --run-id ID` or `--sweep --ledger PATH` loads ownership, includes
   pending intents, computes real age from persisted timestamps (fake age only
   for the seeded fake epoch), and deletes in reverse journal order.
-- Tombstone only after confirmed deletion or terminal absence (404/not-found).
-  Keep failed, uncertain, unsupported and deliberately retained records with a
-  reason. KMS CryptoKeys are retained in live mode (no direct delete); bq_table
-  and firestore_doc have explicit cleanup paths. `set_auto_cleanup(false)`
-  persists retention, so recovery reports rather than force-deletes.
+- Definite create failures (any 4xx, including 409) write a `failed` record and
+  drop the pending intent; only unknown outcomes (timeout/5xx/transport) stay
+  pending. `set_run_id` is refused once the journal is attached.
+- Before ANY sweep delete, GET the remote resource and verify ownership:
+  `lmgcp_test == journal run ID`, and (live) created-at not before the intent.
+  Kinds without a verifier are retained. Never trust a prefix alone.
+- Tombstone only after confirmed deletion or typed `googleapi.Error` 404 with a
+  resource-specific reason (`notFound`). Never classify absence from message
+  text; wrong endpoint/proxy/permission errors are retained/uncertain. Sweep
+  reports deleted and absent separately.
+- Torn tail: append records the prior offset and truncates back on write
+  failure; load ignores an invalid final line without a trailing newline but
+  fails on any other invalid line.
+- The active run holds an exclusive flock; a second writer or sweep gets a clear
+  error. `--force-stale` is an operator escape hatch, not normal operation.
+  Buckets are emptied (objects and versions) before delete; KMS CryptoKeys are
+  retained in live mode; bq_table and firestore_doc have cleanup paths.
+  `set_auto_cleanup(false)` persists retention.
 - Dry invocations create no live journal. A hard abort skips provider cleanup
   but leaves the fsynced journal and prints its run ID/path; a separate sweep
   process reclaims it. Tests cover intent-without-confirm, abort/recovery,
-  unrelated same-prefix safety, and an idempotent second sweep.
+  unowned/failed-create safety, crafted records, torn tails, locking, typed
+  absence, real kill -9 recovery through gcpsim, unrelated same-prefix safety,
+  and an idempotent second sweep.
 
 ## Per-host edit checklist (copying the skeleton)
 
@@ -126,9 +146,17 @@ those, not the whole provider host.
 5. Supply provider cleanup/auth hooks to `internal/invoke`; fix the recovery
    journal metadata, every resource kind delete/retain decision, and the
    provider-specific retention/ownership rules in `internal/safety`.
-6. Rename `membudget.EnvVarName` and diagnostics. Keep the supervisor/recovery
-   outside the worker memory budget. Do not copy GCP ADC, project masking,
-   `lmgcp_` prefixes, the fixed demo epoch, or fake-only age logic.
+6. Rename `membudget.EnvVarName`, `LMGCP_STATE_DIR` and `LMGCP_LEDGER` per
+   provider. Keep the supervisor/recovery outside the worker memory budget.
+   Do not copy GCP ADC, project masking, `lmgcp_` prefixes, the fixed demo
+   epoch, or fake-only age logic.
+7. Port ownership verification per SDK: OCI tags + timeCreated; Azure tags;
+   AWS tags (S3 bucket tags). Typed not-found must be provider-specific; OCI
+   `NotAuthorizedOrNotFound` is ambiguous and must be retained. Poll async
+   delete operations before tombstoning. Empty sub-resources (S3 objects and
+   versions, Azure blobs, OCI objects) and delete non-default record sets. The
+   journal lock, run-ID validation, truncate-on-failure and tolerant-tail rules
+   are shared; do not reimplement them per host.
 
 ## LIVE gate
 
@@ -143,7 +171,7 @@ wait for `Program.Run`; recovery is via the durable journal and explicit sweep.
 
 `go vet ./...`, `go test -race -count=3 ./...`, and `./test.sh` with both the
 local mono `lmscript` and the published `@lmctl-ai/lmctl@0.2.453` (3 runs each).
-The 64-check suite covers the envelope, dry reads/dummy mutators/zero ledger
+The 65-check suite covers the envelope, dry reads/dummy mutators/zero ledger
 writes, repeated/selector builders, one-slot builder abort metadata, dry and
 real memory aborts, durable journal recovery through a separate `--sweep`
-process, all 41 examples, the gallery skip probe, and the `lmcloud` comparison.
+process, optional gcpsim kill -9 recovery, all 41 examples, the gallery skip probe, and the `lmcloud` comparison.

@@ -121,7 +121,9 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 	if err := mLocal("Gcp", "set_run_id", []string{"string"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		hs := self.(*Host)
-		hs.SetRunID(a[0].Str)
+		if !hs.SetRunID(a[0].Str) {
+			return lmcode.None(), lmcode.NewHostError(hs.LastError())
+		}
 		return lmcode.Obj("Gcp", hs), nil
 	}); err != nil {
 		return err

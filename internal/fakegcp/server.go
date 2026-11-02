@@ -105,46 +105,46 @@ type Server struct {
 	baseURL  string
 	msgSeq   int64
 
-	vpcs          map[string]*compute.Network
-	subnets       map[string]*compute.Subnetwork
-	firewalls     map[string]*compute.Firewall
-	instances     map[string]*compute.Instance
-	disks         map[string]*compute.Disk
-	buckets       map[string]*storage.Bucket
-	bucketStats   map[string]bucketStat
-	objects       map[string]map[string]storedObject
-	topics        map[string]*pubsub.Topic
-	topicStats    map[string]int64
-	subscriptions map[string]*pubsub.Subscription
-	subBacklog    map[string]int64
-	subMessages   map[string][]pubsubMsg
-	runServices   map[string]*run.GoogleCloudRunV2Service
-	runMeta       map[string]runMetaInfo
-	sqlInstances  map[string]*sqladmin.DatabaseInstance
-	firestoreDocs map[string]map[string]map[string]string
-	bqDatasets    map[string]*bigquery.Dataset
-	bqTables      map[string]*bigquery.Table
-	serviceAccounts map[string]*iam.ServiceAccount
-	saMeta        map[string]saMetaInfo
-	iamPolicy     *cloudresourcemanager.Policy
-	secrets       map[string]*secretmanager.Secret
-	secretMeta    map[string]secretMetaInfo
-	kmsKeyRings   map[string]*cloudkms.KeyRing
-	kmsKeys       map[string]*cloudkms.CryptoKey
-	kmsRotDays    map[string]int64
-	gkeClusters   map[string]*container.Cluster
-	gkeMeta       map[string]gkeMetaInfo
-	arRepos       map[string]*artifactregistry.Repository
-	arMeta        map[string]arMetaInfo
-	dnsZones      map[string]*dns.ManagedZone
-	dnsRecords    map[string][]*dns.ResourceRecordSet
-	logSinks      map[string]*logging.LogSink
-	logEntries    []string
+	vpcs              map[string]*compute.Network
+	subnets           map[string]*compute.Subnetwork
+	firewalls         map[string]*compute.Firewall
+	instances         map[string]*compute.Instance
+	disks             map[string]*compute.Disk
+	buckets           map[string]*storage.Bucket
+	bucketStats       map[string]bucketStat
+	objects           map[string]map[string]storedObject
+	topics            map[string]*pubsub.Topic
+	topicStats        map[string]int64
+	subscriptions     map[string]*pubsub.Subscription
+	subBacklog        map[string]int64
+	subMessages       map[string][]pubsubMsg
+	runServices       map[string]*run.GoogleCloudRunV2Service
+	runMeta           map[string]runMetaInfo
+	sqlInstances      map[string]*sqladmin.DatabaseInstance
+	firestoreDocs     map[string]map[string]map[string]string
+	bqDatasets        map[string]*bigquery.Dataset
+	bqTables          map[string]*bigquery.Table
+	serviceAccounts   map[string]*iam.ServiceAccount
+	saMeta            map[string]saMetaInfo
+	iamPolicy         *cloudresourcemanager.Policy
+	secrets           map[string]*secretmanager.Secret
+	secretMeta        map[string]secretMetaInfo
+	kmsKeyRings       map[string]*cloudkms.KeyRing
+	kmsKeys           map[string]*cloudkms.CryptoKey
+	kmsRotDays        map[string]int64
+	gkeClusters       map[string]*container.Cluster
+	gkeMeta           map[string]gkeMetaInfo
+	arRepos           map[string]*artifactregistry.Repository
+	arMeta            map[string]arMetaInfo
+	dnsZones          map[string]*dns.ManagedZone
+	dnsRecords        map[string][]*dns.ResourceRecordSet
+	logSinks          map[string]*logging.LogSink
+	logEntries        []string
 	logSeverityCounts map[string]int64
-	alertPolicies map[string]*monitoring.AlertPolicy
-	alertMeta     map[string]alertMetaInfo
-	metricSeries  map[string][]float64
-	createdAgeHrs map[string]int64 // kind:name -> simulated age in hours
+	alertPolicies     map[string]*monitoring.AlertPolicy
+	alertMeta         map[string]alertMetaInfo
+	metricSeries      map[string][]float64
+	createdAgeHrs     map[string]int64 // kind:name -> simulated age in hours
 }
 
 // NewServer starts a new loopback fake GCP REST server pre-seeded with a baseline estate.
@@ -599,6 +599,10 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request, sub strin
 			}
 			if b.StorageClass == "" {
 				b.StorageClass = "STANDARD"
+			}
+			if _, exists := s.buckets[b.Name]; exists {
+				writeErr(w, http.StatusConflict, "bucket already exists: "+b.Name)
+				return
 			}
 			if b.Versioning == nil {
 				b.Versioning = &storage.BucketVersioning{Enabled: false}

@@ -461,6 +461,18 @@ func (l *RunLedger) Begin(kind, location, name string) error {
 	return nil
 }
 
+// FailIntent records a definite create failure and removes the pending intent.
+func (l *RunLedger) FailIntent(kind, location, name, reason string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.journal != nil {
+		if err := l.journal.Failed(kind, location, name, reason); err != nil {
+			l.journalErr = err
+		}
+	}
+	l.removeLocked(kind, location, name)
+}
+
 // RetainRecord keeps a resource with an explicit recovery reason.
 func (l *RunLedger) RetainRecord(kind, location, name, reason string) {
 	l.mu.Lock()
@@ -524,7 +536,7 @@ func (l *RunLedger) ReplaceFromJournal(records []JournalRecord) {
 				order = append(order, key)
 			}
 			l.byKey[key] = e
-		case EventDeleted:
+		case EventDeleted, EventFailed:
 			delete(l.byKey, key)
 		}
 	}

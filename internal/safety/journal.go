@@ -3,12 +3,14 @@
 package safety
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -19,10 +21,13 @@ const (
 	EventMeta      = "meta"
 	EventIntent    = "intent"
 	EventConfirmed = "confirmed"
+	EventFailed    = "failed"
 	EventRetained  = "retained"
 	EventDeleted   = "deleted"
 	EventPolicy    = "policy"
 )
+
+var runIDPattern = regexp.MustCompile(`^run-[0-9]+-[0-9a-f]{12}$`)
 
 // JournalMeta binds a recovery journal to one provider/account/tenant/scope.
 type JournalMeta struct {
@@ -32,6 +37,16 @@ type JournalMeta struct {
 	Tenant   string `json:"tenant,omitempty"`
 	Scope    string `json:"scope,omitempty"`
 	Endpoint string `json:"endpoint,omitempty"`
+}
+
+func (m JournalMeta) validate() error {
+	if !runIDPattern.MatchString(m.RunID) {
+		return fmt.Errorf("invalid run ID %q", m.RunID)
+	}
+	if strings.TrimSpace(m.Provider) == "" || strings.TrimSpace(m.Account) == "" {
+		return errors.New("journal provider and account must not be empty")
+	}
+	return nil
 }
 
 // JournalRecord is one append-only recovery event.
@@ -59,15 +74,17 @@ type JournalRecord struct {
 // Journal is an append-only, fsynced recovery log. A write failure poisons the
 // journal so the host refuses further mutations until the operator intervenes.
 type Journal struct {
-	mu   sync.Mutex
-	path string
-	file *os.File
-	meta JournalMeta
-	seq  int64
-	err  error
+	mu     sync.Mutex
+	path   string
+	file   *os.File
+	meta   JournalMeta
+	seq    int64
+	offset int64
+	locked bool
+	err    error
 }
 
-// DefaultStateDir returns LMGCP_STATE_DIR or the per-user state directory.
+// DefaultStateDir returns LMGCP_STATE_DIR or a per-user state directory.
 func DefaultStateDir() string {
 	if dir := strings.TrimSpace(os.Getenv("LMGCP_STATE_DIR")); dir != "" {
 		return dir
@@ -75,49 +92,102 @@ func DefaultStateDir() string {
 	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
 		return filepath.Join(dir, "lmgcp")
 	}
-	return filepath.Join(os.TempDir(), "lmgcp-state")
+	return filepath.Join(os.TempDir(), fmt.Sprintf("lmgcp-%d", os.Getuid()))
 }
 
-// JournalPath returns the canonical journal file for a run ID.
+// JournalPath returns the canonical journal file for a valid run ID, or "".
 func JournalPath(stateDir, runID string) string {
-	return filepath.Join(stateDir, "journal-"+strings.TrimSpace(runID)+".jsonl")
+	runID = strings.TrimSpace(runID)
+	if !runIDPattern.MatchString(runID) {
+		return ""
+	}
+	return filepath.Join(stateDir, "journal-"+runID+".jsonl")
 }
 
-// OpenJournal creates or reopens one journal and validates its bound metadata.
-func OpenJournal(path string, meta JournalMeta) (*Journal, error) {
+// EnsureStateDir creates only the leaf journal directory with 0700, or verifies
+// an existing leaf directory is owned by the current user and not shared.
+func EnsureStateDir(dir string) error {
+	info, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			return fmt.Errorf("create state directory: %w", err)
+		}
+		info, err = os.Lstat(dir)
+	}
+	if err != nil {
+		return fmt.Errorf("inspect state directory: %w", err)
+	}
+	return checkPrivateDir(dir, info)
+}
+
+func checkPrivateDir(dir string, info os.FileInfo) error {
+	if !info.IsDir() {
+		return fmt.Errorf("state path %q is not a directory", dir)
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("state directory %q has group/world permissions %04o", dir, info.Mode().Perm())
+	}
+	if uid, ok := fileOwner(info); ok && uid != os.Getuid() {
+		return fmt.Errorf("state directory %q is owned by uid %d, not %d", dir, uid, os.Getuid())
+	}
+	return nil
+}
+
+// OpenJournal creates or reopens one journal, validates its bound metadata,
+// and optionally takes the exclusive run lock.
+func OpenJournal(path string, meta JournalMeta, lock bool) (*Journal, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, errors.New("journal path must not be empty")
 	}
-	if strings.TrimSpace(meta.RunID) == "" {
-		return nil, errors.New("journal run ID must not be empty")
+	if err := meta.validate(); err != nil {
+		return nil, err
 	}
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("create journal directory: %w", err)
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return nil, fmt.Errorf("journal directory must exist: %w", err)
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("secure journal directory: %w", err)
+	if err := checkPrivateDir(dir, info); err != nil {
+		return nil, err
 	}
 	existing, err := LoadJournal(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if len(existing.Records) > 0 {
-		if existing.Meta.RunID != meta.RunID || existing.Meta.Provider != meta.Provider ||
-			existing.Meta.Account != meta.Account || existing.Meta.Tenant != meta.Tenant ||
-			existing.Meta.Scope != meta.Scope || existing.Meta.Endpoint != meta.Endpoint {
+		if existing.Meta != meta {
 			return nil, errors.New("recovery journal metadata does not match this host")
 		}
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR|oNoFollow, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open recovery journal: %w", err)
+	}
+	opened, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return nil, fmt.Errorf("inspect recovery journal: %w", err)
+	}
+	if !opened.Mode().IsRegular() {
+		file.Close()
+		return nil, errors.New("recovery journal must be a regular file")
+	}
+	if uid, ok := fileOwner(opened); ok && uid != os.Getuid() {
+		file.Close()
+		return nil, fmt.Errorf("recovery journal is owned by uid %d, not %d", uid, os.Getuid())
 	}
 	if err := file.Chmod(0o600); err != nil {
 		file.Close()
 		return nil, fmt.Errorf("secure recovery journal: %w", err)
 	}
 	j := &Journal{path: path, file: file, meta: meta, seq: existing.MaxSeq}
+	if lock {
+		if err := lockFile(file); err != nil {
+			file.Close()
+			return nil, fmt.Errorf("recovery journal is locked by another run: %w", err)
+		}
+		j.locked = true
+	}
 	if len(existing.Records) == 0 {
 		if err := j.append(JournalRecord{Event: EventMeta}); err != nil {
 			file.Close()
@@ -128,6 +198,12 @@ func OpenJournal(path string, meta JournalMeta) (*Journal, error) {
 			return nil, err
 		}
 	}
+	offset, err := file.Seek(0, io.SeekEnd)
+	if err != nil {
+		file.Close()
+		return nil, err
+	}
+	j.offset = offset
 	return j, nil
 }
 
@@ -137,6 +213,7 @@ func (j *Journal) append(record JournalRecord) error {
 	if j.err != nil {
 		return j.err
 	}
+	offset := j.offset
 	j.seq++
 	record.Version = JournalVersion
 	record.Seq = j.seq
@@ -157,9 +234,12 @@ func (j *Journal) append(record JournalRecord) error {
 		err = j.file.Sync()
 	}
 	if err != nil {
-		j.err = err
-		return fmt.Errorf("write recovery journal: %w", err)
+		_ = j.file.Truncate(offset)
+		_ = j.file.Sync()
+		j.err = fmt.Errorf("write recovery journal: %w", err)
+		return j.err
 	}
+	j.offset = offset + int64(len(payload))
 	return nil
 }
 
@@ -178,6 +258,11 @@ func (j *Journal) Confirm(kind, location, name, providerID string, createdAtUnix
 		createdAtUnix = time.Now().Unix()
 	}
 	return j.append(JournalRecord{Event: EventConfirmed, Kind: kind, Location: location, Name: name, ProviderID: providerID, CreatedAtUnix: createdAtUnix})
+}
+
+// Failed records a definite create failure so no pending intent survives.
+func (j *Journal) Failed(kind, location, name, reason string) error {
+	return j.append(JournalRecord{Event: EventFailed, Kind: kind, Location: location, Name: name, Reason: reason})
 }
 
 // Retain keeps an entry with a reason instead of tombstoning it.
@@ -209,19 +294,15 @@ func (j *Journal) Close() error {
 	if j.file == nil {
 		return nil
 	}
+	if j.locked {
+		_ = unlockFile(j.file)
+		j.locked = false
+	}
 	err := j.file.Close()
 	j.file = nil
 	return err
 }
 
-// JournalLoad is the result of replaying one journal.
-type JournalLoad struct {
-	Meta    JournalMeta
-	Records []JournalRecord
-	MaxSeq  int64
-}
-
-// LoadJournal replays a journal file. Missing files return os.ErrNotExist.
 func syncDir(dir string) error {
 	f, err := os.Open(dir)
 	if err != nil {
@@ -231,40 +312,63 @@ func syncDir(dir string) error {
 	return f.Sync()
 }
 
+// JournalLoad is the result of replaying one journal.
+type JournalLoad struct {
+	Meta     JournalMeta
+	Records  []JournalRecord
+	MaxSeq   int64
+	Warnings []string
+}
+
+// LoadJournal replays a journal file. A torn final line without a newline is
+// ignored with a warning; any other invalid line is fatal.
 func LoadJournal(path string) (JournalLoad, error) {
 	var out JournalLoad
-	file, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return out, err
 	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 4096), 1<<20)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+	if len(data) == 0 {
+		return out, nil
+	}
+	hasFinalNewline := data[len(data)-1] == '\n'
+	lines := bytes.Split(data, []byte{'\n'})
+	for index, raw := range lines {
+		line := strings.TrimSpace(string(raw))
 		if line == "" {
 			continue
 		}
 		var record JournalRecord
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			if index == len(lines)-1 && !hasFinalNewline {
+				out.Warnings = append(out.Warnings, "ignored torn final journal line")
+				break
+			}
 			return out, fmt.Errorf("invalid recovery journal: %w", err)
 		}
 		if record.Version != JournalVersion {
 			return out, fmt.Errorf("unsupported recovery journal version %d", record.Version)
 		}
-		if record.Event == EventMeta && out.Meta.RunID == "" {
-			out.Meta = JournalMeta{RunID: record.RunID, Provider: record.Provider, Account: record.Account, Tenant: record.Tenant, Scope: record.Scope, Endpoint: record.Endpoint}
+		if record.Event == EventMeta {
+			meta := JournalMeta{RunID: record.RunID, Provider: record.Provider, Account: record.Account, Tenant: record.Tenant, Scope: record.Scope, Endpoint: record.Endpoint}
+			if err := meta.validate(); err != nil {
+				return out, err
+			}
+			if out.Meta.RunID == "" {
+				out.Meta = meta
+			}
+		}
+		if out.Meta.RunID == "" {
+			return out, errors.New("recovery journal has no metadata record")
+		}
+		if record.RunID != out.Meta.RunID || record.Provider != out.Meta.Provider || record.Account != out.Meta.Account ||
+			record.Tenant != out.Meta.Tenant || record.Scope != out.Meta.Scope || record.Endpoint != out.Meta.Endpoint {
+			return out, fmt.Errorf("recovery journal record seq %d does not match metadata binding", record.Seq)
 		}
 		if record.Seq > out.MaxSeq {
 			out.MaxSeq = record.Seq
 		}
 		out.Records = append(out.Records, record)
-	}
-	if err := scanner.Err(); err != nil {
-		return out, fmt.Errorf("read recovery journal: %w", err)
-	}
-	if len(out.Records) > 0 && out.Meta.RunID == "" {
-		return out, errors.New("recovery journal has no metadata record")
 	}
 	return out, nil
 }

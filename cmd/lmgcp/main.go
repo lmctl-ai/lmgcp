@@ -26,7 +26,7 @@ var rawVersion string
 //go:embed THIRD_PARTY_NOTICES
 var embeddedNotices string
 
-const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | [--lmcode|--first|--last] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete] [--run-id ID] [--ledger PATH]
+const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | [--lmcode|--first|--last] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete] [--run-id ID] [--ledger PATH] [--force-stale]
 
 Google Cloud Go SDK host for lmscript (Apache-2.0 SDK on lmcode-go).
 
@@ -239,6 +239,7 @@ func realMain(args []string) int {
 		var maxAge int64 = 1
 		dryRun := true
 		runID, ledgerPath := "", ""
+		forceStale := false
 		for i := 2; i < len(args); i++ {
 			switch args[i] {
 			case "--delete":
@@ -269,6 +270,8 @@ func realMain(args []string) int {
 				}
 				ledgerPath = args[i+1]
 				i++
+			case "--force-stale":
+				forceStale = true
 			default:
 				fmt.Fprint(os.Stderr, usageText)
 				return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
@@ -278,8 +281,11 @@ func realMain(args []string) int {
 			path := ledgerPath
 			if path == "" {
 				path = safety.JournalPath(safety.DefaultStateDir(), runID)
+				if path == "" {
+					return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, "invalid --run-id"))
+				}
 			}
-			if err := h.LoadRecovery(path); err != nil {
+			if err := h.LoadRecoveryForce(path, forceStale); err != nil {
 				return invoke.Failure("app", lmcode.NewError(lmcode.APP_FAIL, err.Error()))
 			}
 			fmt.Printf("recovery: run=%s ledger=%s\n", h.RunID(), h.RecoveryPath())
@@ -291,8 +297,8 @@ func realMain(args []string) int {
 				fmt.Println("  " + it)
 			}
 		} else {
-			del := h.SweepDelete(maxAge)
-			fmt.Printf("sweep delete (older_than_hours=%d): deleted %d resource(s)\n", maxAge, del)
+			deleted, absent, retained := h.SweepDeleteDetailed(maxAge)
+			fmt.Printf("sweep delete (older_than_hours=%d): deleted %d resource(s), absent %d, retained %d\n", maxAge, deleted, absent, retained)
 		}
 		return 0
 	}
