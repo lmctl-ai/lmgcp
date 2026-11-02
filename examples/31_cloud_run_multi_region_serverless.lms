@@ -4,7 +4,8 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+s = load_schema(cli="lmgcp");
+p = _lmcode_ s;
   let s_primary = gcp.run_deploy_service("us-central1", "lmgcp-edge-webhook-usc1", "us-central1-docker.pkg.dev/demo/webhook:v2", 1000, 512, 10);
   let s_dr = gcp.run_deploy_service("us-east1", "lmgcp-edge-webhook-use1", "us-east1-docker.pkg.dev/demo/webhook:v2", 1000, 512, 8);
 
@@ -28,40 +29,8 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
   let ok_ev = gcp.write_cost_evidence("31_cloud_run_multi_region_serverless", "build/evidence/live-cost-31_cloud_run_multi_region_serverless.json");
   print(gcp.cost_report());
-end _dsl_
-savedsl(p, "build/examples/31_cloud_run_multi_region_serverless.dslb");
-r = system ${dsl_cli(p)} --lmcode build/examples/31_cloud_run_multi_region_serverless.dslb;
-assert(r.code == 0);
+end _lmcode_
+r = run_lmcode(p);
+assert(r.ok, "lmgcp host failed");
 
-draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
-  scene.canvas(960, 520, "#0d1117");
-  scene.text(480.0, 34.0, 20.0, "Cloud Run v2 Multi-Region Serverless Deployment (us-central1 + us-east1)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-  scene.text(480.0, 56.0, 12.5, "Active-Active serverless endpoints with regional canary split (90/10 in us-central1, 100/0 in us-east1) & LIFO cleanup", "#8b949e").set_attr("text-anchor", "middle");
-
-  scene.rect(60.0, 100.0, 400.0, 360.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
-  scene.text(260.0, 138.0, 16.0, "Primary: us-central1", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-  scene.text(260.0, 168.0, 13.5, "lmgcp-edge-webhook-usc1", "#e6edf3").set_attr("text-anchor", "middle");
-  scene.text(260.0, 205.0, 12.0, "CPU: 1000m | Memory: 512 MiB | Max: 10", "#8b949e").set_attr("text-anchor", "middle");
-  scene.rect(100.0, 240.0, 288.0, 28.0, "#3fb950");
-  scene.rect(388.0, 240.0, 32.0, 28.0, "#d29922");
-  scene.text(260.0, 292.0, 12.5, "Traffic: 90% Stable / 10% Canary", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "600");
-  scene.text(260.0, 335.0, 12.0, "Baseline services:checkout-api, order-worker", "#8b949e").set_attr("text-anchor", "middle");
-  scene.text(260.0, 415.0, 13.0, "CLEANED UP (ledger_count == 0)", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-
-  scene.rect(500.0, 100.0, 400.0, 360.0, "#161b22").set_attr("stroke", "#a371f7").set_attr("stroke-width", "2");
-  scene.text(700.0, 138.0, 16.0, "Secondary: us-east1", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-  scene.text(700.0, 168.0, 13.5, "lmgcp-edge-webhook-use1", "#e6edf3").set_attr("text-anchor", "middle");
-  scene.text(700.0, 205.0, 12.0, "CPU: 1000m | Memory: 512 MiB | Max: 8", "#8b949e").set_attr("text-anchor", "middle");
-  scene.rect(540.0, 240.0, 320.0, 28.0, "#3fb950");
-  scene.text(700.0, 292.0, 12.5, "Traffic: 100% Stable / 0% Canary", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "600");
-  scene.text(700.0, 335.0, 12.0, "Baseline service: dr-checkout-api", "#8b949e").set_attr("text-anchor", "middle");
-  scene.text(700.0, 415.0, 13.0, "CLEANED UP (ledger_count == 0)", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-
-  scene.render_png("images/31_cloud_run_multi_region_serverless.png", 960, 520, 1);
-end _dsl_
-savedsl(draw, "build/examples/31_cloud_run_multi_region_serverless_draw.dslb");
-rd = system ${dsl_cli(draw)} --lmcode build/examples/31_cloud_run_multi_region_serverless_draw.dslb;
-assert(rd.code == 0);
-copy_file("images/31_cloud_run_multi_region_serverless.png", "docs/images/31_cloud_run_multi_region_serverless.png");
-println("ok 31_cloud_run_multi_region_serverless - wrote images/31_cloud_run_multi_region_serverless.png");
-println(split(r.stdout, "\n")[0]);
+println("ok 31_cloud_run_multi_region_serverless (lmgcp; lmdraw step awaits host migration)");

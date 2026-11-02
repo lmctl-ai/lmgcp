@@ -4,7 +4,8 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+s = load_schema(cli="lmgcp");
+p = _lmcode_ s;
   let svc = gcp.run_deploy_service("us-central1", "lmgcp-checkout-api", "us-central1-docker.pkg.dev/gcp-proj-****8f2a/prod-containers/checkout:v2.1.0", 1000, 512, 10);
   assert_close(float(svc.cpu_milli()), 1000.0, 0.01);
   assert_close(float(svc.memory_mb()), 512.0, 0.01);
@@ -28,44 +29,8 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
   let ok_ev = gcp.write_cost_evidence("06_cloud_run_canary_rollout", "build/evidence/live-cost-06_cloud_run_canary_rollout.json");
   print(gcp.cost_report());
-end _dsl_
-savedsl(p, "build/examples/06_cloud_run_canary_rollout.dslb");
-r = system ${dsl_cli(p)} --lmcode build/examples/06_cloud_run_canary_rollout.dslb;
-assert(r.code == 0);
+end _lmcode_
+r = run_lmcode(p);
+assert(r.ok, "lmgcp host failed");
 
-draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
-  scene.canvas(960, 520, "#0d1117");
-  scene.text(480.0, 34.0, 20.0, "Cloud Run Progressive Canary Traffic Rollout (lmgcp-checkout-api)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-  scene.text(480.0, 56.0, 12.5, "1000m vCPU | 512 MiB RAM | Max 10 instances | 4 traffic stages verified & cleaned up", "#8b949e").set_attr("text-anchor", "middle");
-
-  scene.rect(45.0, 88.0, 870.0, 390.0, "#161b22").set_attr("stroke", "#30363d");
-
-  fn stage_bar(y: float, title: string, stable_pct: int, canary_pct: int, note: string) -> void {
-    scene.text(70.0, y + 20.0, 13.5, title, "#e6edf3").set_attr("font-weight", "700");
-    let sw = float(stable_pct) * 4.4;
-    let cw = float(canary_pct) * 4.4;
-    if (stable_pct > 0) {
-      scene.rect(250.0, y, sw, 32.0, "#1f6feb");
-      scene.text(250.0 + sw / 2.0, y + 21.0, 12.0, "Stable " + str(stable_pct) + "%", "#ffffff").set_attr("text-anchor", "middle");
-    }
-    if (canary_pct > 0) {
-      scene.rect(250.0 + sw, y, cw, 32.0, "#3fb950");
-      scene.text(250.0 + sw + cw / 2.0, y + 21.0, 12.0, "Canary " + str(canary_pct) + "%", "#0d1117").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-    }
-    scene.text(710.0, y + 20.0, 12.0, note, "#8b949e");
-  }
-
-  stage_bar(120.0, "Stage 1: Initial Deploy", 100, 0,   "rev-001 deployed (0% canary)");
-  stage_bar(195.0, "Stage 2: Smoke Canary",   90,  10,  "p95 latency 49ms < 250ms SLO");
-  stage_bar(270.0, "Stage 3: 50/50 Split",    50,  50,  "error rate 0.04% within budget");
-  stage_bar(345.0, "Stage 4: Full Promotion", 0,   100, "100% traffic on canary revision");
-
-  scene.text(480.0, 442.0, 12.5, "Post-rollout: cleanup_ledger() deleted ephemeral service lmgcp-checkout-api (ledger_count = 0)", "#58a6ff").set_attr("text-anchor", "middle");
-  scene.render_png("images/06_cloud_run_canary_rollout.png", 960, 520, 1);
-end _dsl_
-savedsl(draw, "build/examples/06_cloud_run_canary_rollout_draw.dslb");
-rd = system ${dsl_cli(draw)} --lmcode build/examples/06_cloud_run_canary_rollout_draw.dslb;
-assert(rd.code == 0);
-copy_file("images/06_cloud_run_canary_rollout.png", "docs/images/06_cloud_run_canary_rollout.png");
-println("ok 06_cloud_run_canary_rollout - wrote images/06_cloud_run_canary_rollout.png");
-println(split(r.stdout, "\n")[0]);
+println("ok 06_cloud_run_canary_rollout (lmgcp; lmdraw step awaits host migration)");

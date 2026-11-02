@@ -126,29 +126,31 @@ bad_out="$("$HOST" --lmcode "$bad_code" 2>&1)"
 bad_rc=$?
 set -e
 [ "$bad_rc" -eq 3 ] || fail "corrupt bytecode exited $bad_rc, want 3"
-echo "$bad_out" | grep -q "LOAD_BAD_BYTECODE" || fail "bad bytecode missing LOAD_BAD_BYTECODE: $bad_out"
-ok "corrupt bytecode rejected with exit 3 and LOAD_BAD_BYTECODE"
+echo "$bad_out" | grep -q "LMCODE_RETURN_BEGIN" || fail "bad bytecode missing envelope: $bad_out"
+echo "$bad_out" | grep -q '"code":"LOAD_BAD_BYTECODE"' || fail "bad bytecode missing LOAD_BAD_BYTECODE: $bad_out"
+ok "corrupt bytecode rejected with exit 3, envelope, and LOAD_BAD_BYTECODE"
 
-# 8. Memory budget enforcement test (runaway allocation fails cleanly with exit 3)
+# 8. Memory budget enforcement test (runaway allocation returns a RUN_HOST envelope)
 export PATH="$PWD/$BUILD_DIR:$PATH"
 mem_dir="$(mktemp -d build/mem.XXXXXX)"
 cat > "$mem_dir/oom.lms" <<LMS
-p = _dsl_ cli="lmgcp";
+s = load_schema(cli="lmgcp");
+p = _lmcode_ s;
   let ok = gcp.alloc_scratch_mb(32);
-end _dsl_
-savedsl(p, "$mem_dir/oom.dslb");
+end _lmcode_
+set_env("LMGCP_MAX_MEMORY_MB", "8");
+r = run_lmcode(p);
+assert(!r.ok && r.code == "RUN_HOST" && contains(r.message, "LMGCP_MAX_MEMORY_MB"), "memory budget failure envelope");
 LMS
-"$LMSCRIPT" "$mem_dir/oom.lms" >/dev/null 2>&1
 set +e
-oom_stdout="$(LMGCP_MAX_MEMORY_MB=8 "$HOST" --lmcode "$mem_dir/oom.dslb" 2>"$mem_dir/oom.stderr")"
+"$LMSCRIPT" "$mem_dir/oom.lms" 2>"$mem_dir/oom.stderr"
 oom_rc=$?
 set -e
 oom_stderr="$(cat "$mem_dir/oom.stderr")"
 rm -rf "$mem_dir"
-[ "$oom_rc" -eq 3 ] || fail "memory budget test exited $oom_rc, want 3"
+[ "$oom_rc" -eq 0 ] || fail "memory budget test exited $oom_rc, want 0 (envelope assertion)"
 echo "$oom_stderr" | grep -q "LMGCP_MAX_MEMORY_MB" || fail "memory budget stderr missing LMGCP_MAX_MEMORY_MB: $oom_stderr"
-echo "$oom_stdout" | grep -q '"code": "RUN_HOST"' || fail "memory budget stdout missing RUN_HOST: $oom_stdout"
-ok "memory budget limit enforced with exit 3, stderr message, and JSON RUN_HOST"
+ok "memory budget limit enforced with RUN_HOST envelope and stderr message"
 
 # 9. Go unit tests (safety & fake GCP SDK integration)
 go test ./internal/safety ./internal/host >/dev/null || fail "go test failed"

@@ -4,7 +4,8 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+s = load_schema(cli="lmgcp");
+p = _lmcode_ s;
   let base_docs = gcp.firestore_list_docs("feature_flags");
   assert_close(float(base_docs.len()), 2.0, 0.01);
 
@@ -36,40 +37,8 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   if (est_cost <= 0.0 || est_cost > gcp.cost_cap_usd()) { assert_close(est_cost, -1.0, 0.0); }
   let ok_ev = gcp.write_cost_evidence("34_firestore_multi_collection_state_store", "build/evidence/live-cost-34_firestore_multi_collection_state_store.json");
   print(gcp.cost_report());
-end _dsl_
-savedsl(p, "build/examples/34_firestore_multi_collection_state_store.dslb");
-r = system ${dsl_cli(p)} --lmcode build/examples/34_firestore_multi_collection_state_store.dslb;
-assert(r.code == 0);
+end _lmcode_
+r = run_lmcode(p);
+assert(r.ok, "lmgcp host failed");
 
-draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
-  scene.canvas(960, 500, "#0d1117");
-  scene.text(480.0, 34.0, 20.0, "Cloud Firestore Multi-Collection Workflow & Distributed Lock Store", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-  scene.text(480.0, 56.0, 12.5, "Baseline feature_flags inspected + ephemeral lmgcp_workflows & lmgcp_locks documents verified, redacted & deleted", "#8b949e").set_attr("text-anchor", "middle");
-
-  scene.rect(45.0, 95.0, 275.0, 350.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
-  scene.text(182.0, 130.0, 15.0, "Collection: feature_flags", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-  scene.text(182.0, 165.0, 12.0, "doc: checkout_v2 (enabled=true)", "#e6edf3").set_attr("text-anchor", "middle");
-  scene.text(182.0, 195.0, 12.0, "doc: ai_search (rollout=25%)", "#e6edf3").set_attr("text-anchor", "middle");
-  scene.text(182.0, 395.0, 12.0, "READ-ONLY BASELINE", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-
-  scene.rect(342.0, 95.0, 275.0, 350.0, "#161b22").set_attr("stroke", "#3fb950").set_attr("stroke-width", "2");
-  scene.text(480.0, 130.0, 15.0, "Collection: lmgcp_workflows", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-  scene.text(480.0, 165.0, 12.0, "doc: wf-101 (COMPLETED)", "#e6edf3").set_attr("text-anchor", "middle");
-  scene.text(480.0, 195.0, 11.5, "auth_header -> ya29.[REDACTED]", "#8b949e").set_attr("text-anchor", "middle");
-  scene.text(480.0, 225.0, 12.0, "doc: wf-102 (RUNNING)", "#e6edf3").set_attr("text-anchor", "middle");
-  scene.text(480.0, 395.0, 12.0, "CREATED & CLEANED", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-
-  scene.rect(640.0, 95.0, 275.0, 350.0, "#161b22").set_attr("stroke", "#a371f7").set_attr("stroke-width", "2");
-  scene.text(777.0, 130.0, 15.0, "Collection: lmgcp_locks", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-  scene.text(777.0, 165.0, 12.0, "doc: lock-shard-0", "#e6edf3").set_attr("text-anchor", "middle");
-  scene.text(777.0, 195.0, 11.5, "holder=worker-usc1-01 (ttl=60s)", "#8b949e").set_attr("text-anchor", "middle");
-  scene.text(777.0, 395.0, 12.0, "CREATED & CLEANED", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-
-  scene.render_png("images/34_firestore_multi_collection_state_store.png", 960, 500, 1);
-end _dsl_
-savedsl(draw, "build/examples/34_firestore_multi_collection_state_store_draw.dslb");
-rd = system ${dsl_cli(draw)} --lmcode build/examples/34_firestore_multi_collection_state_store_draw.dslb;
-assert(rd.code == 0);
-copy_file("images/34_firestore_multi_collection_state_store.png", "docs/images/34_firestore_multi_collection_state_store.png");
-println("ok 34_firestore_multi_collection_state_store - wrote images/34_firestore_multi_collection_state_store.png");
-println(split(r.stdout, "\n")[0]);
+println("ok 34_firestore_multi_collection_state_store (lmgcp; lmdraw step awaits host migration)");

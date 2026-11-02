@@ -5,7 +5,8 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
+s = load_schema(cli="lmgcp");
+p = _lmcode_ s;
   let proj = gcp.masked_project();
   let mode = gcp.auth_mode();
   let inv = gcp.inventory_summary();
@@ -47,41 +48,8 @@ p = _dsl_ cli="lmgcp" install="github:lmctl-ai/lmgcp@latest";
   assert_close(gcp.estimated_cost_usd(), 0.0, 0.00001);
   let ok_ev = gcp.write_cost_evidence("01_project_inventory_overview", "build/evidence/live-cost-01_project_inventory_overview.json");
   print(gcp.cost_report());
-end _dsl_
-savedsl(p, "build/examples/01_project_inventory_overview.dslb");
-r = system ${dsl_cli(p)} --lmcode build/examples/01_project_inventory_overview.dslb;
-assert(r.code == 0);
+end _lmcode_
+r = run_lmcode(p);
+assert(r.ok, "lmgcp host failed");
 
-draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
-  scene.canvas(960, 540, "#0d1117");
-  scene.text(480.0, 34.0, 20.0, "GCP Multi-Service Estate Inventory (Project: gcp-proj-****8f2a)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-  scene.text(480.0, 56.0, 12.5, "Read-only Google Cloud Go SDK discovery across 10 core service families | 43 baseline resources", "#8b949e").set_attr("text-anchor", "middle");
-
-  scene.rect(40.0, 76.0, 880.0, 430.0, "#161b22").set_attr("stroke", "#30363d");
-
-  fn bar(y: float, label: string, count: int, max_w: float, col: string, detail: string) -> void {
-    scene.text(200.0, y + 16.0, 13.0, label, "#c9d1d9").set_attr("text-anchor", "end").set_attr("font-weight", "600");
-    let w = float(count) * max_w / 8.0;
-    scene.rect(215.0, y, w, 24.0, col);
-    scene.text(225.0 + w, y + 16.0, 12.5, str(count) + "  (" + detail + ")", "#e6edf3");
-  }
-
-  bar(96.0,  "Compute Engine VMs", 7, 460.0, "#58a6ff", "us-central1, us-east1, us-west1");
-  bar(136.0, "VPC Firewall Rules", 6, 460.0, "#f0883e", "3 hardened, 3 open-world flagged");
-  bar(176.0, "VPC Subnetworks",    5, 460.0, "#3fb950", "4 with Private Google Access");
-  bar(216.0, "Cloud Storage (GCS)",5, 460.0, "#a371f7", "STANDARD, NEARLINE, COLDLINE, ARCHIVE");
-  bar(256.0, "Secret Manager Meta",5, 460.0, "#d2a8ff", "metadata only; payloads never read");
-  bar(296.0, "VPC Networks",       3, 460.0, "#79c0ff", "prod-vpc, staging-vpc, analytics-vpc");
-  bar(336.0, "Pub/Sub Topics",     3, 460.0, "#56d364", "order-events-v1, dlq, security-audit");
-  bar(376.0, "Cloud Run Services", 3, 460.0, "#ffa657", "payments-authorizer, catalog-search");
-  bar(416.0, "Cloud SQL Instances",3, 460.0, "#ff7b72", "2 REGIONAL HA PG15, 1 ZONAL MySQL8");
-  bar(456.0, "GKE K8s Clusters",   3, 460.0, "#39d353", "2 Autopilot hardened, 1 Standard");
-
-  scene.render_png("images/01_project_inventory_overview.png", 960, 540, 1);
-end _dsl_
-savedsl(draw, "build/examples/01_project_inventory_overview_draw.dslb");
-rd = system ${dsl_cli(draw)} --lmcode build/examples/01_project_inventory_overview_draw.dslb;
-assert(rd.code == 0);
-copy_file("images/01_project_inventory_overview.png", "docs/images/01_project_inventory_overview.png");
-println("ok 01_project_inventory_overview - wrote images/01_project_inventory_overview.png");
-println(split(r.stdout, "\n")[0]);
+println("ok 01_project_inventory_overview (lmgcp; lmdraw step awaits host migration)");

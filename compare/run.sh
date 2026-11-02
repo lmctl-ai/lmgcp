@@ -21,6 +21,7 @@ if [[ "${LMGCP_LIVE:-0}" != "1" ]]; then
 fi
 
 export PATH="$ROOT_DIR/bin:$PATH"
+LMSCRIPT="${LMSCRIPT_BIN:-lmscript}"
 
 if [[ ! -x "$ROOT_DIR/bin/lmgcp" ]]; then
   mkdir -p "$ROOT_DIR/bin"
@@ -87,14 +88,14 @@ for ex in "${EXAMPLES[@]}"; do
   mkdir -p "$ROOT_DIR/build/compare/$ex"
 
   t0_ms="$(now_ms)"
-  lmgcp_out="$(lmscript "examples/${ex}.lms" 2>&1)"
+  lmgcp_out="$("$LMSCRIPT" "examples/${ex}.lms" 2>&1)"
   t1_ms="$(now_ms)"
   lmgcp_ms="$(( t1_ms - t0_ms ))"
   printf "%s\n" "$lmgcp_out" > "$ROOT_DIR/build/compare/$ex/lmgcp.stdout"
 
   if [[ "$HAVE_LMCLOUD" -eq 1 ]]; then
     t2_ms="$(now_ms)"
-    lmcloud_out="$(lmscript "compare/${ex}/${ex}.lms" 2>&1)"
+    lmcloud_out="$("$LMSCRIPT" "compare/${ex}/${ex}.lms" 2>&1)"
     t3_ms="$(now_ms)"
     lmcloud_ms="$(( t3_ms - t2_ms ))"
     printf "%s\n" "$lmcloud_out" > "$ROOT_DIR/build/compare/$ex/lmcloud.stdout"

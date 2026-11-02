@@ -111,18 +111,48 @@ func realMain(args []string) int {
 		fmt.Fprint(os.Stderr, usageText)
 		return 2
 	}
+
+	dryInvocation := false
+	var files []string
+	if args[1] == "--lmcode" {
+		startIdx := 2
+		if len(args) >= 3 && args[2] == "--dry-run" {
+			dryInvocation = true
+			startIdx = 3
+		}
+		if startIdx >= len(args) {
+			return lmcode.FailureFrame(os.Stdout, "cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
+		}
+		for i := startIdx; i < len(args); i++ {
+			if args[i] == "" || strings.HasPrefix(args[i], "--") {
+				return lmcode.FailureFrame(os.Stdout, "cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
+			}
+		}
+		files = args[startIdx:]
+	}
+
+	results, resultsErr := lmcode.InvocationResultsFromCommand(files)
+	if args[1] == "--lmcode" {
+		if resultsErr != nil {
+			return lmcode.FailureFrame(os.Stdout, "cli", resultsErr)
+		}
+		if results.Dry() {
+			dryInvocation = true
+		}
+	}
+
 	h, err := host.NewHost()
 	if err != nil {
-		return lmcode.ReportAppFailure("failed to initialize GCP host: " + safety.RedactSecrets(err.Error()))
+		return lmcode.FailureFrame(os.Stdout, "app", lmcode.NewError(lmcode.APP_FAIL, "failed to initialize GCP host: "+safety.RedactSecrets(err.Error())))
 	}
 	defer h.Close()
 
 	reg := lmcode.NewRegistry()
 	if err := host.Register(reg, h); err != nil {
-		return lmcode.ReportAppFailure("failed to register host: " + err.Error())
+		return lmcode.FailureFrame(os.Stdout, "app", lmcode.NewError(lmcode.APP_FAIL, "failed to register host: "+err.Error()))
 	}
 
-	if len(args) >= 2 && args[1] == "--lmcode-schema" {
+	if args[1] == "--lmcode-schema" {
 		if len(args) == 2 {
 			printSchemaSummary(reg)
 			return 0
@@ -143,14 +173,14 @@ func realMain(args []string) int {
 		}
 		return 0
 	}
-	if len(args) == 2 && args[1] == "--lmcode-signatures" {
+	if args[1] == "--lmcode-signatures" && len(args) == 2 {
 		for _, s := range reg.Signatures() {
 			fmt.Println(s)
 		}
 		return 0
 	}
 
-	if len(args) >= 2 && args[1] == "--sweep" {
+	if args[1] == "--sweep" {
 		var maxAge int64 = 1
 		dryRun := true
 		for i := 2; i < len(args); i++ {
@@ -187,38 +217,37 @@ func realMain(args []string) int {
 		return 0
 	}
 
-	if len(args) >= 3 && args[1] == "--lmcode" {
-		dryRun := false
-		startIdx := 2
-		if args[2] == "--dry-run" {
-			dryRun = true
-			startIdx = 3
-		}
-		if startIdx >= len(args) {
-			fmt.Fprint(os.Stderr, usageText)
-			return 2
-		}
-		for i := startIdx; i < len(args); i++ {
-			if args[i] == "" || strings.HasPrefix(args[i], "--") {
-				fmt.Fprint(os.Stderr, usageText)
-				return 2
-			}
+	if args[1] == "--lmcode" {
+		contract, err := lmcode.ResultContractFromSchema(schema.EmbeddedSchema)
+		if err != nil {
+			return lmcode.FailureFrame(os.Stdout, "load", err)
 		}
 
 		ctx := lmcode.NewContext()
 		ctx.Set("gcp", h)
+		ctx.SetDry(dryInvocation)
 
-		for i := startIdx; i < len(args); i++ {
-			codeBytes, err := os.ReadFile(args[i])
+		for _, registration := range results.Registrations() {
+			index := registration.Index
+			codeBytes, err := os.ReadFile(registration.File)
 			if err != nil {
-				return lmcode.ReportError("load", lmcode.NewError(lmcode.LOAD_BAD_BYTECODE, err.Error()))
+				_ = results.Fail(&index, "load", lmcode.NewError(lmcode.LOAD_BAD_BYTECODE, err.Error()))
+				break
 			}
 			prog, err := lmcode.Load(codeBytes, schema.EmbeddedSchema, reg)
 			if err != nil {
-				return lmcode.ReportError("load", err)
+				_ = results.Fail(&index, "load", err)
+				break
 			}
-			if dryRun {
-				lmcode.ReportOK()
+			if _, err := results.Select(index, reg, contract); err != nil {
+				_ = results.Fail(&index, "run", err)
+				break
+			}
+			if dryInvocation {
+				if err := results.Complete(index); err != nil {
+					_ = results.Fail(&index, "run", err)
+					break
+				}
 				continue
 			}
 
@@ -228,25 +257,29 @@ func realMain(args []string) int {
 				exitOnce.Do(func() {
 					_ = h.CleanupLedger()
 					fmt.Fprintln(os.Stderr, wErr.Error())
-					code := lmcode.ReportError("run", wErr)
-					os.Exit(code)
+					os.Exit(lmcode.FailureFrame(os.Stdout, "run", wErr))
 				})
 			})
 			runErr := prog.Run(ctx, reg)
 			stopWatchdog()
 			if h.AuthError() != "" {
-				return lmcode.ReportAppFailure(h.AuthError())
+				_ = results.Fail(nil, "app", lmcode.NewError(lmcode.APP_FAIL, h.AuthError()))
+				break
 			}
 			if runErr != nil {
 				_ = h.CleanupLedger()
 				if strings.Contains(runErr.Error(), membudget.EnvVarName) {
 					fmt.Fprintln(os.Stderr, runErr.Error())
 				}
-				return lmcode.ReportError("run", runErr)
+				_ = results.Fail(&index, "run", runErr)
+				break
 			}
-			lmcode.ReportOK()
+			if err := results.Complete(index); err != nil {
+				_ = results.Fail(&index, "run", err)
+				break
+			}
 		}
-		return 0
+		return results.WriteFrame(os.Stdout)
 	}
 
 	fmt.Fprint(os.Stderr, usageText)
