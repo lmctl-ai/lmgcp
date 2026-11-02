@@ -111,12 +111,14 @@ func (h *Host) queueBase() string {
 	}
 	return ep + "/v1"
 }
-func (h *Host) topicPath(name string) string {
-	return h.queueBase() + "/projects/" + url.PathEscape(h.project) + "/topics/" + url.PathEscape(name)
+func (h *Host) topicName(name string) string {
+	return "projects/" + h.project + "/topics/" + url.PathEscape(name)
 }
-func (h *Host) subPath(name string) string {
-	return h.queueBase() + "/projects/" + url.PathEscape(h.project) + "/subscriptions/" + url.PathEscape(name)
+func (h *Host) subName(name string) string {
+	return "projects/" + h.project + "/subscriptions/" + url.PathEscape(name)
 }
+func (h *Host) topicPath(name string) string { return h.queueBase() + "/" + h.topicName(name) }
+func (h *Host) subPath(name string) string   { return h.queueBase() + "/" + h.subName(name) }
 
 func (h *Host) BucketCreate(name string) (bool, error) {
 	if e := ValidateBucketName(name); e != nil {
@@ -382,17 +384,17 @@ func (h *Host) QueueCreate(name string) (bool, error) {
 	}
 	topicCreated := status >= 200 && status < 300
 	if status != 409 && !topicCreated {
-		return false, h.setErr("queue_create", name, h.classify(status, data))
+		return false, h.setErr("queue_create", fmt.Sprintf("%s topic-status=%d", name, status), h.classify(status, data))
 	}
 	sub := h.subPath(name)
-	body, _ := json.Marshal(map[string]any{"topic": topic, "ackDeadlineSeconds": 30, "expirationPolicy": map[string]any{}})
+	body, _ := json.Marshal(map[string]any{"topic": h.topicName(name), "ackDeadlineSeconds": 30, "expirationPolicy": map[string]any{}})
 	status, data, err = h.request(context.Background(), http.MethodPut, sub, body, "application/json")
 	if err != nil {
 		return false, h.setErr("queue_create", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
 	subCreated := status >= 200 && status < 300
 	if status != 409 && !subCreated {
-		return false, h.setErr("queue_create", name, h.classify(status, data))
+		return false, h.setErr("queue_create", fmt.Sprintf("%s sub-status=%d", name, status), h.classify(status, data))
 	}
 	return topicCreated || subCreated, nil
 }
@@ -452,7 +454,7 @@ func (h *Host) QueueExists(name string) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	want := h.topicPath(name)
+	want := h.topicName(name)
 	got, _ := sub["topic"].(string)
 	return got == want, nil
 }
@@ -573,7 +575,7 @@ func (h *Host) QueueReceive(queue string, maxMessages, waitSeconds, visibility i
 			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
 		}
 		if status < 200 || status >= 300 {
-			return nil, h.setErr("queue_receive", queue, h.classify(status, data))
+			return nil, h.setErr("queue_receive", h.subPath(queue)+":pull", h.classify(status, data))
 		}
 		var pull struct {
 			ReceivedMessages []struct {
@@ -606,7 +608,7 @@ func (h *Host) QueueReceive(queue string, maxMessages, waitSeconds, visibility i
 			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
 		}
 		if status < 200 || status >= 300 {
-			return nil, h.setErr("queue_receive", queue, h.classify(status, data))
+			return nil, h.setErr("queue_receive", h.subPath(queue)+":modifyAckDeadline", h.classify(status, data))
 		}
 		return out, nil
 	}
