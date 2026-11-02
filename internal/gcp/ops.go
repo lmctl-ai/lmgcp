@@ -380,6 +380,84 @@ func (h *Host) ObjectList(bucket, prefix string, maxKeys int64, token string) (*
 	return out, nil
 }
 
+func (h *Host) BucketListPage(token string) ([]string, string, error) {
+	u := h.storageBase() + "/b?project=" + url.QueryEscape(h.project)
+	if token != "" {
+		u += "&pageToken=" + url.QueryEscape(token)
+	}
+	status, data, err := h.request(h.ctx, http.MethodGet, u, nil, "")
+	if err != nil {
+		return nil, "", err
+	}
+	if status < 200 || status >= 300 {
+		return nil, "", h.setErr("bucket_list", "", h.classify(status, data))
+	}
+	var page struct {
+		Items []struct {
+			Name string `json:"name"`
+		} `json:"items"`
+		Next string `json:"nextPageToken"`
+	}
+	if err := json.Unmarshal(data, &page); err != nil {
+		return nil, "", err
+	}
+	names := make([]string, 0, len(page.Items))
+	for _, it := range page.Items {
+		names = append(names, it.Name)
+	}
+	sort.Strings(names)
+	return names, page.Next, nil
+}
+
+func (h *Host) QueueListPage(token string) ([]string, string, error) {
+	topics := map[string]bool{}
+	subs := map[string]bool{}
+	next := ""
+	base := h.queueBase() + "/projects/" + url.PathEscape(h.project)
+	for _, kind := range []string{"topics", "subscriptions"} {
+		u := base + "/" + kind
+		if token != "" {
+			u += "?pageToken=" + url.QueryEscape(token)
+		}
+		status, data, err := h.request(h.ctx, http.MethodGet, u, nil, "")
+		if err != nil {
+			return nil, "", err
+		}
+		if status < 200 || status >= 300 {
+			return nil, "", h.setErr("queue_list", kind, h.classify(status, data))
+		}
+		var page struct {
+			Topics []struct {
+				Name string `json:"name"`
+			} `json:"topics"`
+			Subscriptions []struct {
+				Name string `json:"name"`
+			} `json:"subscriptions"`
+			Next string `json:"nextPageToken"`
+		}
+		if err := json.Unmarshal(data, &page); err != nil {
+			return nil, "", err
+		}
+		for _, t := range page.Topics {
+			topics[shortName(t.Name)] = true
+		}
+		for _, s := range page.Subscriptions {
+			subs[shortName(s.Name)] = true
+		}
+		if page.Next != "" {
+			next = page.Next
+		}
+	}
+	var out []string
+	for n := range topics {
+		if subs[n] {
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	return out, next, nil
+}
+
 func (h *Host) QueueCreate(name string) (bool, error) {
 	if e := ValidateQueueName(name); e != nil {
 		return false, h.setErr("queue_create", name, e)
@@ -601,24 +679,22 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 	if maxMessages == 0 {
 		maxMessages = 1
 	}
-	if waitSeconds == 0 {
-		waitSeconds = 1
+	wait := waitSeconds
+	if wait <= 0 {
+		wait = 0
 	}
-	deadline := time.Now().Add(time.Duration(waitSeconds) * time.Second)
+	ctx := h.ctx
+	var cancel context.CancelFunc
+	if wait > 0 {
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(wait)*time.Second)
+		defer cancel()
+	}
+	returnImmediately := wait == 0
 	for {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			return []RawMessage{}, nil
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), remaining)
-		req, _ := json.Marshal(map[string]any{"maxMessages": maxMessages, "returnImmediately": false})
-		status, data, err := h.request(ctx, http.MethodPost, h.subPath(queue)+":pull", req, "application/json")
-		cancel()
+		req, _ := json.Marshal(map[string]any{"maxMessages": maxMessages, "returnImmediately": returnImmediately})
+		status, data, err := h.requestIdem(ctx, http.MethodPost, h.subPath(queue)+":pull", req, "application/json", false)
 		if err != nil {
-			if time.Now().Before(deadline) {
-				continue
-			}
-			return []RawMessage{}, nil
+			return nil, cerrNet("queue_receive", queue, err)
 		}
 		if status < 200 || status >= 300 {
 			return nil, h.setErr("queue_receive", queue, h.classify(status, data))
@@ -636,17 +712,24 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, status, "decode", err.Error()))
 		}
 		if len(pull.ReceivedMessages) == 0 {
-			if time.Now().Before(deadline) {
-				time.Sleep(50 * time.Millisecond)
+			if wait == 0 {
+				return []RawMessage{}, nil
+			}
+			select {
+			case <-ctx.Done():
+				return []RawMessage{}, nil
+			case <-time.After(50 * time.Millisecond):
 				continue
 			}
-			return []RawMessage{}, nil
 		}
 		ids := make([]string, 0, len(pull.ReceivedMessages))
 		out := make([]RawMessage, 0, len(pull.ReceivedMessages))
 		for _, rm := range pull.ReceivedMessages {
 			ids = append(ids, rm.AckId)
-			raw, _ := base64.StdEncoding.DecodeString(rm.Message.Data)
+			raw, derr := base64.StdEncoding.DecodeString(rm.Message.Data)
+			if derr != nil {
+				return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, status, "decode", "malformed message data"))
+			}
 			id := rm.Message.MessageId
 			if id == "" {
 				id = rm.AckId
@@ -654,15 +737,25 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 			out = append(out, RawMessage{ID: id, Wire: string(raw), Receipt: rm.AckId})
 		}
 		mod, _ := json.Marshal(map[string]any{"ackIds": ids, "ackDeadlineSeconds": visibility})
-		status, data, err = h.request(h.ctx, http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mod, "application/json")
+		status, data, err = h.requestIdem(h.ctx, http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mod, "application/json", false)
 		if err != nil {
-			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
+			return nil, cerrNet("queue_receive", queue, err)
 		}
 		if status < 200 || status >= 300 {
 			return nil, h.setErr("queue_receive", queue, h.classify(status, data))
 		}
 		return out, nil
 	}
+}
+
+func cerrNet(op, target string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if e, ok := err.(*CloudError); ok {
+		return e
+	}
+	return newCloudError(CodeInternal, 0, "transport", err.Error())
 }
 
 func (h *Host) BucketCreateToken(bucket string) (string, error) {

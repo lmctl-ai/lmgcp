@@ -123,8 +123,8 @@ func (a *Adapter) ListBuckets(ctx context.Context, token string) ([]string, stri
 	if fake {
 		return a.fake.ListBuckets(ctx, token)
 	}
-	v, e := h.BucketList()
-	return v, "", cerr(e)
+	v, next, e := h.BucketListPage(token)
+	return v, next, cerr(e)
 }
 func (a *Adapter) PutObject(ctx context.Context, b, k string, body []byte, ct string, md map[string]string) (hostkit.ObjectMeta, error) {
 	h, fake, err := a.route(ctx)
@@ -275,8 +275,8 @@ func (a *Adapter) ListQueues(ctx context.Context, token string) ([]string, strin
 	if fake {
 		return a.fake.ListQueues(ctx, token)
 	}
-	v, e := h.QueueList()
-	return v, "", cerr(e)
+	v, next, e := h.QueueListPage(token)
+	return v, next, cerr(e)
 }
 func (a *Adapter) BucketCreateToken(ctx context.Context, b string) (string, error) {
 	h, fake, err := a.route(ctx)

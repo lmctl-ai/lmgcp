@@ -75,6 +75,21 @@ Branch `hostkit-port` from `635a665`.
 - The adapter sends `Authorization: Bearer $LMGCP_SIM_TOKEN` on loopback
   requests, per design 02 M3.
 
+## SolReviewer final GCP fixes
+
+- Bucket/queue listing adapted to one-page methods (`BucketListPage`,
+  `QueueListPage`) with next tokens; hostkit `ListAll` now enforces repeated
+  token/page/deadline limits. Bucket and queue stall tests fail after one page.
+- Queue receive derives its wait context from the caller context, uses
+  `returnImmediately=true` for wait=0, does not retry a pull after a transport
+  failure, and rejects malformed base64 instead of fabricating an ID. Tests:
+  10 ms parent deadline, accepted-pull-then-EOF makes exactly one pull.
+- Bucket/queue create conflicts are returned to hostkit (not swallowed as
+  false/OK), so v3 token read-back decides ownership. Tests cover matching-token
+  conflict true and pre-existing/foreign conflict false for bucket and queue.
+- `QueueCapsFor` reports offline fake `LongPoll=false` and simulator
+  `LongPoll=true`.
+
 ## Hostkit gaps observed
 
 - `hostkit` validates the receipt before the queue exists probe, so a
