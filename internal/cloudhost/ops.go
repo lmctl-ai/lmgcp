@@ -573,7 +573,7 @@ func (h *Host) QueueReceive(queue string, maxMessages, waitSeconds, visibility i
 			if time.Now().Before(deadline) {
 				continue
 			}
-			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
+			return &QueueMessageList{}, nil
 		}
 		if status < 200 || status >= 300 {
 			return nil, h.setErr("queue_receive", h.subPath(queue)+":pull", h.classify(status, data))

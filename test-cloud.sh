@@ -21,15 +21,29 @@ assert(r.ok && r.result.prov == "gcp", "trivial shared-schema host failed");
 go vet ./...
 SIM_SH="${SIM_SH:-/home/ubuntu/cloud/lmcloud-sims/scripts/sim.sh}"
 LMCLOUD_DIR="${LMCLOUD_DIR:-/home/ubuntu/cloud/lmcloud}"
-if [[ -x "$SIM_SH" && -x "$LMCLOUD_DIR/tests/run-conformance.sh" ]]; then
+if [[ -x "$LMCLOUD_DIR/tests/run-conformance.sh" ]]; then
   export LMCLOUD_SIM_DIR="${LMCLOUD_SIM_DIR:-/home/ubuntu/cloud/lmcloud-sims/.cache/sims}"
-  cleanup() { "$SIM_SH" stop gcp --name lmgcp-cloud-test >/dev/null 2>&1 || true; }
+  if [[ -n "${GCPSIM_JVM_JAR:-}" ]]; then
+    PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
+    ENDPOINT="http://127.0.0.1:$PORT"
+    java -jar "$GCPSIM_JVM_JAR" serve --port "$PORT" >/tmp/lmgcp-test-cloud-gcpsim.log 2>&1 &
+    SIM_PID=$!
+    cleanup() { kill "$SIM_PID" 2>/dev/null || true; wait "$SIM_PID" 2>/dev/null || true; }
+  elif [[ -x "$SIM_SH" ]]; then
+    cleanup() { "$SIM_SH" stop gcp --name lmgcp-cloud-test >/dev/null 2>&1 || true; }
+    trap cleanup EXIT
+    ENDPOINT="$("$SIM_SH" start gcp --name lmgcp-cloud-test)"
+    SIM_PID=""
+  else
+    echo "SKIP lmcloud conformance (no gcpsim/JVM and sim.sh not found)"
+    exit 0
+  fi
+  for _ in $(seq 1 80); do curl -sf -o /dev/null "$ENDPOINT/health" && break; sleep 0.25; done
   trap cleanup EXIT
-  ENDPOINT="$("$SIM_SH" start gcp --name lmgcp-cloud-test)"
   "$LMCLOUD_DIR/tests/run-conformance.sh" "$PWD/scripts/lmgcp-cloud-host.sh" "$ENDPOINT" object-storage
-  echo "object-storage conformance PASS; queue conformance is WIP (gcpsim REST modifyAckDeadline gap)"
+  "$LMCLOUD_DIR/tests/run-conformance.sh" "$PWD/scripts/lmgcp-cloud-host.sh" "$ENDPOINT" queue
   cleanup; trap - EXIT
 else
-  echo "SKIP lmcloud conformance (sim or lmcloud repo not found)"
+  echo "SKIP lmcloud conformance (lmcloud repo not found)"
 fi
-echo "PHASE A/B PASS"
+echo "PHASE A/B/C PASS"

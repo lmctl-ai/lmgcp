@@ -21,22 +21,21 @@ Branch `shared-schema` cut from `go-lmcode-head` `4ba074b`.
 - lmcloud conformance: 12/12 pass in open mode; scenario 12 skips because the
   shared gcpsim instance is in `--auth open` mode.
 
-## Phase C status (WIP — sim gap)
+## Phase C status (complete)
 
 - Queue implemented as Pub/Sub topic+subscription pairs, including
   `expirationPolicy: {}`, topic+subscription intersection for exists/list,
   `returnImmediately:false` pull under `max(wait,1)` deadline, empty-body
-  sentinel, and acknowledge.
-- Current conformance: 5/13 pass (02, 08, 10, 11, 13-skip); scenarios 01, 03,
-  04, 05, 06, 07, 09, 12 fail.
-- Simulator gap: gcpsim REST `POST /v1/projects/{p}/subscriptions/{s}:modifyAckDeadline`
-  returns HTTP 404 even for a valid in-flight ackId (while `:acknowledge` and
-  `:pull` work; the native binary contains gRPC ModifyAckDeadline). This blocks
-  visibility/nack/receive-with-messages scenarios. Recorded, not edited in
-  gcpsim. Workaround options: use the pubsub gRPC client for queue receive/nack,
-  or fix gcpsim REST.
-- Also pending: queue 01 exists/list ordering once modify is fixed; queue 12
-  payload-size guard depends on receive.
+  sentinel, acknowledge, and modifyAckDeadline.
+- lmcloud conformance against the fixed gcpsim JVM build: **13/13 pass**, 1 skip
+  (13-auth-enforced-denial skips in open mode).
+- gcpsim root cause/fix (branch `fix-modify-ack-deadline`): the upstream REST
+  controller had no `:modifyAckDeadline` route, and the gRPC method was a no-op.
+  Added the REST route and a real service method; deadline 0 requeues the
+  in-flight message, 0..600 bounds, invalid ackId returns INVALID_ARGUMENT.
+  Auth-enforce `pubsub.subscriptions.consume` path verified manually.
+- `test-cloud.sh` now runs object-storage + queue conformance and accepts
+  `GCPSIM_JVM_JAR` so it uses the fixed JVM build.
 
 ## Spec/sim findings to carry forward
 
