@@ -5,6 +5,7 @@ package host
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"google.golang.org/api/googleapi"
@@ -120,7 +121,7 @@ func TestSweepDeletesBQTable(t *testing.T) {
 		t.Fatalf("create table: %v", h.LastError())
 	}
 	if got := h.SweepDelete(0); got != 2 {
-		t.Fatalf("sweep deleted %d, want 2 (last_error=%q)", got, h.LastError())
+		t.Fatalf("sweep deleted %d, want 2 in the explicit fake harness", got)
 	}
 	if got := h.ledger.Count(); got != 0 {
 		t.Fatalf("ledger count = %d, want 0", got)
@@ -140,5 +141,110 @@ func TestAbsentErrorRequiresTyped404Reason(t *testing.T) {
 	h.fail(fmt.Errorf("404 not found: lmgcp-404-demo"))
 	if h.absentError() {
 		t.Fatal("message text was used for absence classification")
+	}
+}
+
+func TestDefiniteCreateFailureClassification(t *testing.T) {
+	for _, code := range []int{400, 401, 403, 409, 412} {
+		if !definiteCreateFailure(&googleapi.Error{Code: code}) {
+			t.Fatalf("code %d should be definite", code)
+		}
+	}
+	for _, code := range []int{408, 429, 499, 500, 503} {
+		if definiteCreateFailure(&googleapi.Error{Code: code}) {
+			t.Fatalf("code %d should remain pending", code)
+		}
+	}
+	if definiteCreateFailure(nil) {
+		t.Fatal("nil error classified definite")
+	}
+}
+
+func TestFake404CarriesNotFoundReason(t *testing.T) {
+	h, err := NewHost(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	_ = h.StorageGetBucket("lmgcp-does-not-exist")
+	if !h.absentError() {
+		t.Fatalf("fake 404 did not classify absent: %q", h.LastError())
+	}
+}
+
+func TestPendingIntentRecoveryAndLabeledSibling(t *testing.T) {
+	server, err := fakegcp.NewServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	t.Setenv("LMGCP_LIVE", "")
+	state := t.TempDir()
+	if err := os.Chmod(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runID := "run-1234567890-abcdefabcdef"
+
+	owned, err := newHost(false, false, server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !owned.SetRunID(runID) {
+		t.Fatal(owned.LastError())
+	}
+	if got := owned.StorageCreateBucket("lmgcp-pending-owned", "US", "STANDARD"); got == nil || owned.LastError() != "" {
+		t.Fatalf("owned bucket: %v", owned.LastError())
+	}
+	owned.Close()
+
+	unowned, err := newHost(false, false, server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := unowned.StorageCreateBucket("lmgcp-pending-unowned", "US", "STANDARD"); got == nil || unowned.LastError() != "" {
+		t.Fatalf("unowned bucket: %v", unowned.LastError())
+	}
+	unowned.Close()
+
+	path := filepath.Join(state, "journal-"+runID+".jsonl")
+	meta := safety.JournalMeta{RunID: runID, Provider: "gcp", Account: "lmgcp-sandbox-8f2a", Tenant: "lmgcp-sandbox-8f2a", Scope: "us-central1", Endpoint: "in-process-fake"}
+	j, err := safety.OpenJournal(path, meta, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Intent("bucket", "US", "lmgcp-pending-owned", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Intent("bucket", "US", "lmgcp-pending-unowned", 0); err != nil {
+		t.Fatal(err)
+	}
+	j.Close()
+
+	rec, err := newHost(false, false, server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rec.Close()
+	if err := rec.LoadRecovery(path); err != nil {
+		t.Fatal(err)
+	}
+	deleted, _, retained := rec.SweepDeleteDetailed(0)
+	if deleted != 1 || retained != 1 {
+		t.Fatalf("pending sweep deleted=%d retained=%d, want 1/1", deleted, retained)
+	}
+	names := rec.StorageListBuckets()
+	if containsName(names, "lmgcp-pending-owned") {
+		t.Fatal("owned pending-intent bucket survived")
+	}
+	if !containsName(names, "lmgcp-pending-unowned") {
+		t.Fatal("labeled unowned sibling was deleted")
+	}
+}
+
+func TestFakeOwnershipBypassUnreachableWithoutFake(t *testing.T) {
+	h := &Host{}
+	owned, absent, reason := h.verifyOwnership(safety.LedgerEntry{Kind: "pubsub_topic", Name: "lmgcp-topic"})
+	if owned || absent || reason == "" {
+		t.Fatalf("non-fake ownership check accepted an unverified kind: owned=%v absent=%v reason=%q", owned, absent, reason)
 	}
 }

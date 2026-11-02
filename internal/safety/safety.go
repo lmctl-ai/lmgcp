@@ -465,6 +465,11 @@ func (l *RunLedger) Begin(kind, location, name string) error {
 func (l *RunLedger) FailIntent(kind, location, name, reason string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	key := LedgerEntry{Kind: kind, Location: location, Name: name}.Key()
+	if e, ok := l.byKey[key]; ok && e.State != "pending" {
+		// A failed duplicate create must never cancel an owned confirmed entry.
+		return
+	}
 	if l.journal != nil {
 		if err := l.journal.Failed(kind, location, name, reason); err != nil {
 			l.journalErr = err
@@ -536,8 +541,12 @@ func (l *RunLedger) ReplaceFromJournal(records []JournalRecord) {
 				order = append(order, key)
 			}
 			l.byKey[key] = e
-		case EventDeleted, EventFailed:
+		case EventDeleted:
 			delete(l.byKey, key)
+		case EventFailed:
+			if e, ok := l.byKey[key]; ok && e.State == "pending" {
+				delete(l.byKey, key)
+			}
 		}
 	}
 	for _, key := range order {

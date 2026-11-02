@@ -105,9 +105,11 @@ those, not the whole provider host.
 - `--sweep --run-id ID` or `--sweep --ledger PATH` loads ownership, includes
   pending intents, computes real age from persisted timestamps (fake age only
   for the seeded fake epoch), and deletes in reverse journal order.
-- Definite create failures (any 4xx, including 409) write a `failed` record and
-  drop the pending intent; only unknown outcomes (timeout/5xx/transport) stay
-  pending. `set_run_id` is refused once the journal is attached.
+- Definite create failures (4xx except 408/429/499) write a `failed` record and
+  drop a **pending** intent only. A failed record never cancels a confirmed
+  entry; a duplicate create of an owned name does not write a new intent.
+  Timeout/5xx/transport and 408/429/499 stay pending. `set_run_id` is refused
+  once the journal is attached.
 - Before ANY sweep delete, GET the remote resource and verify ownership:
   `lmgcp_test == journal run ID`, and (live) created-at not before the intent.
   Kinds without a verifier are retained. Never trust a prefix alone.
@@ -116,13 +118,15 @@ those, not the whole provider host.
   text; wrong endpoint/proxy/permission errors are retained/uncertain. Sweep
   reports deleted and absent separately.
 - Torn tail: append records the prior offset and truncates back on write
-  failure; load ignores an invalid final line without a trailing newline but
-  fails on any other invalid line.
+  failure; load ignores an invalid final line without a trailing newline; a
+  writer reopens/truncates to the last newline before appending; any other
+  invalid line is fatal.
 - The active run holds an exclusive flock; a second writer or sweep gets a clear
-  error. `--force-stale` is an operator escape hatch, not normal operation.
-  Buckets are emptied (objects and versions) before delete; KMS CryptoKeys are
-  retained in live mode; bq_table and firestore_doc have cleanup paths.
-  `set_auto_cleanup(false)` persists retention.
+  error. POSIX flock is released on holder death, so there is no stale-lock
+  escape hatch; `--force-stale` was removed. Buckets are emptied (objects and
+  versions) before delete; KMS CryptoKeys are retained in live mode; bq_table
+  and firestore_doc have cleanup paths. `set_auto_cleanup(false)` persists
+  retention.
 - Dry invocations create no live journal. A hard abort skips provider cleanup
   but leaves the fsynced journal and prints its run ID/path; a separate sweep
   process reclaims it. Tests cover intent-without-confirm, abort/recovery,
@@ -158,14 +162,31 @@ those, not the whole provider host.
    journal lock, run-ID validation, truncate-on-failure and tolerant-tail rules
    are shared; do not reimplement them per host.
 
-## LIVE gate
+## LIVE gate checklist (all must hold before any host enables LIVE)
 
-Do not enable LIVE in another host until it has: durable journal with
-intent-before-create, cross-process `--sweep` recovery, real timestamps,
-retain/tombstone semantics, every kind covered, one-slot builder abort metadata,
-and an abort/recovery acceptance test against a persistent loopback emulator.
-Until the SDK exposes cooperative VM/request cancellation, the watchdog may not
-wait for `Program.Run`; recovery is via the durable journal and explicit sweep.
+- Async delete operations are polled to completion before writing a tombstone;
+  otherwise retain as `delete pending`.
+- Non-default DNS record sets and every other sub-resource are emptied before
+  parent delete and are journaled as intents.
+- Ownership is verified for EVERY resource kind: labels where supported,
+  otherwise a description/created-at token. The only bypass is an explicit
+  `// FAKE-ONLY: never port` branch for non-bucket kinds in the in-process
+  fake; it is proven unreachable when `fakeSrv == nil` (LIVE or external
+  endpoint). No port may reintroduce it.
+- Windows has a real `LockFileEx` lock and ACL/permission check, and
+  `checkPrivateDir` is verified not to reject normal Windows directories.
+  Until then LIVE is blocked on Windows.
+- Journal compaction/rotation exists so retention sweeps do not grow without
+  bound.
+- A real disk-full/`ulimit -f` probe and a gcpsim kill between intent and
+  confirm are part of the release gate; a labeled same-name sibling must
+  survive.
+- One-slot builder abort metadata, durable `--sweep --run-id/--ledger`
+  recovery, and an abort/recovery acceptance test against a persistent loopback
+  emulator all pass.
+- Until the SDK exposes cooperative VM/request cancellation, the watchdog may
+  not wait for `Program.Run`; recovery is via the durable journal and explicit
+  sweep. LIVE remains gated even after the checklist items above.
 
 ## Verification gate
 

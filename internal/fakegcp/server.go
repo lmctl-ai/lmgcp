@@ -238,6 +238,19 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 	})
 }
 
+func writeNotFound(w http.ResponseWriter, msg string) {
+	writeJSON(w, http.StatusNotFound, map[string]any{
+		"error": map[string]any{
+			"code":    http.StatusNotFound,
+			"message": msg,
+			"errors": []map[string]any{{
+				"reason":  "notFound",
+				"message": msg,
+			}},
+		},
+	})
+}
+
 func lastSegment(p string) string {
 	p = strings.TrimSuffix(p, "/")
 	if idx := strings.LastIndex(p, "/"); idx >= 0 {
@@ -345,7 +358,7 @@ func (s *Server) handleCompute(w http.ResponseWriter, r *http.Request, sub strin
 			if r.Method == http.MethodGet {
 				n, ok := s.vpcs[name]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "network not found: "+name)
+					writeNotFound(w, "network not found: "+name)
 					return
 				}
 				writeJSON(w, http.StatusOK, n)
@@ -390,7 +403,7 @@ func (s *Server) handleCompute(w http.ResponseWriter, r *http.Request, sub strin
 			if r.Method == http.MethodGet {
 				fw, ok := s.firewalls[name]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "firewall not found: "+name)
+					writeNotFound(w, "firewall not found: "+name)
 					return
 				}
 				writeJSON(w, http.StatusOK, fw)
@@ -440,7 +453,7 @@ func (s *Server) handleCompute(w http.ResponseWriter, r *http.Request, sub strin
 			if r.Method == http.MethodGet {
 				sn, ok := s.subnets[key]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "subnet not found: "+key)
+					writeNotFound(w, "subnet not found: "+key)
 					return
 				}
 				writeJSON(w, http.StatusOK, sn)
@@ -531,7 +544,7 @@ func (s *Server) handleCompute(w http.ResponseWriter, r *http.Request, sub strin
 				if r.Method == http.MethodGet {
 					inst, ok := s.instances[key]
 					if !ok {
-						writeErr(w, http.StatusNotFound, "instance not found: "+key)
+						writeNotFound(w, "instance not found: "+key)
 						return
 					}
 					writeJSON(w, http.StatusOK, inst)
@@ -549,7 +562,7 @@ func (s *Server) handleCompute(w http.ResponseWriter, r *http.Request, sub strin
 				key := zone + "/" + name
 				inst, ok := s.instances[key]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "instance not found: "+key)
+					writeNotFound(w, "instance not found: "+key)
 					return
 				}
 				switch action {
@@ -625,7 +638,7 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request, sub strin
 		bktName := parts[1]
 		bkt, ok := s.buckets[bktName]
 		if !ok {
-			writeErr(w, http.StatusNotFound, "bucket not found: "+bktName)
+			writeNotFound(w, "bucket not found: "+bktName)
 			return
 		}
 		if r.Method == http.MethodGet {
@@ -665,7 +678,7 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request, sub strin
 		bktName := parts[1]
 		objs, ok := s.objects[bktName]
 		if !ok {
-			writeErr(w, http.StatusNotFound, "bucket not found: "+bktName)
+			writeNotFound(w, "bucket not found: "+bktName)
 			return
 		}
 		if len(parts) == 3 && r.Method == http.MethodGet {
@@ -695,7 +708,7 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request, sub strin
 			if r.Method == http.MethodGet {
 				o, exists := objs[objName]
 				if !exists {
-					writeErr(w, http.StatusNotFound, "object not found: "+objName)
+					writeNotFound(w, "object not found: "+objName)
 					return
 				}
 				writeJSON(w, http.StatusOK, &storage.Object{
@@ -756,7 +769,7 @@ func (s *Server) handlePubsub(w http.ResponseWriter, r *http.Request, sub string
 			if strings.HasSuffix(raw, ":publish") && r.Method == http.MethodPost {
 				topicName := strings.TrimSuffix(raw, ":publish")
 				if _, ok := s.topics[topicName]; !ok {
-					writeErr(w, http.StatusNotFound, "topic not found: "+topicName)
+					writeNotFound(w, "topic not found: "+topicName)
 					return
 				}
 				var req pubsub.PublishRequest
@@ -806,7 +819,7 @@ func (s *Server) handlePubsub(w http.ResponseWriter, r *http.Request, sub string
 				_ = json.NewDecoder(r.Body).Decode(&req)
 				t, ok := s.topics[topicName]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "topic not found")
+					writeNotFound(w, "topic not found")
 					return
 				}
 				if req.Topic != nil && req.Topic.Labels != nil {
@@ -817,7 +830,7 @@ func (s *Server) handlePubsub(w http.ResponseWriter, r *http.Request, sub string
 			case http.MethodGet:
 				t, ok := s.topics[topicName]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "topic not found")
+					writeNotFound(w, "topic not found")
 					return
 				}
 				writeJSON(w, http.StatusOK, t)
@@ -849,7 +862,7 @@ func (s *Server) handlePubsub(w http.ResponseWriter, r *http.Request, sub string
 			if strings.HasSuffix(raw, ":pull") && r.Method == http.MethodPost {
 				subName := strings.TrimSuffix(raw, ":pull")
 				if _, ok := s.subscriptions[subName]; !ok {
-					writeErr(w, http.StatusNotFound, "subscription not found: "+subName)
+					writeNotFound(w, "subscription not found: "+subName)
 					return
 				}
 				var req pubsub.PullRequest
@@ -896,7 +909,7 @@ func (s *Server) handlePubsub(w http.ResponseWriter, r *http.Request, sub string
 			case http.MethodGet:
 				sb, ok := s.subscriptions[subName]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "subscription not found")
+					writeNotFound(w, "subscription not found")
 					return
 				}
 				writeJSON(w, http.StatusOK, sb)
@@ -970,7 +983,7 @@ func (s *Server) handleCloudRun(w http.ResponseWriter, r *http.Request, sub stri
 		key := loc + "/" + svcID
 		svc, ok := s.runServices[key]
 		if !ok {
-			writeErr(w, http.StatusNotFound, "cloud run service not found: "+key)
+			writeNotFound(w, "cloud run service not found: "+key)
 			return
 		}
 		if r.Method == http.MethodGet {
@@ -1046,7 +1059,7 @@ func (s *Server) handleSQL(w http.ResponseWriter, r *http.Request, sub string) {
 		if r.Method == http.MethodGet {
 			inst, ok := s.sqlInstances[name]
 			if !ok {
-				writeErr(w, http.StatusNotFound, "sql instance not found: "+name)
+				writeNotFound(w, "sql instance not found: "+name)
 				return
 			}
 			writeJSON(w, http.StatusOK, inst)
@@ -1100,7 +1113,7 @@ func (s *Server) handleBigQuery(w http.ResponseWriter, r *http.Request, sub stri
 		if r.Method == http.MethodGet {
 			ds, ok := s.bqDatasets[dsID]
 			if !ok {
-				writeErr(w, http.StatusNotFound, "dataset not found: "+dsID)
+				writeNotFound(w, "dataset not found: "+dsID)
 				return
 			}
 			writeJSON(w, http.StatusOK, ds)
@@ -1132,7 +1145,7 @@ func (s *Server) handleBigQuery(w http.ResponseWriter, r *http.Request, sub stri
 			if r.Method == http.MethodGet {
 				tbl, ok := s.bqTables[key]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "table not found: "+key)
+					writeNotFound(w, "table not found: "+key)
 					return
 				}
 				writeJSON(w, http.StatusOK, tbl)
@@ -1178,7 +1191,7 @@ func (s *Server) handleIAM(w http.ResponseWriter, r *http.Request, sub string) {
 					return
 				}
 			}
-			writeErr(w, http.StatusNotFound, "service account not found: "+id)
+			writeNotFound(w, "service account not found: "+id)
 			return
 		}
 	}
@@ -1226,7 +1239,7 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request, sub strin
 			if r.Method == http.MethodGet {
 				sec, ok := s.secrets[secID]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "secret metadata not found: "+secID)
+					writeNotFound(w, "secret metadata not found: "+secID)
 					return
 				}
 				writeJSON(w, http.StatusOK, sec)
@@ -1303,7 +1316,7 @@ func (s *Server) handleKMS(w http.ResponseWriter, r *http.Request, sub string) {
 				keyID := parts[7]
 				ck, ok := s.kmsKeys[prefix+keyID]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "kms key not found: "+keyID)
+					writeNotFound(w, "kms key not found: "+keyID)
 					return
 				}
 				writeJSON(w, http.StatusOK, ck)
@@ -1339,7 +1352,7 @@ func (s *Server) handleGKE(w http.ResponseWriter, r *http.Request, sub string) {
 			key := loc + "/" + parts[5]
 			c, ok := s.gkeClusters[key]
 			if !ok {
-				writeErr(w, http.StatusNotFound, "gke cluster not found: "+key)
+				writeNotFound(w, "gke cluster not found: "+key)
 				return
 			}
 			writeJSON(w, http.StatusOK, c)
@@ -1390,7 +1403,7 @@ func (s *Server) handleAR(w http.ResponseWriter, r *http.Request, sub string) {
 			if r.Method == http.MethodGet {
 				repo, ok := s.arRepos[key]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "repository not found: "+key)
+					writeNotFound(w, "repository not found: "+key)
 					return
 				}
 				writeJSON(w, http.StatusOK, repo)
@@ -1438,7 +1451,7 @@ func (s *Server) handleDNS(w http.ResponseWriter, r *http.Request, sub string) {
 			if r.Method == http.MethodGet {
 				z, ok := s.dnsZones[zName]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "dns zone not found: "+zName)
+					writeNotFound(w, "dns zone not found: "+zName)
 					return
 				}
 				writeJSON(w, http.StatusOK, z)
@@ -1522,7 +1535,7 @@ func (s *Server) handleLogging(w http.ResponseWriter, r *http.Request, sub strin
 			if r.Method == http.MethodGet {
 				sk, ok := s.logSinks[name]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "sink not found: "+name)
+					writeNotFound(w, "sink not found: "+name)
 					return
 				}
 				writeJSON(w, http.StatusOK, sk)
@@ -1570,7 +1583,7 @@ func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request, sub st
 			if r.Method == http.MethodGet {
 				ap, ok := s.alertPolicies[id]
 				if !ok {
-					writeErr(w, http.StatusNotFound, "alert policy not found: "+id)
+					writeNotFound(w, "alert policy not found: "+id)
 					return
 				}
 				writeJSON(w, http.StatusOK, ap)

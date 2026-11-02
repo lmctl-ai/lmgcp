@@ -115,6 +115,20 @@ func TestOpusTornTailBlocksRecovery(t *testing.T) {
 	defer rec.Close()
 	if err := rec.LoadRecovery(path); err != nil {
 		t.Errorf("UNRECOVERABLE after torn tail: %v (bucket still exists=%v)", err, containsName(rec.StorageListBuckets(), "lmgcp-torn-demo"))
+		return
+	}
+	rec.SweepDelete(0)
+	rec.Close()
+	again, err := newHost(false, false, server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer again.Close()
+	if err := again.LoadRecovery(path); err != nil {
+		t.Errorf("journal unreadable after sweep reopened torn tail: %v", err)
+	}
+	if got := again.SweepDelete(0); got != 0 {
+		t.Errorf("second sweep after torn tail deleted %d, want 0", got)
 	}
 }
 

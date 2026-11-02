@@ -296,6 +296,9 @@ func (h *Host) LoadRecoveryForce(path string, force bool) error {
 }
 
 func (h *Host) beginResource(kind, location, name string) bool {
+	if h.ledger.Owns(kind, name) {
+		return true
+	}
 	if err := h.ledger.Begin(kind, location, name); err != nil {
 		h.fail(err)
 		return false
@@ -320,6 +323,17 @@ func (h *Host) confirmResource(kind, location, name string) {
 	h.mu.Unlock()
 }
 
+func definiteCreateFailure(apiErr *googleapi.Error) bool {
+	if apiErr == nil || apiErr.Code < 400 || apiErr.Code >= 500 {
+		return false
+	}
+	switch apiErr.Code {
+	case 408, 429, 499:
+		return false
+	}
+	return true
+}
+
 func (h *Host) absentError() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -336,7 +350,9 @@ func (h *Host) absentError() bool {
 }
 
 func (h *Host) verifyOwnership(e safety.LedgerEntry) (owned, absent bool, reason string) {
-	if e.Kind != "bucket" && h.fakeSrv != nil {
+	// FAKE-ONLY: never port. The in-process fake cannot label every kind; this
+	// branch is unreachable when fakeSrv is nil (LIVE or external endpoint).
+	if h.fakeSrv != nil && e.Kind != "bucket" {
 		return true, false, ""
 	}
 	switch e.Kind {
@@ -393,7 +409,7 @@ func (h *Host) fail(err error) {
 	if apiErr != nil && (apiErr.Code == 401 || apiErr.Code == 403) {
 		h.authError = h.lastError
 	}
-	if h.pendingKind != "" && apiErr != nil && apiErr.Code >= 400 && apiErr.Code < 500 {
+	if h.pendingKind != "" && definiteCreateFailure(apiErr) {
 		h.ledger.FailIntent(h.pendingKind, h.pendingLoc, h.pendingName, h.lastError)
 		h.pendingKind, h.pendingLoc, h.pendingName = "", "", ""
 	}

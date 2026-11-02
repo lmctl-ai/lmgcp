@@ -3,6 +3,7 @@
 package safety
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 )
@@ -15,6 +16,16 @@ func lockFile(file *os.File) error {
 
 func unlockFile(file *os.File) error {
 	return syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+}
+
+func platformDirCheck(dir string, info os.FileInfo) error {
+	if info.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("state directory %q has group/world permissions %04o", dir, info.Mode().Perm())
+	}
+	if uid, ok := fileOwner(info); ok && uid != os.Getuid() {
+		return fmt.Errorf("state directory %q is owned by uid %d, not %d", dir, uid, os.Getuid())
+	}
+	return nil
 }
 
 func fileOwner(info os.FileInfo) (int, bool) {

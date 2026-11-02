@@ -124,13 +124,7 @@ func checkPrivateDir(dir string, info os.FileInfo) error {
 	if !info.IsDir() {
 		return fmt.Errorf("state path %q is not a directory", dir)
 	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("state directory %q has group/world permissions %04o", dir, info.Mode().Perm())
-	}
-	if uid, ok := fileOwner(info); ok && uid != os.Getuid() {
-		return fmt.Errorf("state directory %q is owned by uid %d, not %d", dir, uid, os.Getuid())
-	}
-	return nil
+	return platformDirCheck(dir, info)
 }
 
 // OpenJournal creates or reopens one journal, validates its bound metadata,
@@ -187,6 +181,21 @@ func OpenJournal(path string, meta JournalMeta, lock bool) (*Journal, error) {
 			return nil, fmt.Errorf("recovery journal is locked by another run: %w", err)
 		}
 		j.locked = true
+	}
+	if data, err := os.ReadFile(path); err == nil && len(data) > 0 && data[len(data)-1] != '\n' {
+		cut := bytes.LastIndexByte(data, '\n')
+		size := int64(0)
+		if cut >= 0 {
+			size = int64(cut + 1)
+		}
+		if err := file.Truncate(size); err != nil {
+			file.Close()
+			return nil, fmt.Errorf("truncate torn journal tail: %w", err)
+		}
+		if err := file.Sync(); err != nil {
+			file.Close()
+			return nil, err
+		}
 	}
 	if len(existing.Records) == 0 {
 		if err := j.append(JournalRecord{Event: EventMeta}); err != nil {
