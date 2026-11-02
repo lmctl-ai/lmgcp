@@ -29,6 +29,22 @@ Branch `hostkit-port` from `635a665`.
 - Dry-run mutator spy in `test-cloud.sh`: PASS (closed loopback endpoint;
   bucket/object/queue mutators make no provider calls).
 
+## SolReviewer follow-up fixes
+
+- All GCP HTTP now goes through `hostkit.NewHTTPClient` + `RetryPolicy.DoHTTP`
+  with the caller context; 503 retries three times, 429 is retried, non-idempotent
+  POSTs are not retried after a possible send, and cross-origin redirects are not
+  followed. Bodies use `ReadBoundedResponse` (16 MiB), so oversize responses fail
+  without buffering past the limit.
+- GCP-only neutral validation was removed (hostkit owns rules); aws-/amz-/azure-
+  queue names, 255-segment keys, and long prefixes now behave like other hosts.
+- Queue receive returns `message.messageId`, not the ackId.
+- `LMGCP_LIVE=1` with no loopback endpoint returns UNAUTHENTICATED
+  `LiveCredentialsNotImplemented`; non-loopback HTTPS does the same.
+- Dead `internal/gcp/register.go` and unused `schema/lmcloud.go` were deleted.
+- Transport regressions: 503 attempt count, 10 ms caller deadline, 16 MiB+1
+  oversize read, cross-origin redirect not followed.
+
 ## Hostkit gaps observed
 
 - `hostkit` validates the receipt before the queue exists probe, so a

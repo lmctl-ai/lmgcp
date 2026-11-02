@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -16,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lmctl-ai/lmcloud/hostkit"
 	lmcode "github.com/lmctl-ai/lmcode-go"
 )
 
@@ -71,22 +71,30 @@ func (h *Host) classify(status int, body []byte) *CloudError {
 }
 
 func (h *Host) request(ctx context.Context, method, urlStr string, body []byte, contentType string) (int, []byte, error) {
-	req, err := http.NewRequestWithContext(ctx, method, urlStr, bytes.NewReader(body))
-	if err != nil {
-		return 0, nil, err
+	client := h.client
+	if client == nil {
+		client = hostkit.NewHTTPClient(60 * time.Second)
 	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-	req.Header.Set("Accept", "application/json")
-	client := &http.Client{Timeout: 25 * time.Second, Transport: &http.Transport{Proxy: nil}}
-	resp, err := client.Do(req)
+	resp, _, err := h.retry.DoHTTP(ctx, client, hostkit.IdempotentMethod(method), func(ctx context.Context) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, method, urlStr, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		req.Header.Set("Accept", "application/json")
+		return req, nil
+	})
 	if err != nil {
 		return 0, nil, err
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	return resp.StatusCode, data, err
+	data, cerr := hostkit.ReadBoundedResponse(resp, 16*1024*1024)
+	if cerr != nil {
+		return resp.StatusCode, nil, cerr
+	}
+	return resp.StatusCode, data, nil
 }
 
 func (h *Host) storageBase() string {
@@ -125,7 +133,7 @@ func (h *Host) BucketCreate(name string) (bool, error) {
 		return false, h.setErr("bucket_create", name, e)
 	}
 	body, _ := json.Marshal(map[string]string{"name": name})
-	status, data, err := h.request(context.Background(), http.MethodPost, h.storageBase()+"/b?project="+url.QueryEscape(h.project), body, "application/json")
+	status, data, err := h.request(h.ctx, http.MethodPost, h.storageBase()+"/b?project="+url.QueryEscape(h.project), body, "application/json")
 	if err != nil {
 		return false, h.setErr("bucket_create", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -147,7 +155,7 @@ func (h *Host) BucketDelete(name string) (bool, error) {
 	if e := ValidateBucketName(name); e != nil {
 		return false, h.setErr("bucket_delete", name, e)
 	}
-	status, data, err := h.request(context.Background(), http.MethodDelete, h.storageBase()+"/b/"+url.PathEscape(name), nil, "")
+	status, data, err := h.request(h.ctx, http.MethodDelete, h.storageBase()+"/b/"+url.PathEscape(name), nil, "")
 	if err != nil {
 		return false, h.setErr("bucket_delete", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -168,7 +176,7 @@ func (h *Host) BucketExists(name string) (bool, error) {
 	if e := ValidateBucketName(name); e != nil {
 		return false, h.setErr("bucket_exists", name, e)
 	}
-	status, data, err := h.request(context.Background(), http.MethodGet, h.storageBase()+"/b/"+url.PathEscape(name), nil, "")
+	status, data, err := h.request(h.ctx, http.MethodGet, h.storageBase()+"/b/"+url.PathEscape(name), nil, "")
 	if err != nil {
 		return false, h.setErr("bucket_exists", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -188,7 +196,7 @@ func (h *Host) BucketList() ([]string, error) {
 		if token != "" {
 			u += "&pageToken=" + url.QueryEscape(token)
 		}
-		status, data, err := h.request(context.Background(), http.MethodGet, u, nil, "")
+		status, data, err := h.request(h.ctx, http.MethodGet, u, nil, "")
 		if err != nil {
 			return nil, h.setErr("bucket_list", "", newCloudError(CodeInternal, 0, "transport", err.Error()))
 		}
@@ -242,7 +250,7 @@ func (h *Host) ObjectPut(bucket, key, data, contentType string, metadata map[str
 	media.Write([]byte(data))
 	mw.Close()
 	u := h.storageBase() + "/b/" + url.PathEscape(bucket) + "/o?uploadType=multipart&name=" + url.QueryEscape(key)
-	status, resp, err := h.request(context.Background(), http.MethodPost, u, buf.Bytes(), "multipart/related; boundary="+mw.Boundary())
+	status, resp, err := h.request(h.ctx, http.MethodPost, u, buf.Bytes(), "multipart/related; boundary="+mw.Boundary())
 	if err != nil {
 		return nil, h.setErr("object_put", key, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -270,7 +278,7 @@ func (h *Host) objectMetaFromJSON(bucket, key string, data []byte) (*ObjectMeta,
 	return &ObjectMeta{Exists: true, Bucket: bucket, Key: key, Size: size, ETag: NormalizeETag(o.ETag), ContentType: o.ContentType, Metadata: o.Metadata}, nil
 }
 func (h *Host) ObjectGet(bucket, key string) (string, error) {
-	status, data, err := h.request(context.Background(), http.MethodGet, h.storageBase()+"/b/"+url.PathEscape(bucket)+"/o/"+EncodeObjectKeyPath(key)+"?alt=media", nil, "")
+	status, data, err := h.request(h.ctx, http.MethodGet, h.storageBase()+"/b/"+url.PathEscape(bucket)+"/o/"+EncodeObjectKeyPath(key)+"?alt=media", nil, "")
 	if err != nil {
 		return "", h.setErr("object_get", key, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -280,7 +288,7 @@ func (h *Host) ObjectGet(bucket, key string) (string, error) {
 	return string(data), nil
 }
 func (h *Host) ObjectHead(bucket, key string) (*ObjectMeta, error) {
-	status, data, err := h.request(context.Background(), http.MethodGet, h.storageBase()+"/b/"+url.PathEscape(bucket)+"/o/"+EncodeObjectKeyPath(key), nil, "")
+	status, data, err := h.request(h.ctx, http.MethodGet, h.storageBase()+"/b/"+url.PathEscape(bucket)+"/o/"+EncodeObjectKeyPath(key), nil, "")
 	if err != nil {
 		return nil, h.setErr("object_head", key, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -300,7 +308,7 @@ func (h *Host) ObjectHead(bucket, key string) (*ObjectMeta, error) {
 	return h.objectMetaFromJSON(bucket, key, data)
 }
 func (h *Host) ObjectDelete(bucket, key string) error {
-	status, data, err := h.request(context.Background(), http.MethodDelete, h.storageBase()+"/b/"+url.PathEscape(bucket)+"/o/"+EncodeObjectKeyPath(key), nil, "")
+	status, data, err := h.request(h.ctx, http.MethodDelete, h.storageBase()+"/b/"+url.PathEscape(bucket)+"/o/"+EncodeObjectKeyPath(key), nil, "")
 	if err != nil {
 		return h.setErr("object_delete", key, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -336,7 +344,7 @@ func (h *Host) ObjectList(bucket, prefix string, maxKeys int64, token string) (*
 	if token != "" {
 		u += "&pageToken=" + url.QueryEscape(token)
 	}
-	status, data, err := h.request(context.Background(), http.MethodGet, u, nil, "")
+	status, data, err := h.request(h.ctx, http.MethodGet, u, nil, "")
 	if err != nil {
 		return nil, h.setErr("object_list", bucket, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -388,7 +396,7 @@ func (h *Host) QueueCreate(name string) (bool, error) {
 		return false, h.setErr("queue_create", name, e)
 	}
 	topic := h.topicPath(name)
-	status, data, err := h.request(context.Background(), http.MethodPut, topic, []byte("{}"), "application/json")
+	status, data, err := h.request(h.ctx, http.MethodPut, topic, []byte("{}"), "application/json")
 	if err != nil {
 		return false, h.setErr("queue_create", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -398,7 +406,7 @@ func (h *Host) QueueCreate(name string) (bool, error) {
 	}
 	sub := h.subPath(name)
 	body, _ := json.Marshal(map[string]any{"topic": h.topicName(name), "ackDeadlineSeconds": 30, "expirationPolicy": map[string]any{}})
-	status, data, err = h.request(context.Background(), http.MethodPut, sub, body, "application/json")
+	status, data, err = h.request(h.ctx, http.MethodPut, sub, body, "application/json")
 	if err != nil {
 		return false, h.setErr("queue_create", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -414,7 +422,7 @@ func (h *Host) QueueDelete(name string) (bool, error) {
 	}
 	deleted := false
 	for _, u := range []string{h.subPath(name), h.topicPath(name)} {
-		status, data, err := h.request(context.Background(), http.MethodDelete, u, nil, "")
+		status, data, err := h.request(h.ctx, http.MethodDelete, u, nil, "")
 		if err != nil {
 			return false, h.setErr("queue_delete", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
 		}
@@ -430,7 +438,7 @@ func (h *Host) QueueDelete(name string) (bool, error) {
 	return deleted, nil
 }
 func (h *Host) queueGet(path string) (map[string]any, *CloudError, bool) {
-	status, data, err := h.request(context.Background(), http.MethodGet, path, nil, "")
+	status, data, err := h.request(h.ctx, http.MethodGet, path, nil, "")
 	if err != nil {
 		return nil, newCloudError(CodeInternal, 0, "transport", err.Error()), false
 	}
@@ -478,7 +486,7 @@ func (h *Host) QueueList() ([]string, error) {
 			if token != "" {
 				u += "&pageToken=" + url.QueryEscape(token)
 			}
-			status, data, err := h.request(context.Background(), http.MethodGet, u, nil, "")
+			status, data, err := h.request(h.ctx, http.MethodGet, u, nil, "")
 			if err != nil {
 				return h.setErr("queue_list", kind, newCloudError(CodeInternal, 0, "transport", err.Error()))
 			}
@@ -541,7 +549,7 @@ func (h *Host) QueueSend(queue, body string) (string, error) {
 	}
 	wire := EncodeQueueBody(body)
 	req, _ := json.Marshal(map[string]any{"messages": []map[string]string{{"data": base64.StdEncoding.EncodeToString([]byte(wire))}}})
-	status, data, err := h.request(context.Background(), http.MethodPost, h.topicPath(queue)+":publish", req, "application/json")
+	status, data, err := h.request(h.ctx, http.MethodPost, h.topicPath(queue)+":publish", req, "application/json")
 	if err != nil {
 		return "", h.setErr("queue_send", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -592,7 +600,8 @@ func (h *Host) QueueReceive(queue string, maxMessages, waitSeconds, visibility i
 			ReceivedMessages []struct {
 				AckId   string `json:"ackId"`
 				Message struct {
-					Data string `json:"data"`
+					Data      string `json:"data"`
+					MessageId string `json:"messageId"`
 				} `json:"message"`
 			} `json:"receivedMessages"`
 		}
@@ -614,7 +623,7 @@ func (h *Host) QueueReceive(queue string, maxMessages, waitSeconds, visibility i
 			out.Items = append(out.Items, &QueueMessage{ID: rm.AckId, Body: DecodeQueueBody(string(raw)), Receipt: rm.AckId})
 		}
 		mod, _ := json.Marshal(map[string]any{"ackIds": ids, "ackDeadlineSeconds": visibility})
-		status, data, err = h.request(context.Background(), http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mod, "application/json")
+		status, data, err = h.request(h.ctx, http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mod, "application/json")
 		if err != nil {
 			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
 		}
@@ -632,7 +641,7 @@ func (h *Host) QueueAck(queue, receipt string) error {
 		return h.setErr("queue_ack", queue, e)
 	}
 	body, _ := json.Marshal(map[string]any{"ackIds": []string{receipt}})
-	status, data, err := h.request(context.Background(), http.MethodPost, h.subPath(queue)+":acknowledge", body, "application/json")
+	status, data, err := h.request(h.ctx, http.MethodPost, h.subPath(queue)+":acknowledge", body, "application/json")
 	if err != nil {
 		return h.setErr("queue_ack", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -652,7 +661,7 @@ func (h *Host) QueueNack(queue, receipt string, visibility int64) (string, error
 		return "", h.setErr("queue_nack", queue, e)
 	}
 	body, _ := json.Marshal(map[string]any{"ackIds": []string{receipt}, "ackDeadlineSeconds": visibility})
-	status, data, err := h.request(context.Background(), http.MethodPost, h.subPath(queue)+":modifyAckDeadline", body, "application/json")
+	status, data, err := h.request(h.ctx, http.MethodPost, h.subPath(queue)+":modifyAckDeadline", body, "application/json")
 	if err != nil {
 		return "", h.setErr("queue_nack", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -666,7 +675,7 @@ type RawMessage struct{ ID, Wire, Receipt string }
 
 func (h *Host) QueueSendWire(queue, wire string) (string, error) {
 	req, _ := json.Marshal(map[string]any{"messages": []map[string]string{{"data": base64.StdEncoding.EncodeToString([]byte(wire))}}})
-	status, data, err := h.request(context.Background(), http.MethodPost, h.topicPath(queue)+":publish", req, "application/json")
+	status, data, err := h.request(h.ctx, http.MethodPost, h.topicPath(queue)+":publish", req, "application/json")
 	if err != nil {
 		return "", h.setErr("queue_send", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -712,7 +721,8 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 			ReceivedMessages []struct {
 				AckId   string `json:"ackId"`
 				Message struct {
-					Data string `json:"data"`
+					Data      string `json:"data"`
+					MessageId string `json:"messageId"`
 				} `json:"message"`
 			} `json:"receivedMessages"`
 		}
@@ -731,10 +741,14 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 		for _, rm := range pull.ReceivedMessages {
 			ids = append(ids, rm.AckId)
 			raw, _ := base64.StdEncoding.DecodeString(rm.Message.Data)
-			out = append(out, RawMessage{ID: rm.AckId, Wire: string(raw), Receipt: rm.AckId})
+			id := rm.Message.MessageId
+			if id == "" {
+				id = rm.AckId
+			}
+			out = append(out, RawMessage{ID: id, Wire: string(raw), Receipt: rm.AckId})
 		}
 		mod, _ := json.Marshal(map[string]any{"ackIds": ids, "ackDeadlineSeconds": visibility})
-		status, data, err = h.request(context.Background(), http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mod, "application/json")
+		status, data, err = h.request(h.ctx, http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mod, "application/json")
 		if err != nil {
 			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
 		}

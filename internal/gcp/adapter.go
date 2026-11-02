@@ -4,17 +4,24 @@ package gcp
 
 import (
 	"context"
+	"net/http"
 	"net/url"
+	"os"
+	"time"
 
 	"github.com/lmctl-ai/lmcloud/hostkit"
 	"github.com/lmctl-ai/lmcloud/hostkit/fakeadapter"
 )
 
 type Adapter struct {
-	fake *fakeadapter.Fake
+	fake   *fakeadapter.Fake
+	client *http.Client
+	ctx    context.Context
 }
 
-func NewAdapter() *Adapter { return &Adapter{fake: fakeadapter.New(fakeadapter.Options{})} }
+func NewAdapter() *Adapter {
+	return &Adapter{fake: fakeadapter.New(fakeadapter.Options{}), client: hostkit.NewHTTPClient(60 * time.Second)}
+}
 
 func Endpoints() *hostkit.EndpointResolver {
 	return &hostkit.EndpointResolver{
@@ -29,13 +36,18 @@ func Endpoints() *hostkit.EndpointResolver {
 func (a *Adapter) route(ctx context.Context) (*Host, bool, error) {
 	base := hostkit.EndpointFrom(ctx)
 	if base == "" {
+		if os.Getenv("LMGCP_LIVE") == "1" {
+			return nil, false, hostkit.ProviderError(hostkit.Unauthenticated, 0, "LiveCredentialsNotImplemented", "live GCP credentials are not implemented; use a loopback emulator")
+		}
 		return nil, true, nil
 	}
 	u, err := url.Parse(base)
 	if err != nil || !hostkit.IsLoopbackHost(u.Hostname()) {
-		return nil, false, hostkit.ProviderError(hostkit.Internal, 0, "", "live GCP is not supported by this host; use a loopback emulator")
+		return nil, false, hostkit.ProviderError(hostkit.Unauthenticated, 0, "LiveCredentialsNotImplemented", "live GCP credentials are not implemented; use a loopback emulator")
 	}
 	h := NewHost()
+	h.ctx = ctx
+	h.client = a.client
 	if _, err := h.SetEndpoint("storage", base); err != nil {
 		return nil, false, err
 	}
@@ -44,7 +56,6 @@ func (a *Adapter) route(ctx context.Context) (*Host, bool, error) {
 	}
 	return h, false, nil
 }
-
 func cerr(err error) error {
 	if err == nil {
 		return nil

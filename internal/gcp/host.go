@@ -1,15 +1,23 @@
 package gcp
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/lmctl-ai/lmcloud/hostkit"
 )
 
 type Host struct {
 	mu           sync.Mutex
+	ctx          context.Context
+	client       *http.Client
+	retry        hostkit.RetryPolicy
 	abortOnError bool
 	lastError    *CloudError
 	endpoints    map[string]string
@@ -35,7 +43,8 @@ func NewHost() *Host {
 	if project == "" {
 		project = "gcpsim-local"
 	}
-	return &Host{abortOnError: true, lastError: okError(), endpoints: map[string]string{}, defaultEP: strings.TrimRight(def, "/"), project: project}
+	return &Host{abortOnError: true, lastError: okError(), endpoints: map[string]string{}, defaultEP: strings.TrimRight(def, "/"), project: project,
+		ctx: context.Background(), client: hostkit.NewHTTPClient(60 * time.Second), retry: hostkit.DefaultRetryPolicy()}
 }
 
 func (h *Host) Provider() string   { return "gcp" }
