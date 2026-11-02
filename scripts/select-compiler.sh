@@ -6,6 +6,10 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/lmgcp-compiler-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 candidate="${LMSCRIPT_BIN:-$(command -v lmscript || true)}"
 printf '%s\n' '{"dsl.schema":2,"name":"compiler_probe","types":{},"functions":{},"context":{}}' > "$WORK/probe.schema.json"
+signatures=""
+if [ -n "$candidate" ]; then
+  signatures="$("$candidate" --lmcode-signatures "$WORK/probe.schema.json" 2>/dev/null || true)"
+fi
 cat > "$WORK/check.lms" <<LMS
 s = load_schema(schema="$WORK/probe.schema.json");
 p = _lmcode_ s;
@@ -17,12 +21,12 @@ LMS
 # A v6 compiler carries the v3 std catalog; template_render is the stable
 # marker that also proves implicit std is bundled (no external --std file).
 if [ -z "$candidate" ] ||
-   ! "$candidate" --lmcode-signatures "$WORK/probe.schema.json" 2>/dev/null | grep -q '^fn template_render(string, Json) -> string$' ||
+   ! grep -q '^fn template_render(string, Json) -> string$' <<<"$signatures" ||
    ! "$candidate" --lmcode-schema "$WORK/probe.schema.json" --json >/dev/null 2>&1
 then
   if [ -n "${LMGCP_DEBUG:-}" ]; then
     echo "--- compiler probe diagnostics (candidate=$candidate)" >&2
-    [ -n "$candidate" ] && "$candidate" --lmcode-signatures "$WORK/probe.schema.json" 2>&1 | grep 'template_render' | head -3 >&2
+    grep -Fm3 'template_render' <<<"$signatures" >&2
   fi
   echo "error: no implicit-std lmcode v6 compiler found; install @lmctl-ai/lmctl@0.2.453 so lmscript is on PATH, or set LMSCRIPT_BIN" >&2
   exit 2

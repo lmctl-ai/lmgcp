@@ -66,13 +66,13 @@ ok "--version prints '$want'"
 
 # 3. Help and notices check
 help_out="$("$HOST" --help | tr -d '\r')"
-echo "$help_out" | grep -q "LMGCP_MAX_MEMORY_MB" || fail "--help missing LMGCP_MAX_MEMORY_MB"
-echo "$help_out" | grep -q "glibc >= 2.35" || fail "--help missing glibc >= 2.35 note"
+grep -Fq "LMGCP_MAX_MEMORY_MB" <<<"$help_out" || fail "--help missing LMGCP_MAX_MEMORY_MB"
+grep -Fq "glibc >= 2.35" <<<"$help_out" || fail "--help missing glibc >= 2.35 note"
 ok "--help documents memory budget, safety, and glibc baseline"
 
 notices_out="$("$HOST" --notices | tr -d '\r')"
-echo "$notices_out" | grep -q "Apache License 2.0" || fail "--notices missing Apache License 2.0"
-echo "$notices_out" | grep -q "lmcode-go" || fail "--notices missing lmcode-go"
+grep -Fq "Apache License 2.0" <<<"$notices_out" || fail "--notices missing Apache License 2.0"
+grep -Fq "lmcode-go" <<<"$notices_out" || fail "--notices missing lmcode-go"
 ok "--notices prints embedded third-party notices"
 
 # 4. Schema & signature parity
@@ -89,23 +89,24 @@ cmp <("$HOST" --lmcode-schema --json) schema/lmgcp.dsl.json >/dev/null || fail "
 ok "embedded schema is byte-identical"
 
 schema_summary="$("$HOST" --lmcode-schema | tr -d '\r')"
-echo "$schema_summary" | grep -q "context gcp: Gcp" || fail "schema summary missing context gcp: Gcp"
-echo "$schema_summary" | grep -q "ComputeInstance:" || fail "schema summary missing ComputeInstance"
-echo "$schema_summary" | grep -q "StorageBucket:" || fail "schema summary missing StorageBucket"
+grep -Fq "context gcp: Gcp" <<<"$schema_summary" || fail "schema summary missing context gcp: Gcp"
+grep -Fq "ComputeInstance:" <<<"$schema_summary" || fail "schema summary missing ComputeInstance"
+grep -Fq "StorageBucket:" <<<"$schema_summary" || fail "schema summary missing StorageBucket"
 ok "--lmcode-schema summary formats context and types"
 
 # 5. Sweeper CLI check
 sweep_out="$("$HOST" --sweep --older-than-hours 1 | tr -d '\r')"
-echo "$sweep_out" | grep -q "sweep dry-run" || fail "--sweep failed: $sweep_out"
+grep -Fq "sweep dry-run" <<<"$sweep_out" || fail "--sweep failed: $sweep_out"
 ok "--sweep dry-run CLI works"
 
 # 6. Invalid usage & invalid memory budget env return exit 2
 set +e
-"$HOST" --invalid-flag >/dev/null 2>&1
+invalid_out="$("$HOST" --invalid-flag 2>/dev/null)"
 code=$?
 set -e
 [ "$code" -eq 2 ] || fail "--invalid-flag exited $code, want 2"
-ok "invalid CLI flag returns exit 2"
+grep -Fq "LMCODE_RETURN_BEGIN" <<<"$invalid_out" || fail "--invalid-flag did not emit a failure frame"
+ok "invalid CLI flag returns exit 2 with a failure frame"
 
 for bad_mb in "0" "-10" "notanumber" ""; do
   set +e
@@ -113,7 +114,7 @@ for bad_mb in "0" "-10" "notanumber" ""; do
   code=$?
   set -e
   [ "$code" -eq 2 ] || fail "LMGCP_MAX_MEMORY_MB='$bad_mb' exited $code, want 2"
-  echo "$err_out" | grep -q "LMGCP_MAX_MEMORY_MB" || fail "stderr did not name LMGCP_MAX_MEMORY_MB: $err_out"
+  grep -Fq "LMGCP_MAX_MEMORY_MB" <<<"$err_out" || fail "stderr did not name LMGCP_MAX_MEMORY_MB: $err_out"
 done
 ok "invalid LMGCP_MAX_MEMORY_MB values exit 2 with variable named on stderr"
 
@@ -127,8 +128,8 @@ bad_out="$("$HOST" --lmcode "$bad_code" 2>&1)"
 bad_rc=$?
 set -e
 [ "$bad_rc" -eq 3 ] || fail "corrupt bytecode exited $bad_rc, want 3"
-echo "$bad_out" | grep -q "LMCODE_RETURN_BEGIN" || fail "bad bytecode missing envelope: $bad_out"
-echo "$bad_out" | grep -q '"code":"LOAD_BAD_BYTECODE"' || fail "bad bytecode missing LOAD_BAD_BYTECODE: $bad_out"
+grep -Fq "LMCODE_RETURN_BEGIN" <<<"$bad_out" || fail "bad bytecode missing envelope: $bad_out"
+grep -Fq '"code":"LOAD_BAD_BYTECODE"' <<<"$bad_out" || fail "bad bytecode missing LOAD_BAD_BYTECODE: $bad_out"
 ok "corrupt bytecode rejected with exit 3, envelope, and LOAD_BAD_BYTECODE"
 
 # 8. Memory budget enforcement test (runaway allocation returns a RUN_HOST envelope)
@@ -150,7 +151,7 @@ set -e
 oom_stderr="$(cat "$mem_dir/oom.stderr")"
 rm -rf "$mem_dir"
 [ "$oom_rc" -eq 0 ] || fail "memory budget test exited $oom_rc, want 0 (envelope assertion)"
-echo "$oom_stderr" | grep -q "LMGCP_MAX_MEMORY_MB" || fail "memory budget stderr missing LMGCP_MAX_MEMORY_MB: $oom_stderr"
+grep -Fq "LMGCP_MAX_MEMORY_MB" <<<"$oom_stderr" || fail "memory budget stderr missing LMGCP_MAX_MEMORY_MB: $oom_stderr"
 ok "memory budget limit enforced with RUN_HOST envelope and stderr message"
 
 # 8b. Dry invocation: real reads, dummy mutators, zero ledger writes, asserts run
@@ -164,6 +165,7 @@ p = _lmcode_ s;
   assert_close(float(before), float(after), 0.0);
   let inv = gcp.inventory_summary();
   assert_close(float(str_to_int(inv.get("compute_instances"))), 7.0, 0.0);
+  assert_close(float(str_len(gcp.set_region("us-east1").region())), 8.0, 0.0);
   assert_close(1.0, 1.0, 0.0);
 end _lmcode_
 r = run_lmcode(p, {command:["$HOST","--lmcode","\$DSLFILE"]});
@@ -174,9 +176,56 @@ dry_rc=$?
 set -e
 rm -rf "$dry_dir"
 [ "$dry_rc" -eq 0 ] || fail "dry invocation exited $dry_rc: $dry_out"
-echo "$dry_out" | grep -q '"dry":true' || fail "dry invocation missing dry envelope: $dry_out"
-echo "$dry_out" | grep -q '"ok":true' || fail "dry invocation missing ok envelope: $dry_out"
+grep -Fq '"dry":true' <<<"$dry_out" || fail "dry invocation missing dry envelope: $dry_out"
+grep -Fq '"ok":true' <<<"$dry_out" || fail "dry invocation missing ok envelope: $dry_out"
 ok "dry invocation executes reads/asserts with zero ledger writes"
+
+# 8c. Repeated --lmcode: lmscript builder default fragment and selector pairs
+builder_dir="$(mktemp -d build/builder.XXXXXX)"
+cat > "$builder_dir/builder.lms" <<LMS
+s = load_schema(schema="$PWD/schema/lmgcp.dsl.json");
+p1 = _lmcode_ s;
+  let a = 1;
+end _lmcode_
+p2 = _lmcode_ s;
+  let b = 2;
+end _lmcode_
+b = lmcode_build("$HOST");
+b.add(p1);
+b.add(p2);
+r = run_lmcode(b);
+assert(r.ok, "default builder failed");
+assert(r.parts == 2, "default builder parts");
+b2 = lmcode_build("$HOST");
+b2.add(p1, ["--last", "\$DSLFILE"]);
+b2.add(p2, ["--first", "\$DSLFILE"]);
+r2 = run_lmcode(b2);
+assert(r2.ok, "selector builder failed");
+assert(r2.parts == 2, "selector builder parts");
+LMS
+builder_out="$("$LMSCRIPT" "$builder_dir/builder.lms" 2>&1)" || { rm -rf "$builder_dir"; fail "builder invocation failed: $builder_out"; }
+rm -rf "$builder_dir"
+ok "repeated --lmcode and --first/--last builder forms share one host"
+
+# 8d. Dry memory-limit watchdog keeps dry metadata and a valid envelope
+watchdog_dir="$(mktemp -d build/watchdog.XXXXXX)"
+cat > "$watchdog_dir/watchdog.lms" <<LMS
+s = load_schema(schema="$PWD/schema/lmgcp.dsl.json");
+p = _lmcode_ s;
+  let x = "x";
+  while (str_len(x) < 1000000000) { x = x + x; }
+end _lmcode_
+r = run_lmcode(p, {command:["$HOST","--lmcode","\$DSLFILE"]});
+LMS
+set +e
+watchdog_out="$(LMGCP_MAX_MEMORY_MB=8 "$LMSCRIPT" --dry-run "$watchdog_dir/watchdog.lms" 2>&1)"
+watchdog_rc=$?
+set -e
+rm -rf "$watchdog_dir"
+[ "$watchdog_rc" -eq 0 ] || fail "dry watchdog invocation exited $watchdog_rc: $watchdog_out"
+grep -Fq '"dry":true' <<<"$watchdog_out" || fail "dry watchdog frame lost dry:true: $watchdog_out"
+grep -Fq '"ok":false' <<<"$watchdog_out" || fail "dry watchdog frame missing failure: $watchdog_out"
+ok "dry memory-limit watchdog emits a lmscript-accepted dry frame"
 
 # 9. Go unit tests (safety & fake GCP SDK integration)
 go test ./internal/safety ./internal/host >/dev/null || fail "go test failed"
@@ -189,7 +238,7 @@ example_files=(examples/[0-9][0-9]_*.lms)
 for f in "${example_files[@]}"; do
   base="$(basename "$f" .lms)"
   out="$("$LMSCRIPT" "$f" 2>&1)" || { echo "$out" >&2; fail "$f failed"; }
-  echo "$out" | grep -q "^ok " || { echo "$out" >&2; fail "$f printed no ok line"; }
+  grep -q '^ok ' <<<"$out" || { echo "$out" >&2; fail "$f printed no ok line"; }
   cost_line="$(echo "$out" | grep -E '^estimated cost: \$0\.(00|[0-9]{4})' || true)"
   [ -n "$cost_line" ] || { echo "$out" >&2; fail "$f missing 'estimated cost: \$0.00xx' line"; }
   [ -s "build/evidence/live-cost-${base}.json" ] || fail "$f did not write build/evidence/live-cost-${base}.json"
@@ -198,12 +247,12 @@ done
 
 # The account inventory example is outside the 40 numbered comparison/cost labs.
 out="$("$LMSCRIPT" examples/find_lmgcp_resources.lms 2>&1)" || { echo "$out" >&2; fail "prefix inventory example failed"; }
-echo "$out" | grep -q '^ok ' || fail "prefix inventory example printed no ok line"
+grep -q '^ok ' <<<"$out" || fail "prefix inventory example printed no ok line"
 ok "account inventory example"
 
 # 11. Gallery scenes are separate, capability-gated, and skipped until lmdraw/lmplot advance
 gallery_out="$(LMSCRIPT_BIN="$LMSCRIPT" ./scripts/render-gallery.sh 2>&1)" || { echo "$gallery_out" >&2; fail "gallery render probe failed"; }
-if echo "$gallery_out" | grep -q '^SKIP '; then
+if grep -q '^SKIP ' <<<"$gallery_out"; then
   skip "lmdraw not envelope-capable"
 else
   ok "gallery scenes rendered"

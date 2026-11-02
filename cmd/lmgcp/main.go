@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,7 +25,7 @@ var rawVersion string
 //go:embed THIRD_PARTY_NOTICES
 var embeddedNotices string
 
-const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | --lmcode FILE [FILE ...] | --sweep [--older-than-hours N] [--delete]
+const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | [--lmcode|--first|--last] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete]
 
 Google Cloud Go SDK host for lmscript (Apache-2.0 SDK on lmcode-go).
 
@@ -34,7 +35,7 @@ Options:
   --notices                  Print embedded third-party license notices
   --lmcode-schema [--json]      Print human-readable schema summary or raw JSON schema
   --lmcode-signatures           Print sorted canonical DSL signatures
-  --lmcode FILE...           Load, verify, and execute compiled .dslb bytecode files
+  --lmcode|--first|--last FILE...  Load, verify, and execute compiled .dslb files
   --sweep                    List (dry-run default) or delete (--delete) lmgcp_ leftovers
 
 Dry mode comes from the lmcode invocation manifest; there is no --dry-run flag.
@@ -110,28 +111,68 @@ func realMain(args []string) int {
 	}
 
 	// Reject unrecognized operations before starting the fake or live transport.
-	if len(args) < 2 || (args[1] != "--lmcode-schema" && args[1] != "--lmcode-signatures" && args[1] != "--lmcode" && args[1] != "--sweep") {
+	invocation := len(args) >= 2 && (args[1] == "--lmcode" || args[1] == "--first" || args[1] == "--last")
+	if len(args) < 2 || (args[1] != "--lmcode-schema" && args[1] != "--lmcode-signatures" && !invocation && args[1] != "--sweep") {
 		fmt.Fprint(os.Stderr, usageText)
-		return 2
+		return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 	}
 
 	var results *lmcode.InvocationResults
-	if args[1] == "--lmcode" {
-		if len(args) < 3 {
-			return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
+	var order []int
+	if invocation {
+		type part struct {
+			file     string
+			priority int
+			index    int
 		}
-		files := make([]string, 0, len(args)-2)
-		for _, file := range args[2:] {
+		parts := make([]part, 0, len(args)/2)
+		files := make([]string, 0, len(args)/2)
+		add := func(file string, priority int) bool {
 			if file == "" || strings.HasPrefix(file, "--") {
-				return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
+				return false
 			}
+			parts = append(parts, part{file: file, priority: priority, index: len(parts)})
 			files = append(files, file)
+			return true
+		}
+		for i := 1; i < len(args); i++ {
+			switch args[i] {
+			case "--lmcode", "--first", "--last":
+				priority := 1
+				if args[i] == "--first" {
+					priority = 0
+				} else if args[i] == "--last" {
+					priority = 2
+				}
+				if i+1 >= len(args) || !add(args[i+1], priority) {
+					return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
+				}
+				i++
+			default:
+				if !add(args[i], 1) {
+					return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
+				}
+			}
+		}
+		if len(parts) == 0 {
+			return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 		}
 		collected, err := lmcode.InvocationResultsFromCommand(files)
 		if err != nil {
 			return invoke.Failure("cli", err)
 		}
 		results = collected
+		order = make([]int, len(parts))
+		for i := range parts {
+			order[i] = i
+		}
+		sort.SliceStable(order, func(i, j int) bool {
+			a, b := parts[order[i]], parts[order[j]]
+			if a.priority != b.priority {
+				return a.priority < b.priority
+			}
+			return a.index < b.index
+		})
 	}
 	dryInvocation := results != nil && results.Dry()
 
@@ -158,7 +199,7 @@ func realMain(args []string) int {
 			return 0
 		}
 		fmt.Fprint(os.Stderr, usageText)
-		return 2
+		return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 	}
 
 	if len(args) == 3 && args[1] == "--lmcode-signatures" && args[2] == "--without-std" {
@@ -184,18 +225,18 @@ func realMain(args []string) int {
 			case "--older-than-hours":
 				if i+1 >= len(args) {
 					fmt.Fprint(os.Stderr, usageText)
-					return 2
+					return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 				}
 				val, err := strconv.ParseInt(args[i+1], 10, 64)
 				if err != nil || val < 0 {
 					fmt.Fprint(os.Stderr, usageText)
-					return 2
+					return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 				}
 				maxAge = val
 				i++
 			default:
 				fmt.Fprint(os.Stderr, usageText)
-				return 2
+				return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 			}
 		}
 		if dryRun {
@@ -211,7 +252,7 @@ func realMain(args []string) int {
 		return 0
 	}
 
-	if args[1] == "--lmcode" {
+	if invocation {
 		contract, err := lmcode.ResultContractFromSchema(schema.EmbeddedSchema)
 		if err != nil {
 			return invoke.Failure("load", err)
@@ -227,6 +268,8 @@ func realMain(args []string) int {
 			Schema:   schema.EmbeddedSchema,
 			Contract: contract,
 			Context:  ctx,
+			Order:    order,
+			Dry:      dryInvocation,
 			Hooks: invoke.Hooks{
 				BeforeRun: membudget.ResetRun,
 				OnRunError: func(runErr error) {
@@ -247,5 +290,5 @@ func realMain(args []string) int {
 	}
 
 	fmt.Fprint(os.Stderr, usageText)
-	return 2
+	return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 }

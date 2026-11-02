@@ -214,6 +214,8 @@ func (h *Host) Close() {
 }
 
 func (h *Host) fail(err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if err == nil {
 		h.lastError = ""
 		return
@@ -229,11 +231,17 @@ func (h *Host) fail(err error) {
 }
 
 func (h *Host) clearErr() {
+	h.mu.Lock()
 	h.lastError = ""
+	h.mu.Unlock()
 }
 
 // AuthError retains authentication/permission failures even if a later operation succeeds.
-func (h *Host) AuthError() string { return h.authError }
+func (h *Host) AuthError() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.authError
+}
 
 type emulatorTransport struct{ origin, token string }
 
@@ -303,7 +311,11 @@ func (h *Host) RunID() string { return h.ledger.RunID() }
 
 func (h *Host) SetRunID(id string) { h.ledger.SetRunID(id) }
 
-func (h *Host) LastError() string { return h.lastError }
+func (h *Host) LastError() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.lastError
+}
 
 func (h *Host) SetAutoCleanup(enabled bool) { h.autoCleanup = enabled }
 

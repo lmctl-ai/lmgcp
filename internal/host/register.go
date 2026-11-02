@@ -18,7 +18,21 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	m := func(typeName, name string, params []string, ret string, fn lmcode.Method) error {
+		if typeName != "Gcp" {
+			// Snapshot accessors are pure reads: use the same callback in dry.
+			return reg.Method(typeName, name, params, ret, fn, lmcode.Dry(fn))
+		}
 		return reg.Method(typeName, name, params, ret, fn)
+	}
+	mLocal := func(typeName, name string, params []string, ret string, fn lmcode.Method) error {
+		// Local-only configuration updates are safe to execute in dry mode.
+		return reg.Method(typeName, name, params, ret, fn, lmcode.Dry(fn))
+	}
+	mSelf := func(typeName, name string, params []string, ret string, fn lmcode.Method) error {
+		preview := lmcode.Method(func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+			return lmcode.Object(typeName, self), nil
+		})
+		return reg.Method(typeName, name, params, ret, fn, lmcode.Dry(preview))
 	}
 	mRead := func(typeName, name string, params []string, ret string, fn lmcode.Method) error {
 		dryFn := fn
@@ -54,7 +68,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "set_project", []string{"string"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mLocal("Gcp", "set_project", []string{"string"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		hs := self.(*Host)
 		hs.SetProject(a[0].Str)
 		return lmcode.Obj("Gcp", hs), nil
@@ -66,7 +80,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "set_region", []string{"string"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mLocal("Gcp", "set_region", []string{"string"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		hs := self.(*Host)
 		hs.SetRegion(a[0].Str)
 		return lmcode.Obj("Gcp", hs), nil
@@ -78,7 +92,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "set_zone", []string{"string"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mLocal("Gcp", "set_zone", []string{"string"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		hs := self.(*Host)
 		hs.SetZone(a[0].Str)
 		return lmcode.Obj("Gcp", hs), nil
@@ -105,7 +119,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "set_run_id", []string{"string"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mLocal("Gcp", "set_run_id", []string{"string"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		hs := self.(*Host)
 		hs.SetRunID(a[0].Str)
 		return lmcode.Obj("Gcp", hs), nil
@@ -122,7 +136,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "set_auto_cleanup", []string{"bool"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mSelf("Gcp", "set_auto_cleanup", []string{"bool"}, "Gcp", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		hs := self.(*Host)
 		hs.SetAutoCleanup(a[0].Bool)
 		return lmcode.Obj("Gcp", hs), nil

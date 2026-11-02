@@ -31,14 +31,27 @@ those, not the whole provider host.
   Pass it to `host.NewHost(dry)` so live/ADC setup is skipped; set
   `ctx.SetDry(dry)`; still call `Program.Run`. The SDK substitutes a dummy value
   for any callback without a `DrySlot`, so mutators naturally make zero writes.
-  Add `lmcode.Dry(realFn)` only to read-only list/get/report methods that should
-  really read (the fake transport is the default and safe). Mutators that return
-  objects get `mPreview` callbacks returning a zero object, so calls such as
-  compute/run create never touch the transport. Never skip `Program.Run` in dry
-  mode: assertions and reads must still execute.
-- Watchdog goroutines cannot safely call the collector. `invoke` emits
-  `FailureFrame(os.Stdout,"run",err)` and exits from the watchdog only, so the
-  main path cannot double-frame. Auth failures also call `CleanupLedger`.
+  Register **every** read-only snapshot method with `lmcode.Dry(realFn)`: the
+  Gcp list/get/report methods and all object accessors/predicates (`name`,
+  `vcpus`, `labels`, `risk_score`, ...). The fake transport read is side-effect
+  free, and without Dry the SDK returns empty/zero/true dummies. Mutators that
+  return objects get `mPreview` callbacks returning a concrete zero object.
+  Local-only configuration setters (`set_project/region/zone/run_id`) execute
+  under `lmcode.Dry(fn)` so chaining (`set_region(...).region()`) sees the new
+  value; `set_auto_cleanup` uses a same-receiver preview. Consuming operations
+  such as `pubsub_pull` stay previews. Never skip `Program.Run` in dry mode.
+- Watchdog goroutines cannot safely call the collector or provider cleanup
+  while `Program.Run` is active. `invoke` emits the collector wire shape with
+  the dry/part metadata, never calls `Cleanup`, and exits; normal auth failures
+  still call `CleanupLedger`. `Host.fail/clearErr/LastError/AuthError` are
+  mutex-guarded so even the old cleanup-vs-read overlap is race-free.
+- CLI `--lmcode` accepts repeated selectors exactly as lmscript's default
+  builder emits them (`--lmcode f0 --lmcode f1`) and the sample's
+  `--first/--last FILE` pairs. Slots keep add order; execution order is stable
+  by priority. `InvocationResultsFromCommand` still runs only in this branch.
+- Shell flake: never pipe a large captured string into `grep -q` under
+  `set -o pipefail` (grep's early exit can SIGPIPE the producer). Use
+  `grep -Fq PATTERN <<<"$var"` in test.sh/select-compiler.sh.
 
 ## lmscript example migration
 
