@@ -18,6 +18,7 @@ type Host struct {
 	ctx          context.Context
 	client       *http.Client
 	retry        hostkit.RetryPolicy
+	createToken  string
 	abortOnError bool
 	lastError    *CloudError
 	endpoints    map[string]string

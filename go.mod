@@ -37,3 +37,6 @@ require (
 
 // github.com/lmctl-ai/lmcloud (hostkit) is not published yet: local checkout.
 replace github.com/lmctl-ai/lmcloud => ../lmcloud
+
+// hostkit v3 enum dry-run support; remove when Registry.Enum is upstream.
+replace github.com/lmctl-ai/lmcode-go => ../lmcode-go-patched

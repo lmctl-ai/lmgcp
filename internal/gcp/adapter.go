@@ -48,6 +48,7 @@ func (a *Adapter) route(ctx context.Context) (*Host, bool, error) {
 	h := NewHost()
 	h.ctx = ctx
 	h.client = a.client
+	h.createToken = hostkit.CreateToken(ctx)
 	if _, err := h.SetEndpoint("storage", base); err != nil {
 		return nil, false, err
 	}
@@ -272,6 +273,29 @@ func (a *Adapter) ListQueues(ctx context.Context, token string) ([]string, strin
 	v, e := h.QueueList()
 	return v, "", cerr(e)
 }
+func (a *Adapter) BucketCreateToken(ctx context.Context, b string) (string, error) {
+	h, fake, err := a.route(ctx)
+	if err != nil {
+		return "", err
+	}
+	if fake {
+		return a.fake.BucketCreateToken(ctx, b)
+	}
+	v, e := h.BucketCreateToken(b)
+	return v, cerr(e)
+}
+func (a *Adapter) QueueCreateToken(ctx context.Context, q string) (string, error) {
+	h, fake, err := a.route(ctx)
+	if err != nil {
+		return "", err
+	}
+	if fake {
+		return a.fake.QueueCreateToken(ctx, q)
+	}
+	v, e := h.QueueCreateToken(q)
+	return v, cerr(e)
+}
+
 func (a *Adapter) Send(ctx context.Context, q, wire string) (string, error) {
 	h, fake, err := a.route(ctx)
 	if err != nil {

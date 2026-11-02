@@ -45,6 +45,24 @@ Branch `hostkit-port` from `635a665`.
 - Transport regressions: 503 attempt count, 10 ms caller deadline, 16 MiB+1
   oversize read, cross-origin redirect not followed.
 
+## Hostkit v3 adoption
+
+- `go.mod` adds `replace github.com/lmctl-ai/lmcode-go => ../lmcode-go-patched`
+  (remove when Registry.Enum is upstream and pins bump); hostkit v3 enum dry
+  runs now work.
+- GCP adapter implements `BucketCreateTokenReader`/`QueueCreateTokenReader`.
+  Create requests store `lmcloud_create_token` as GCS bucket labels and Pub/Sub
+  topic/subscription labels; readers return that label after a 409/conflict.
+- `QueueCapsFor` reports LongPoll=false for the offline fake and true for the
+  loopback simulator, so offline wait_seconds uses hostkit's WaitLoop.
+- Dry-run spy now executes `cloud.last_error().code() == ErrorCode.OK` and
+  asserts under `lmscript --dry-run`.
+- Dead cloud-era code removed: `internal/gcp/register.go`, `schema/lmcloud.go`,
+  the old `Op` dispatcher, non-wire queue send/receive, `ObjectListAll`,
+  `BucketDeleteErr`, and `finishOK`.
+- Full test-cloud passes against the fixed JVM gcpsim: object 12/12 (1 skip),
+  queue 13/13 (1 skip), dry spy, go vet, go test -race -count=3.
+
 ## Hostkit gaps observed
 
 - `hostkit` validates the receipt before the queue exists probe, so a

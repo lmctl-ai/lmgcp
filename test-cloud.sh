@@ -29,6 +29,7 @@ p = _lmcode_ s;
   cloud.object_put("lmcloud-dry-bucket", "k", "v");
   cloud.queue_create("lmcloud-dry-queue");
   cloud.queue_send("lmcloud-dry-queue", "m");
+  if (cloud.last_error().code() == ErrorCode.OK) { assert_close(1.0, 1.0, 0.0); } else { assert_close(0.0, 1.0, 0.0); }
 end _lmcode_
 r = run_lmcode(p, {command:["$PWD/bin/lmgcp","cloud","--lmcode","\$DSLFILE"]});
 LMS

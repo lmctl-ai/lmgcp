@@ -132,7 +132,11 @@ func (h *Host) BucketCreate(name string) (bool, error) {
 	if e := ValidateBucketName(name); e != nil {
 		return false, h.setErr("bucket_create", name, e)
 	}
-	body, _ := json.Marshal(map[string]string{"name": name})
+	raw := map[string]any{"name": name}
+	if h.createToken != "" {
+		raw["labels"] = map[string]string{"lmcloud_create_token": h.createToken}
+	}
+	body, _ := json.Marshal(raw)
 	status, data, err := h.request(h.ctx, http.MethodPost, h.storageBase()+"/b?project="+url.QueryEscape(h.project), body, "application/json")
 	if err != nil {
 		return false, h.setErr("bucket_create", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
@@ -170,7 +174,6 @@ func (h *Host) BucketDelete(name string) (bool, error) {
 	}
 	return false, h.setErr("bucket_delete", name, h.classify(status, data))
 }
-func (h *Host) BucketDeleteErr(name string) error { _, err := h.BucketDelete(name); return err }
 
 func (h *Host) BucketExists(name string) (bool, error) {
 	if e := ValidateBucketName(name); e != nil {
@@ -369,34 +372,17 @@ func (h *Host) ObjectList(bucket, prefix string, maxKeys int64, token string) (*
 	sort.Slice(out.Items, func(i, j int) bool { return out.Items[i].Key < out.Items[j].Key })
 	return out, nil
 }
-func (h *Host) ObjectListAll(bucket, prefix string) ([]string, error) {
-	var all []string
-	token := ""
-	for {
-		page, err := h.ObjectList(bucket, prefix, 1000, token)
-		if err != nil {
-			return nil, err
-		}
-		if page == nil {
-			return all, nil
-		}
-		for _, it := range page.Items {
-			all = append(all, it.Key)
-		}
-		if !page.HasMore {
-			break
-		}
-		token = page.NextToken
-	}
-	return all, nil
-}
 
 func (h *Host) QueueCreate(name string) (bool, error) {
 	if e := ValidateQueueName(name); e != nil {
 		return false, h.setErr("queue_create", name, e)
 	}
 	topic := h.topicPath(name)
-	status, data, err := h.request(h.ctx, http.MethodPut, topic, []byte("{}"), "application/json")
+	topicBody := []byte("{}")
+	if h.createToken != "" {
+		topicBody, _ = json.Marshal(map[string]any{"labels": map[string]string{"lmcloud_create_token": h.createToken}})
+	}
+	status, data, err := h.request(h.ctx, http.MethodPut, topic, topicBody, "application/json")
 	if err != nil {
 		return false, h.setErr("queue_create", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
@@ -405,7 +391,11 @@ func (h *Host) QueueCreate(name string) (bool, error) {
 		return false, h.setErr("queue_create", fmt.Sprintf("%s topic-status=%d", name, status), h.classify(status, data))
 	}
 	sub := h.subPath(name)
-	body, _ := json.Marshal(map[string]any{"topic": h.topicName(name), "ackDeadlineSeconds": 30, "expirationPolicy": map[string]any{}})
+	subBody := map[string]any{"topic": h.topicName(name), "ackDeadlineSeconds": 30, "expirationPolicy": map[string]any{}}
+	if h.createToken != "" {
+		subBody["labels"] = map[string]string{"lmcloud_create_token": h.createToken}
+	}
+	body, _ := json.Marshal(subBody)
 	status, data, err = h.request(h.ctx, http.MethodPut, sub, body, "application/json")
 	if err != nil {
 		return false, h.setErr("queue_create", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
@@ -540,99 +530,7 @@ func shortName(full string) string {
 	}
 	return full
 }
-func (h *Host) QueueSend(queue, body string) (string, error) {
-	if e := ValidateQueueName(queue); e != nil {
-		return "", h.setErr("queue_send", queue, e)
-	}
-	if e := ValidateQueueBody(body); e != nil {
-		return "", h.setErr("queue_send", queue, e)
-	}
-	wire := EncodeQueueBody(body)
-	req, _ := json.Marshal(map[string]any{"messages": []map[string]string{{"data": base64.StdEncoding.EncodeToString([]byte(wire))}}})
-	status, data, err := h.request(h.ctx, http.MethodPost, h.topicPath(queue)+":publish", req, "application/json")
-	if err != nil {
-		return "", h.setErr("queue_send", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
-	}
-	if status < 200 || status >= 300 {
-		return "", h.setErr("queue_send", queue, h.classify(status, data))
-	}
-	var res struct {
-		MessageIds []string `json:"messageIds"`
-	}
-	if err := json.Unmarshal(data, &res); err != nil || len(res.MessageIds) == 0 {
-		return "", h.setErr("queue_send", queue, newCloudError(CodeInternal, status, "decode", "missing messageIds"))
-	}
-	return res.MessageIds[0], nil
-}
-func (h *Host) QueueReceive(queue string, maxMessages, waitSeconds, visibility int64) (*QueueMessageList, error) {
-	if e := ValidateQueueName(queue); e != nil {
-		return nil, h.setErr("queue_receive", queue, e)
-	}
-	if e := ValidateQueueReceiveParams(maxMessages, waitSeconds, visibility); e != nil {
-		return nil, h.setErr("queue_receive", queue, e)
-	}
-	if maxMessages == 0 {
-		maxMessages = 1
-	}
-	if waitSeconds == 0 {
-		waitSeconds = 1
-	}
-	deadline := time.Now().Add(time.Duration(waitSeconds) * time.Second)
-	for {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			return &QueueMessageList{}, nil
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), remaining)
-		req, _ := json.Marshal(map[string]any{"maxMessages": maxMessages, "returnImmediately": false})
-		status, data, err := h.request(ctx, http.MethodPost, h.subPath(queue)+":pull", req, "application/json")
-		cancel()
-		if err != nil {
-			if time.Now().Before(deadline) {
-				continue
-			}
-			return &QueueMessageList{}, nil
-		}
-		if status < 200 || status >= 300 {
-			return nil, h.setErr("queue_receive", h.subPath(queue)+":pull", h.classify(status, data))
-		}
-		var pull struct {
-			ReceivedMessages []struct {
-				AckId   string `json:"ackId"`
-				Message struct {
-					Data      string `json:"data"`
-					MessageId string `json:"messageId"`
-				} `json:"message"`
-			} `json:"receivedMessages"`
-		}
-		if err := json.Unmarshal(data, &pull); err != nil {
-			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, status, "decode", err.Error()))
-		}
-		if len(pull.ReceivedMessages) == 0 {
-			if time.Now().Before(deadline) {
-				time.Sleep(50 * time.Millisecond)
-				continue
-			}
-			return &QueueMessageList{}, nil
-		}
-		ids := make([]string, 0, len(pull.ReceivedMessages))
-		out := &QueueMessageList{}
-		for _, rm := range pull.ReceivedMessages {
-			ids = append(ids, rm.AckId)
-			raw, _ := base64.StdEncoding.DecodeString(rm.Message.Data)
-			out.Items = append(out.Items, &QueueMessage{ID: rm.AckId, Body: DecodeQueueBody(string(raw)), Receipt: rm.AckId})
-		}
-		mod, _ := json.Marshal(map[string]any{"ackIds": ids, "ackDeadlineSeconds": visibility})
-		status, data, err = h.request(h.ctx, http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mod, "application/json")
-		if err != nil {
-			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
-		}
-		if status < 200 || status >= 300 {
-			return nil, h.setErr("queue_receive", h.subPath(queue)+":modifyAckDeadline", h.classify(status, data))
-		}
-		return out, nil
-	}
-}
+
 func (h *Host) QueueAck(queue, receipt string) error {
 	if e := ValidateQueueName(queue); e != nil {
 		return h.setErr("queue_ack", queue, e)
@@ -650,6 +548,7 @@ func (h *Host) QueueAck(queue, receipt string) error {
 	}
 	return nil
 }
+
 func (h *Host) QueueNack(queue, receipt string, visibility int64) (string, error) {
 	if e := ValidateQueueName(queue); e != nil {
 		return "", h.setErr("queue_nack", queue, e)
@@ -759,85 +658,40 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 	}
 }
 
-// Op dispatches a registered Cloud operation.
-func (h *Host) Op(op string, a []lmcode.Value) (lmcode.Value, error) {
-	switch op {
-	case "bucket_create":
-		v, err := h.BucketCreate(a[0].Str)
-		return lmcode.Bool(v), err
-	case "bucket_delete":
-		v, err := h.BucketDelete(a[0].Str)
-		return lmcode.Bool(v), err
-	case "bucket_exists":
-		v, err := h.BucketExists(a[0].Str)
-		return lmcode.Bool(v), err
-	case "object_put":
-		ct := "application/octet-stream"
-		meta := map[string]string{}
-		if len(a) == 5 {
-			ct = a[3].Str
-			meta = extractMeta(a[4])
-		}
-		m, err := h.ObjectPut(a[0].Str, a[1].Str, a[2].Str, ct, meta)
-		if err != nil {
-			return lmcode.None(), err
-		}
-		return lmcode.Object("ObjectMeta", m), nil
-	case "object_get":
-		v, err := h.ObjectGet(a[0].Str, a[1].Str)
-		return lmcode.String(v), err
-	case "object_head":
-		m, err := h.ObjectHead(a[0].Str, a[1].Str)
-		if err != nil {
-			return lmcode.None(), err
-		}
-		return lmcode.Object("ObjectMeta", m), nil
-	case "object_delete":
-		return lmcode.None(), h.ObjectDelete(a[0].Str, a[1].Str)
-	case "object_list":
-		mk := int64(0)
-		tok := ""
-		if len(a) == 4 {
-			mk = a[2].Int
-			tok = a[3].Str
-		}
-		p, err := h.ObjectList(a[0].Str, a[1].Str, mk, tok)
-		if err != nil {
-			return lmcode.None(), err
-		}
-		return lmcode.Object("ObjectListPage", p), nil
-	case "queue_create":
-		v, err := h.QueueCreate(a[0].Str)
-		return lmcode.Bool(v), err
-	case "queue_delete":
-		v, err := h.QueueDelete(a[0].Str)
-		return lmcode.Bool(v), err
-	case "queue_exists":
-		v, err := h.QueueExists(a[0].Str)
-		return lmcode.Bool(v), err
-	case "queue_send":
-		v, err := h.QueueSend(a[0].Str, a[1].Str)
-		return lmcode.String(v), err
-	case "queue_receive":
-		mx, wait, vis := int64(1), int64(0), int64(30)
-		if len(a) == 4 {
-			mx = a[1].Int
-			wait = a[2].Int
-			vis = a[3].Int
-		}
-		v, err := h.QueueReceive(a[0].Str, mx, wait, vis)
-		if err != nil {
-			return lmcode.None(), err
-		}
-		return lmcode.Object("QueueMessageList", v), nil
-	case "queue_ack":
-		return lmcode.None(), h.QueueAck(a[0].Str, a[1].Str)
-	case "queue_nack":
-		v, err := h.QueueNack(a[0].Str, a[1].Str, a[2].Int)
-		return lmcode.String(v), err
+func (h *Host) BucketCreateToken(bucket string) (string, error) {
+	status, data, err := h.request(h.ctx, http.MethodGet, h.storageBase()+"/b/"+url.PathEscape(bucket), nil, "")
+	if err != nil {
+		return "", err
 	}
-	return lmcode.None(), fmt.Errorf("unimplemented op %s", op)
+	if status < 200 || status >= 300 {
+		return "", h.setErr("bucket_create_token", bucket, h.classify(status, data))
+	}
+	var b struct {
+		Labels map[string]string `json:"labels"`
+	}
+	if err := json.Unmarshal(data, &b); err != nil {
+		return "", err
+	}
+	return b.Labels["lmcloud_create_token"], nil
 }
+
+func (h *Host) QueueCreateToken(queue string) (string, error) {
+	status, data, err := h.request(h.ctx, http.MethodGet, h.topicPath(queue), nil, "")
+	if err != nil {
+		return "", err
+	}
+	if status < 200 || status >= 300 {
+		return "", h.setErr("queue_create_token", queue, h.classify(status, data))
+	}
+	var t struct {
+		Labels map[string]string `json:"labels"`
+	}
+	if err := json.Unmarshal(data, &t); err != nil {
+		return "", err
+	}
+	return t.Labels["lmcloud_create_token"], nil
+}
+
 func extractMeta(v lmcode.Value) map[string]string {
 	out := map[string]string{}
 	if v.Obj == nil {
