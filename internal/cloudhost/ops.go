@@ -480,7 +480,8 @@ func (h *Host) QueueList() ([]string, error) {
 					Name string `json:"name"`
 				} `json:"topics"`
 				Subscriptions []struct {
-					Name, Topic string `json:"name"`
+					Name  string `json:"name"`
+					Topic string `json:"topic"`
 				} `json:"subscriptions"`
 				Next string `json:"nextPageToken"`
 			}
