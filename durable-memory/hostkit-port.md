@@ -63,6 +63,18 @@ Branch `hostkit-port` from `635a665`.
 - Full test-cloud passes against the fixed JVM gcpsim: object 12/12 (1 skip),
   queue 13/13 (1 skip), dry spy, go vet, go test -race -count=3.
 
+## Token and enforce-mode completion
+
+- Create-token conflict tests: pre-existing bucket/queue without our token
+  returns false; a conflict whose stored token matches the per-call token
+  returns true; topic and subscription labels are read back for queues.
+- gcpsim enforce mode is wired into `test-cloud.sh`: a second JVM sim starts
+  with an auth config containing `denied-token` and a deny-all statement for
+  its principal; scenarios 12/13 run with
+  `LMCLOUD_ENFORCE_DENIED_GCP_TOKEN=denied-token` and pass with no skip.
+- The adapter sends `Authorization: Bearer $LMGCP_SIM_TOKEN` on loopback
+  requests, per design 02 M3.
+
 ## Hostkit gaps observed
 
 - `hostkit` validates the receipt before the queue exists probe, so a

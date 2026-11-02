@@ -59,6 +59,21 @@ if [[ -x "$LMCLOUD_DIR/tests/run-conformance.sh" ]]; then
   trap cleanup EXIT
   "$LMCLOUD_DIR/tests/run-conformance.sh" "$PWD/scripts/lmgcp-cloud-host.sh" "$ENDPOINT" object-storage
   "$LMCLOUD_DIR/tests/run-conformance.sh" "$PWD/scripts/lmgcp-cloud-host.sh" "$ENDPOINT" queue
+  if [[ -n "${GCPSIM_JVM_JAR:-}" ]]; then
+    AUTH_CFG="$(mktemp)"
+    cat > "$AUTH_CFG" <<'JSON'
+{"tokens":{"denied-token":"serviceAccount:denied@example.test"},"Statement":[{"Effect":"Deny","ActionGlob":"*","ResourceGlob":"*","Principal":"serviceAccount:denied@example.test"}]}
+JSON
+    EPORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
+    java -jar "$GCPSIM_JVM_JAR" serve --auth enforce --auth-config "$AUTH_CFG" --port "$EPORT" >/tmp/lmgcp-test-cloud-enforce.log 2>&1 &
+    EPID=$!
+    for _ in $(seq 1 80); do curl -sf -o /dev/null "http://127.0.0.1:$EPORT/health" && break; sleep 0.25; done
+    LMCLOUD_ENFORCE_DENIED_GCP_TOKEN=denied-token "$LMSCRIPT_BIN" "$LMCLOUD_DIR/tests/conformance/object-storage/12-auth-enforced-denial.lms" "$PWD/scripts/lmgcp-cloud-host.sh" "http://127.0.0.1:$EPORT" "enf-gcp-blob"
+    LMCLOUD_ENFORCE_DENIED_GCP_TOKEN=denied-token "$LMSCRIPT_BIN" "$LMCLOUD_DIR/tests/conformance/queue/13-queue-auth-enforced-denial.lms" "$PWD/scripts/lmgcp-cloud-host.sh" "http://127.0.0.1:$EPORT" "enf-gcp-queue"
+    kill "$EPID" 2>/dev/null || true; wait "$EPID" 2>/dev/null || true
+    rm -f "$AUTH_CFG"
+    echo "Auth enforce scenarios 12 & 13 PASS"
+  fi
   cleanup; trap - EXIT
 else
   echo "SKIP lmcloud conformance (lmcloud repo not found)"

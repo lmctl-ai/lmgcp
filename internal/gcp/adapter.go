@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/lmctl-ai/lmcloud/hostkit"
@@ -49,6 +50,7 @@ func (a *Adapter) route(ctx context.Context) (*Host, bool, error) {
 	h.ctx = ctx
 	h.client = a.client
 	h.createToken = hostkit.CreateToken(ctx)
+	h.authToken = strings.TrimSpace(os.Getenv("LMGCP_SIM_TOKEN"))
 	if _, err := h.SetEndpoint("storage", base); err != nil {
 		return nil, false, err
 	}
@@ -232,6 +234,9 @@ func (a *Adapter) CreateQueue(ctx context.Context, q string) (bool, error) {
 		return a.fake.CreateQueue(ctx, q)
 	}
 	v, e := h.QueueCreate(q)
+	if e == nil && !v {
+		return false, hostkit.ProviderError(hostkit.Conflict, 409, "conflict", "queue already exists")
+	}
 	return v, cerr(e)
 }
 func (a *Adapter) DeleteQueue(ctx context.Context, q string) error {

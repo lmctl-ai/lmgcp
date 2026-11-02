@@ -71,11 +71,15 @@ func (h *Host) classify(status int, body []byte) *CloudError {
 }
 
 func (h *Host) request(ctx context.Context, method, urlStr string, body []byte, contentType string) (int, []byte, error) {
+	return h.requestIdem(ctx, method, urlStr, body, contentType, hostkit.IdempotentMethod(method))
+}
+
+func (h *Host) requestIdem(ctx context.Context, method, urlStr string, body []byte, contentType string, idempotent bool) (int, []byte, error) {
 	client := h.client
 	if client == nil {
 		client = hostkit.NewHTTPClient(60 * time.Second)
 	}
-	resp, _, err := h.retry.DoHTTP(ctx, client, hostkit.IdempotentMethod(method), func(ctx context.Context) (*http.Request, error) {
+	resp, _, err := h.retry.DoHTTP(ctx, client, idempotent, func(ctx context.Context) (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, method, urlStr, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
@@ -84,6 +88,9 @@ func (h *Host) request(ctx context.Context, method, urlStr string, body []byte, 
 			req.Header.Set("Content-Type", contentType)
 		}
 		req.Header.Set("Accept", "application/json")
+		if h.authToken != "" {
+			req.Header.Set("Authorization", "Bearer "+h.authToken)
+		}
 		return req, nil
 	})
 	if err != nil {
@@ -137,7 +144,7 @@ func (h *Host) BucketCreate(name string) (bool, error) {
 		raw["labels"] = map[string]string{"lmcloud_create_token": h.createToken}
 	}
 	body, _ := json.Marshal(raw)
-	status, data, err := h.request(h.ctx, http.MethodPost, h.storageBase()+"/b?project="+url.QueryEscape(h.project), body, "application/json")
+	status, data, err := h.requestIdem(h.ctx, http.MethodPost, h.storageBase()+"/b?project="+url.QueryEscape(h.project), body, "application/json", h.createToken != "")
 	if err != nil {
 		return false, h.setErr("bucket_create", name, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}

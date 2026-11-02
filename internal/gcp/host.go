@@ -19,6 +19,7 @@ type Host struct {
 	client       *http.Client
 	retry        hostkit.RetryPolicy
 	createToken  string
+	authToken    string
 	abortOnError bool
 	lastError    *CloudError
 	endpoints    map[string]string
