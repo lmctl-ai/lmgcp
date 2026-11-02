@@ -4,7 +4,7 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-s = load_schema(cli="lmgcp");
+s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest");
 p = _lmcode_ s;
   let base_docs = gcp.firestore_list_docs("feature_flags");
   assert_close(float(base_docs.len()), 2.0, 0.01);

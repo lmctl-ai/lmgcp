@@ -1,0 +1,41 @@
+# Gallery scene restored from examples/11_cloud_sql_ha_backup_posture.lms (pre-migration), content unchanged below.
+# Inputs: optional JSON metrics path in ARGV[0]; the scene uses its committed baseline literals.
+s = load_schema(cli="lmdraw" install="github:lmctl-ai/lmdraw@latest");
+p = _lmcode_ s;
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud SQL High Availability, PITR Backup & TLS Security Posture", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "2 Regional HA PostgreSQL 15 instances compliant | 1 Zonal MySQL 8 instance flagged for Public IP", "#8b949e").set_attr("text-anchor", "middle");
+
+  fn sql_col(x: float, name: string, meta: string, ha: string, pitr: string, ssl: string, ip: string, score: string, col: string) -> void {
+    scene.rect(x, 82.0, 280.0, 340.0, "#161b22").set_attr("stroke", col).set_attr("stroke-width", "2");
+    scene.text(x + 140.0, 114.0, 15.5, name, "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+    scene.text(x + 140.0, 136.0, 11.5, meta, "#8b949e").set_attr("text-anchor", "middle");
+
+    scene.rect(x + 18.0, 156.0, 244.0, 38.0, "#0d1117");
+    scene.text(x + 30.0, 180.0, 12.0, ha, "#c9d1d9");
+
+    scene.rect(x + 18.0, 204.0, 244.0, 38.0, "#0d1117");
+    scene.text(x + 30.0, 228.0, 12.0, pitr, "#c9d1d9");
+
+    scene.rect(x + 18.0, 252.0, 244.0, 38.0, "#0d1117");
+    scene.text(x + 30.0, 276.0, 12.0, ssl, "#c9d1d9");
+
+    scene.rect(x + 18.0, 300.0, 244.0, 38.0, "#0d1117");
+    scene.text(x + 30.0, 324.0, 12.0, ip, "#c9d1d9");
+
+    scene.text(x + 140.0, 386.0, 14.0, score, col).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  }
+
+  sql_col(40.0,  "prod-orders-pg15",         "POSTGRES_15 | us-central1", "[PASS] Availability: REGIONAL", "[PASS] Backup + PITR: ON",    "[PASS] Require SSL: TRUE",  "[PASS] Private IP Only",     "Score: 100 / 100", "#3fb950");
+  sql_col(340.0, "prod-ledger-pg15",         "POSTGRES_15 | us-east1",    "[PASS] Availability: REGIONAL", "[PASS] Backup + PITR: ON",    "[PASS] Require SSL: TRUE",  "[PASS] Private IP Only",     "Score: 100 / 100", "#3fb950");
+  sql_col(640.0, "staging-reporting-mysql8", "MYSQL_8_0 | db-g1-small",   "[WARN] Availability: ZONAL",    "[WARN] PITR Binlog: OFF",     "[FAIL] Require SSL: FALSE", "[FAIL] Public IPv4: ON!",    "Score: 35 / 100",  "#ff7b72");
+
+  scene.rect(40.0, 440.0, 880.0, 74.0, "#161b22").set_attr("stroke", "#58a6ff");
+  scene.text(60.0, 468.0, 13.5, "Ephemeral SQL Verification: lmgcp-sql-demo (POSTGRES_15, db-f1-micro)", "#58a6ff").set_attr("font-weight", "700");
+  scene.text(60.0, 494.0, 12.0, "Provisioned with RequireSSL=true & Private IP defaults -> verified via sqladmin/v1 -> deleted cleanly.", "#c9d1d9");
+
+  scene.render_png("images/11_cloud_sql_ha_backup_posture.png", 960, 540, 1);
+end _lmcode_
+r = run_lmcode(p, {args: ARGV});
+assert(r.ok, "lmdraw host failed");
+copy_file("images/11_cloud_sql_ha_backup_posture.png", "docs/images/11_cloud_sql_ha_backup_posture.png");

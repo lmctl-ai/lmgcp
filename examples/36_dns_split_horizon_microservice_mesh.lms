@@ -4,7 +4,7 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-s = load_schema(cli="lmgcp");
+s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest");
 p = _lmcode_ s;
   let z = gcp.dns_create_zone("lmgcp-mesh-internal", "mesh.lmgcp.internal.", "private", true);
   gcp.dns_add_record("lmgcp-mesh-internal", "checkout.mesh.lmgcp.internal.", "A", 60, "10.10.1.25");

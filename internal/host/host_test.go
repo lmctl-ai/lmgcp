@@ -13,7 +13,7 @@ import (
 )
 
 func TestHostSignatureParity(t *testing.T) {
-	h, err := NewHost()
+	h, err := NewHost(false)
 	if err != nil {
 		t.Fatalf("NewHost failed: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestHostSignatureParity(t *testing.T) {
 }
 
 func TestFindPrefixUsesFakeAccountInventory(t *testing.T) {
-	h, err := NewHost()
+	h, err := NewHost(false)
 	if err != nil {
 		t.Fatalf("NewHost failed: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestFindPrefixUsesFakeAccountInventory(t *testing.T) {
 }
 
 func TestHostEndToEndFakeServicesAndSafety(t *testing.T) {
-	h, err := NewHost()
+	h, err := NewHost(false)
 	if err != nil {
 		t.Fatalf("NewHost failed: %v", err)
 	}

@@ -4,7 +4,7 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-s = load_schema(cli="lmgcp");
+s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest");
 p = _lmcode_ s;
   let svc = gcp.run_deploy_service("us-central1", "lmgcp-checkout-api", "us-central1-docker.pkg.dev/gcp-proj-****8f2a/prod-containers/checkout:v2.1.0", 1000, 512, 10);
   assert_close(float(svc.cpu_milli()), 1000.0, 0.01);

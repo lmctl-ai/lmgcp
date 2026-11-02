@@ -4,7 +4,7 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-s = load_schema(cli="lmgcp");
+s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest");
 p = _lmcode_ s;
   let rings = gcp.kms_list_keyrings("us-central1");
   assert_close(float(rings.len()), 1.0, 0.01);

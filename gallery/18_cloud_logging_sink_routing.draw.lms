@@ -1,0 +1,45 @@
+# Gallery scene restored from examples/18_cloud_logging_sink_routing.lms (pre-migration), content unchanged below.
+# Inputs: optional JSON metrics path in ARGV[0]; the scene uses its committed baseline literals.
+s = load_schema(cli="lmdraw" install="github:lmctl-ai/lmdraw@latest");
+p = _lmcode_ s;
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud Logging Severity Distribution & SIEM Sink Routing", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "121,439 Log Entries Across 6 Severities | Automatic Secret Redaction on logging_write_entry()", "#8b949e").set_attr("text-anchor", "middle");
+
+  fn sev_box(x: float, label: string, count: string, col: string) -> void {
+    scene.rect(x, 82.0, 205.0, 100.0, "#161b22").set_attr("stroke", col).set_attr("stroke-width", "2");
+    scene.text(x + 102.5, 114.0, 12.5, label, col).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+    scene.text(x + 102.5, 154.0, 24.0, count, "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  }
+
+  sev_box(40.0,  "INFO ENTRIES",     "94,200", "#58a6ff");
+  sev_box(265.0, "WARNING ENTRIES",  "2,181",  "#d29922");
+  sev_box(490.0, "ERROR ENTRIES",    "340",    "#f0883e");
+  sev_box(715.0, "CRITICAL ENTRIES", "18",     "#ff7b72");
+
+  scene.rect(40.0, 204.0, 880.0, 280.0, "#161b22").set_attr("stroke", "#30363d");
+  scene.text(60.0, 236.0, 15.0, "Cloud Logging Router & Export Sink Destinations", "#e6edf3").set_attr("font-weight", "700");
+
+  scene.rect(65.0, 290.0, 210.0, 110.0, "#0d1117").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(170.0, 334.0, 14.5, "Cloud Logging Router", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(170.0, 360.0, 12.0, "+ Secret Redactor", "#3fb950").set_attr("text-anchor", "middle");
+
+  scene.arrow(280.0, 345.0, 360.0, 285.0, "#58a6ff", 2.2);
+  scene.arrow(280.0, 345.0, 360.0, 345.0, "#3fb950", 2.2);
+  scene.arrow(280.0, 345.0, 360.0, 405.0, "#a371f7", 2.2);
+
+  scene.rect(365.0, 260.0, 530.0, 48.0, "#0d1117").set_attr("stroke", "#58a6ff");
+  scene.text(382.0, 290.0, 12.5, "audit-to-bigquery -> bigquery/.../datasets/security_telemetry (severity>=WARNING)", "#c9d1d9");
+
+  scene.rect(365.0, 320.0, 530.0, 48.0, "#0d1117").set_attr("stroke", "#3fb950");
+  scene.text(382.0, 350.0, 12.5, "compliance-to-archive-gcs -> storage/.../prod-compliance-ledger-archive", "#c9d1d9");
+
+  scene.rect(365.0, 380.0, 530.0, 48.0, "#0d1117").set_attr("stroke", "#a371f7");
+  scene.text(382.0, 410.0, 12.5, "siem-realtime-pubsub + lmgcp-siem-sink -> pubsub/.../security-audit-stream", "#c9d1d9");
+
+  scene.text(480.0, 464.0, 12.0, "Ephemeral sink lmgcp-siem-sink created, verified in sink list (4 sinks), and deleted cleanly.", "#8b949e").set_attr("text-anchor", "middle");
+  scene.render_png("images/18_cloud_logging_sink_routing.png", 960, 520, 1);
+end _lmcode_
+r = run_lmcode(p, {args: ARGV});
+assert(r.ok, "lmdraw host failed");
+copy_file("images/18_cloud_logging_sink_routing.png", "docs/images/18_cloud_logging_sink_routing.png");

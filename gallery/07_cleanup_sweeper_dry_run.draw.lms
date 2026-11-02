@@ -1,0 +1,47 @@
+# Gallery scene restored from examples/07_cleanup_sweeper_dry_run.lms (pre-migration), content unchanged below.
+# Inputs: optional JSON metrics path in ARGV[0]; the scene uses its committed baseline literals.
+s = load_schema(cli="lmdraw" install="github:lmctl-ai/lmdraw@latest");
+p = _lmcode_ s;
+  scene.canvas(960, 540, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Orphaned Resource Sweeper (--sweep Dry-Run & Age-Gated Delete)", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Matches ONLY lmgcp_* / lmgcp-* prefix + lmgcp_test label | Baseline prod resources 100% immune", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(40.0, 82.0, 540.0, 415.0, "#161b22").set_attr("stroke", "#30363d");
+  scene.text(60.0, 112.0, 15.0, "Resource Age vs 24h Sweep Cutoff Threshold", "#e6edf3").set_attr("font-weight", "700");
+
+  let x24 = 240.0 + 24.0 * 5.5;
+  scene.line(x24, 130.0, x24, 445.0, "#f0883e", 2.0);
+  scene.text(x24, 468.0, 11.5, "24h Cutoff (--older-than-hours 24)", "#f0883e").set_attr("text-anchor", "middle");
+
+  fn age_bar(y: float, name: string, hrs: float, col: string, status: string) -> void {
+    scene.text(230.0, y + 18.0, 12.5, name, "#c9d1d9").set_attr("text-anchor", "end");
+    let w = hrs * 5.5;
+    scene.rect(240.0, y, w, 26.0, col);
+    scene.text(248.0 + w, y + 18.0, 12.0, status, "#e6edf3");
+  }
+
+  age_bar(150.0, "lmgcp-stale-vm-48h",    48.0, "#ff7b72", "48h -> SWEPT (24h pass)");
+  age_bar(210.0, "lmgcp-stale-bkt-36h",   36.0, "#ff7b72", "36h -> SWEPT (24h pass)");
+  age_bar(270.0, "lmgcp-recent-topic-8h",  8.0, "#58a6ff", "8h -> Retained at 24h");
+  age_bar(330.0, "lmgcp-fresh-svc-1h",     2.0, "#3fb950", "1h -> Retained at 24h");
+  age_bar(390.0, "prod-api-gw-01",        40.0, "#30363d", "IMMUNE (no lmgcp prefix)");
+
+  scene.rect(600.0, 82.0, 320.0, 415.0, "#161b22").set_attr("stroke", "#30363d");
+  scene.text(620.0, 112.0, 15.0, "Sweeper Verification Summary", "#e6edf3").set_attr("font-weight", "700");
+
+  fn stat_card(y: float, label: string, val: string, col: string) -> void {
+    scene.rect(620.0, y, 280.0, 74.0, "#0d1117").set_attr("stroke", "#30363d");
+    scene.text(636.0, y + 26.0, 12.0, label, "#8b949e");
+    scene.text(636.0, y + 54.0, 17.0, val, col).set_attr("font-weight", "700");
+  }
+
+  stat_card(134.0, "sweep_dry_run(0h) Candidates",  "4 ephemeral matched", "#58a6ff");
+  stat_card(222.0, "sweep_delete(24h) Stale Pass",  "2 deleted (>= 24h)",  "#ff7b72");
+  stat_card(310.0, "sweep_delete(0h) Final Clean",  "2 remaining deleted", "#3fb950");
+  stat_card(398.0, "Baseline Production Resources", "43 / 43 Untouched",   "#39d353");
+
+  scene.render_png("images/07_cleanup_sweeper_dry_run.png", 960, 540, 1);
+end _lmcode_
+r = run_lmcode(p, {args: ARGV});
+assert(r.ok, "lmdraw host failed");
+copy_file("images/07_cleanup_sweeper_dry_run.png", "docs/images/07_cleanup_sweeper_dry_run.png");

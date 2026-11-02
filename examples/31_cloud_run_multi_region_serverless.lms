@@ -4,7 +4,7 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-s = load_schema(cli="lmgcp");
+s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest");
 p = _lmcode_ s;
   let s_primary = gcp.run_deploy_service("us-central1", "lmgcp-edge-webhook-usc1", "us-central1-docker.pkg.dev/demo/webhook:v2", 1000, 512, 10);
   let s_dr = gcp.run_deploy_service("us-east1", "lmgcp-edge-webhook-use1", "us-east1-docker.pkg.dev/demo/webhook:v2", 1000, 512, 8);

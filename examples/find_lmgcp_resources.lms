@@ -1,6 +1,6 @@
 # Account-wide read-only prefix search. Synthetic fake transport by default.
 mkdir("images"); mkdir("data");
-s = load_schema(cli="lmgcp");
+s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest");
 p = _lmcode_ s;
 let rows = gcp.find_prefix("lmgcp");
 file_write("data/find_lmgcp_resources.txt", "category,count\nmatching," + str(rows.len()) + "\n");

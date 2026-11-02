@@ -4,7 +4,7 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-s = load_schema(cli="lmgcp");
+s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest");
 p = _lmcode_ s;
   let ds = gcp.bq_create_dataset("lmgcp_finops_mart", "US");
   assert_close(float(ds.default_expiration_days()), 30.0, 0.01);

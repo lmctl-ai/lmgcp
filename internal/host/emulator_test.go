@@ -26,7 +26,7 @@ func TestEmulatorEndpoint(t *testing.T) {
 	t.Setenv("LMGCP_ENDPOINT", srv.URL)
 	t.Setenv("LMGCP_ACCESS_TOKEN", token)
 	t.Setenv("LMGCP_LIVE", "")
-	h, err := NewHost()
+	h, err := NewHost(false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestEmulatorEndpoint(t *testing.T) {
 func TestRejectUnsafeEndpoint(t *testing.T) {
 	for _, endpoint := range []string{"https://googleapis.com", "http://user:secret@localhost", "http://localhost/path", "http://localhost?token=secret"} {
 		t.Setenv("LMGCP_ENDPOINT", endpoint)
-		if _, err := NewHost(); err == nil {
+		if _, err := NewHost(false); err == nil {
 			t.Fatal("accepted unsafe endpoint")
 		} else if strings.Contains(err.Error(), "secret") {
 			t.Fatal("leaked endpoint")

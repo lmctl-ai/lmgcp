@@ -12,6 +12,7 @@ import (
 
 	"github.com/lmctl-ai/lmcode-go"
 	"github.com/lmctl-ai/lmgcp/internal/host"
+	"github.com/lmctl-ai/lmgcp/internal/invoke"
 	"github.com/lmctl-ai/lmgcp/internal/membudget"
 	"github.com/lmctl-ai/lmgcp/internal/safety"
 	"github.com/lmctl-ai/lmgcp/schema"
@@ -23,7 +24,7 @@ var rawVersion string
 //go:embed THIRD_PARTY_NOTICES
 var embeddedNotices string
 
-const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | --lmcode [--dry-run] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete]
+const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | --lmcode FILE [FILE ...] | --sweep [--older-than-hours N] [--delete]
 
 Google Cloud Go SDK host for lmscript (Apache-2.0 SDK on lmcode-go).
 
@@ -33,8 +34,10 @@ Options:
   --notices                  Print embedded third-party license notices
   --lmcode-schema [--json]      Print human-readable schema summary or raw JSON schema
   --lmcode-signatures           Print sorted canonical DSL signatures
-  --lmcode [--dry-run] FILE...  Load, verify, and execute compiled .dslb bytecode files
+  --lmcode FILE...           Load, verify, and execute compiled .dslb bytecode files
   --sweep                    List (dry-run default) or delete (--delete) lmgcp_ leftovers
+
+Dry mode comes from the lmcode invocation manifest; there is no --dry-run flag.
 
 Environment & Resource Limits:
   LMGCP_MAX_MEMORY_MB        Total memory budget in whole MiB (default: 4096; invalid = exit 2)
@@ -84,7 +87,7 @@ func main() {
 func realMain(args []string) int {
 	if _, err := membudget.InitFromEnv(); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
-		return 2
+		return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, err.Error()))
 	}
 
 	if len(args) == 2 && (args[1] == "--help" || args[1] == "-h") {
@@ -112,44 +115,35 @@ func realMain(args []string) int {
 		return 2
 	}
 
-	dryInvocation := false
-	var files []string
+	var results *lmcode.InvocationResults
 	if args[1] == "--lmcode" {
-		startIdx := 2
-		if len(args) >= 3 && args[2] == "--dry-run" {
-			dryInvocation = true
-			startIdx = 3
+		if len(args) < 3 {
+			return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 		}
-		if startIdx >= len(args) {
-			return lmcode.FailureFrame(os.Stdout, "cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
-		}
-		for i := startIdx; i < len(args); i++ {
-			if args[i] == "" || strings.HasPrefix(args[i], "--") {
-				return lmcode.FailureFrame(os.Stdout, "cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
+		files := make([]string, 0, len(args)-2)
+		for _, file := range args[2:] {
+			if file == "" || strings.HasPrefix(file, "--") {
+				return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 			}
+			files = append(files, file)
 		}
-		files = args[startIdx:]
+		collected, err := lmcode.InvocationResultsFromCommand(files)
+		if err != nil {
+			return invoke.Failure("cli", err)
+		}
+		results = collected
 	}
+	dryInvocation := results != nil && results.Dry()
 
-	results, resultsErr := lmcode.InvocationResultsFromCommand(files)
-	if args[1] == "--lmcode" {
-		if resultsErr != nil {
-			return lmcode.FailureFrame(os.Stdout, "cli", resultsErr)
-		}
-		if results.Dry() {
-			dryInvocation = true
-		}
-	}
-
-	h, err := host.NewHost()
+	h, err := host.NewHost(dryInvocation)
 	if err != nil {
-		return lmcode.FailureFrame(os.Stdout, "app", lmcode.NewError(lmcode.APP_FAIL, "failed to initialize GCP host: "+safety.RedactSecrets(err.Error())))
+		return invoke.Failure("app", lmcode.NewError(lmcode.APP_FAIL, "failed to initialize GCP host: "+safety.RedactSecrets(err.Error())))
 	}
 	defer h.Close()
 
 	reg := lmcode.NewRegistry()
 	if err := host.Register(reg, h); err != nil {
-		return lmcode.FailureFrame(os.Stdout, "app", lmcode.NewError(lmcode.APP_FAIL, "failed to register host: "+err.Error()))
+		return invoke.Failure("app", lmcode.NewError(lmcode.APP_FAIL, "failed to register host: "+err.Error()))
 	}
 
 	if args[1] == "--lmcode-schema" {
@@ -220,66 +214,36 @@ func realMain(args []string) int {
 	if args[1] == "--lmcode" {
 		contract, err := lmcode.ResultContractFromSchema(schema.EmbeddedSchema)
 		if err != nil {
-			return lmcode.FailureFrame(os.Stdout, "load", err)
+			return invoke.Failure("load", err)
 		}
-
 		ctx := lmcode.NewContext()
 		ctx.Set("gcp", h)
 		ctx.SetDry(dryInvocation)
 
-		for _, registration := range results.Registrations() {
-			index := registration.Index
-			codeBytes, err := os.ReadFile(registration.File)
-			if err != nil {
-				_ = results.Fail(&index, "load", lmcode.NewError(lmcode.LOAD_BAD_BYTECODE, err.Error()))
-				break
-			}
-			prog, err := lmcode.Load(codeBytes, schema.EmbeddedSchema, reg)
-			if err != nil {
-				_ = results.Fail(&index, "load", err)
-				break
-			}
-			if _, err := results.Select(index, reg, contract); err != nil {
-				_ = results.Fail(&index, "run", err)
-				break
-			}
-			if dryInvocation {
-				if err := results.Complete(index); err != nil {
-					_ = results.Fail(&index, "run", err)
-					break
-				}
-				continue
-			}
-
-			membudget.ResetRun()
-			var exitOnce sync.Once
-			stopWatchdog := membudget.StartWatchdog(func(wErr error) {
-				exitOnce.Do(func() {
-					_ = h.CleanupLedger()
-					fmt.Fprintln(os.Stderr, wErr.Error())
-					os.Exit(lmcode.FailureFrame(os.Stdout, "run", wErr))
-				})
-			})
-			runErr := prog.Run(ctx, reg)
-			stopWatchdog()
-			if h.AuthError() != "" {
-				_ = results.Fail(nil, "app", lmcode.NewError(lmcode.APP_FAIL, h.AuthError()))
-				break
-			}
-			if runErr != nil {
-				_ = h.CleanupLedger()
-				if strings.Contains(runErr.Error(), membudget.EnvVarName) {
-					fmt.Fprintln(os.Stderr, runErr.Error())
-				}
-				_ = results.Fail(&index, "run", runErr)
-				break
-			}
-			if err := results.Complete(index); err != nil {
-				_ = results.Fail(&index, "run", err)
-				break
-			}
+		var exitOnce sync.Once
+		runner := invoke.Runner{
+			Results:  results,
+			Registry: reg,
+			Schema:   schema.EmbeddedSchema,
+			Contract: contract,
+			Context:  ctx,
+			Hooks: invoke.Hooks{
+				BeforeRun: membudget.ResetRun,
+				OnRunError: func(runErr error) {
+					if strings.Contains(runErr.Error(), membudget.EnvVarName) {
+						fmt.Fprintln(os.Stderr, runErr.Error())
+					}
+				},
+				Cleanup:   func() { _ = h.CleanupLedger() },
+				AuthError: h.AuthError,
+				StartWatchdog: func(onError func(error)) func() {
+					return membudget.StartWatchdog(func(watchdogErr error) {
+						exitOnce.Do(func() { onError(watchdogErr) })
+					})
+				},
+			},
 		}
-		return results.WriteFrame(os.Stdout)
+		return runner.Execute()
 	}
 
 	fmt.Fprint(os.Stderr, usageText)

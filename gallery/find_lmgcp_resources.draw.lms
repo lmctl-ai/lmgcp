@@ -1,0 +1,12 @@
+# Gallery scene restored from examples/find_lmgcp_resources.lms (pre-migration), content unchanged below.
+# Inputs: optional JSON metrics path in ARGV[0]; the scene uses its committed baseline literals.
+s = load_schema(cli="lmplot" install="github:lmctl-ai/lmplot@latest");
+p = _lmcode_ s;
+plot.png("images/find_lmgcp_resources.png", 900, 560);
+plot.cmd("set datafile separator ','; set title 'GCP resources starting with lmgcp'; set style data histograms");
+plot.cmd("plot 'data/find_lmgcp_resources.txt' using 2:xtic(1) title 'matches'");
+plot.close();
+end _lmcode_
+r = run_lmcode(p, {args: ARGV});
+assert(r.ok, "lmplot host failed");
+copy_file("images/find_lmgcp_resources.png", "docs/images/find_lmgcp_resources.png");

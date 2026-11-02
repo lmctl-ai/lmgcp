@@ -1,0 +1,32 @@
+# Gallery scene restored from examples/34_firestore_multi_collection_state_store.lms (pre-migration), content unchanged below.
+# Inputs: optional JSON metrics path in ARGV[0]; the scene uses its committed baseline literals.
+s = load_schema(cli="lmdraw" install="github:lmctl-ai/lmdraw@latest");
+p = _lmcode_ s;
+  scene.canvas(960, 500, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud Firestore Multi-Collection Workflow & Distributed Lock Store", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Baseline feature_flags inspected + ephemeral lmgcp_workflows & lmgcp_locks documents verified, redacted & deleted", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(45.0, 95.0, 275.0, 350.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(182.0, 130.0, 15.0, "Collection: feature_flags", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(182.0, 165.0, 12.0, "doc: checkout_v2 (enabled=true)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(182.0, 195.0, 12.0, "doc: ai_search (rollout=25%)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(182.0, 395.0, 12.0, "READ-ONLY BASELINE", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.rect(342.0, 95.0, 275.0, 350.0, "#161b22").set_attr("stroke", "#3fb950").set_attr("stroke-width", "2");
+  scene.text(480.0, 130.0, 15.0, "Collection: lmgcp_workflows", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 165.0, 12.0, "doc: wf-101 (COMPLETED)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(480.0, 195.0, 11.5, "auth_header -> ya29.[REDACTED]", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(480.0, 225.0, 12.0, "doc: wf-102 (RUNNING)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(480.0, 395.0, 12.0, "CREATED & CLEANED", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.rect(640.0, 95.0, 275.0, 350.0, "#161b22").set_attr("stroke", "#a371f7").set_attr("stroke-width", "2");
+  scene.text(777.0, 130.0, 15.0, "Collection: lmgcp_locks", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(777.0, 165.0, 12.0, "doc: lock-shard-0", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(777.0, 195.0, 11.5, "holder=worker-usc1-01 (ttl=60s)", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(777.0, 395.0, 12.0, "CREATED & CLEANED", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.render_png("images/34_firestore_multi_collection_state_store.png", 960, 500, 1);
+end _lmcode_
+r = run_lmcode(p, {args: ARGV});
+assert(r.ok, "lmdraw host failed");
+copy_file("images/34_firestore_multi_collection_state_store.png", "docs/images/34_firestore_multi_collection_state_store.png");

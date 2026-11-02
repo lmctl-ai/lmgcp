@@ -4,7 +4,7 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-s = load_schema(cli="lmgcp");
+s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest");
 p = _lmcode_ s;
   let bkt = gcp.storage_create_bucket("lmgcp-telemetry-lake", "US-CENTRAL1", "STANDARD");
   let ok_ver = gcp.storage_set_bucket_versioning("lmgcp-telemetry-lake", true);

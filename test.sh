@@ -22,6 +22,7 @@ fi
 
 pass=0
 ok() { pass=$((pass+1)); echo "ok $pass - $1"; }
+skip() { pass=$((pass+1)); echo "ok $pass # SKIP $1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 [ -x "$HOST" ] || fail "$HOST not executable"
@@ -152,6 +153,31 @@ rm -rf "$mem_dir"
 echo "$oom_stderr" | grep -q "LMGCP_MAX_MEMORY_MB" || fail "memory budget stderr missing LMGCP_MAX_MEMORY_MB: $oom_stderr"
 ok "memory budget limit enforced with RUN_HOST envelope and stderr message"
 
+# 8b. Dry invocation: real reads, dummy mutators, zero ledger writes, asserts run
+dry_dir="$(mktemp -d build/dry.XXXXXX)"
+cat > "$dry_dir/dry.lms" <<LMS
+s = load_schema(schema="$PWD/schema/lmgcp.dsl.json");
+p = _lmcode_ s;
+  let before = gcp.ledger_count();
+  let dummy = gcp.compute_create_instance("us-central1-a", "lmgcp-dry-vm", "e2-micro", "debian-12");
+  let after = gcp.ledger_count();
+  assert_close(float(before), float(after), 0.0);
+  let inv = gcp.inventory_summary();
+  assert_close(float(str_to_int(inv.get("compute_instances"))), 7.0, 0.0);
+  assert_close(1.0, 1.0, 0.0);
+end _lmcode_
+r = run_lmcode(p, {command:["$HOST","--lmcode","\$DSLFILE"]});
+LMS
+set +e
+dry_out="$("$LMSCRIPT" --dry-run "$dry_dir/dry.lms" 2>&1)"
+dry_rc=$?
+set -e
+rm -rf "$dry_dir"
+[ "$dry_rc" -eq 0 ] || fail "dry invocation exited $dry_rc: $dry_out"
+echo "$dry_out" | grep -q '"dry":true' || fail "dry invocation missing dry envelope: $dry_out"
+echo "$dry_out" | grep -q '"ok":true' || fail "dry invocation missing ok envelope: $dry_out"
+ok "dry invocation executes reads/asserts with zero ledger writes"
+
 # 9. Go unit tests (safety & fake GCP SDK integration)
 go test ./internal/safety ./internal/host >/dev/null || fail "go test failed"
 ok "Go unit tests pass (internal/safety, internal/host)"
@@ -173,9 +199,17 @@ done
 # The account inventory example is outside the 40 numbered comparison/cost labs.
 out="$("$LMSCRIPT" examples/find_lmgcp_resources.lms 2>&1)" || { echo "$out" >&2; fail "prefix inventory example failed"; }
 echo "$out" | grep -q '^ok ' || fail "prefix inventory example printed no ok line"
-ok "account inventory and plot example"
+ok "account inventory example"
 
-# 11. Verify gallery images in docs/images/ exist and have valid PNG magic bytes
+# 11. Gallery scenes are separate, capability-gated, and skipped until lmdraw/lmplot advance
+gallery_out="$(LMSCRIPT_BIN="$LMSCRIPT" ./scripts/render-gallery.sh 2>&1)" || { echo "$gallery_out" >&2; fail "gallery render probe failed"; }
+if echo "$gallery_out" | grep -q '^SKIP '; then
+  skip "lmdraw not envelope-capable"
+else
+  ok "gallery scenes rendered"
+fi
+
+# 12. Verify gallery images in docs/images/ exist and have valid PNG magic bytes
 img_files=(docs/images/*.png)
 if [ "${#img_files[@]}" -gt 0 ]; then
   for img in "${img_files[@]}"; do
@@ -186,7 +220,7 @@ if [ "${#img_files[@]}" -gt 0 ]; then
   ok "verified ${#img_files[@]} PNG images in docs/images/"
 fi
 
-# 12. Verify all 40 lmcloud (OpenTofu) equivalents under compare/ and compare/RESULTS.md
+# 13. Verify all 40 lmcloud (OpenTofu) equivalents under compare/ and compare/RESULTS.md
 [ -x "compare/run.sh" ] || fail "compare/run.sh missing or not executable"
 [ -s "compare/RESULTS.md" ] || fail "compare/RESULTS.md missing or empty"
 compare_dirs=(compare/[0-9][0-9]_*)

@@ -75,7 +75,7 @@ type Host struct {
 // NewHost initializes the lmgcp Host.
 // Unless LMGCP_LIVE=1 is set in the environment, it starts an in-process fake GCP server
 // and binds all Google Cloud Go SDK clients to loopback HTTP with option.WithoutAuthentication().
-func NewHost() (*Host, error) {
+func NewHost(dry bool) (*Host, error) {
 	proj := strings.TrimSpace(os.Getenv("LMGCP_PROJECT"))
 	if proj == "" {
 		proj = "lmgcp-sandbox-8f2a"
@@ -88,7 +88,7 @@ func NewHost() (*Host, error) {
 	if zn == "" {
 		zn = "us-central1-a"
 	}
-	live := os.Getenv("LMGCP_LIVE") == "1"
+	live := os.Getenv("LMGCP_LIVE") == "1" && !dry
 
 	h := &Host{
 		projectID:   proj,

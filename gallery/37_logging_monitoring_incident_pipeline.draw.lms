@@ -1,0 +1,31 @@
+# Gallery scene restored from examples/37_logging_monitoring_incident_pipeline.lms (pre-migration), content unchanged below.
+# Inputs: optional JSON metrics path in ARGV[0]; the scene uses its committed baseline literals.
+s = load_schema(cli="lmdraw" install="github:lmctl-ai/lmdraw@latest");
+p = _lmcode_ s;
+  scene.canvas(960, 520, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "Cloud Logging & Monitoring Incident Detection Pipeline", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Correlates P95 latency series + Cloud SQL CPU + redacted structured logs -> SIEM sink & SLO alert policy", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(45.0, 95.0, 270.0, 360.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(180.0, 132.0, 15.0, "1. Metric Series Query", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(180.0, 170.0, 12.0, "Run P95 peak: 162.4 ms", "#f85149").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(180.0, 200.0, 12.0, "SQL CPU peak: 64.0%", "#d29922").set_attr("text-anchor", "middle");
+  scene.text(180.0, 240.0, 11.5, "6 time-series windows", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(345.0, 95.0, 270.0, 360.0, "#161b22").set_attr("stroke", "#d29922").set_attr("stroke-width", "2");
+  scene.text(480.0, 132.0, 15.0, "2. Structured Log Stream", "#d29922").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 170.0, 12.0, "lmgcp-incident-log (3 entries)", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(480.0, 200.0, 11.5, "INFO / WARNING / ERROR", "#c9d1d9").set_attr("text-anchor", "middle");
+  scene.text(480.0, 235.0, 11.5, "ya29.incidentSecret99 -> REDACTED", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.rect(645.0, 95.0, 270.0, 360.0, "#161b22").set_attr("stroke", "#3fb950").set_attr("stroke-width", "2");
+  scene.text(780.0, 132.0, 15.0, "3. Sink & Alert Routing", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(780.0, 170.0, 12.0, "Sink: lmgcp-incident-sink", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(780.0, 200.0, 12.0, "Alert: lmgcp-incident-slo-alert", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(780.0, 235.0, 11.5, "Both torn down via cleanup_ledger()", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.render_png("images/37_logging_monitoring_incident_pipeline.png", 960, 520, 1);
+end _lmcode_
+r = run_lmcode(p, {args: ARGV});
+assert(r.ok, "lmdraw host failed");
+copy_file("images/37_logging_monitoring_incident_pipeline.png", "docs/images/37_logging_monitoring_incident_pipeline.png");

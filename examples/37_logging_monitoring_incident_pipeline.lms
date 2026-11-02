@@ -4,7 +4,7 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-s = load_schema(cli="lmgcp");
+s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest");
 p = _lmcode_ s;
   let lat = gcp.monitoring_query_series("run.googleapis.com/request_latencies_p95_ms", 6);
   let cpu = gcp.monitoring_query_series("cloudsql.googleapis.com/database/cpu/utilization", 6);

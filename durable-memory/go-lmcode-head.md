@@ -1,40 +1,49 @@
 # Go host skeleton lessons (lmcode-go HEAD)
 
-Branch `go-lmcode-head` migrated lmgcp from `65f0ef2275b0` (`v0.6.38-12`) to
-`77932bf7134a` (`v0.6.38-22`) and is the reference for the shared Go host skeleton.
+This branch migrated lmgcp from `65f0ef2275b0` (`v0.6.38-12`) to
+`77932bf7134a` (`v0.6.38-22`). The reusable pieces are the shared run loop in
+`internal/invoke` and the dry-slot pattern in `internal/host/register.go`; copy
+those, not the whole provider host.
 
 ## Dependency and API cutover
 
 - Bump with `go get github.com/lmctl-ai/lmcode-go@<HEAD sha>` and update `sdk.lock`
   to the same full SHA. `test.sh` asserts the 12-character prefixes match.
-- `ReportOK`, `ReportError`, and `ReportAppFailure` no longer exist. Hosts now
-  construct `lmcode.InvocationResultsFromCommand(files)` (or
-  `InvocationResultsFromManifest(files, nil)` for standalone argument-order
-  slots), call `Select`/`Complete` per slot, record failures with `Fail`, and emit
-  exactly one terminal frame with `WriteFrame(os.Stdout)`.
+- `ReportOK`, `ReportError`, and `ReportAppFailure` no longer exist. Construct
+  `lmcode.InvocationResultsFromCommand(files)` only in the `--lmcode` branch
+  (never for schema/signature/sweep discovery), call `Select`/`Complete` per
+  slot, record failures with `Fail`, and emit exactly one frame with `WriteFrame`.
 - `FailureFrame(os.Stdout, phase, err)` is for errors before a collector exists
-  (usage, host init, schema contract). Do not write a second frame afterwards.
-- Exit codes are fixed: 0 success, 2 cli/usage, 3 load/run, 4 app or output
-  failure. `Fail` does not exit; `WriteFrame` returns the status.
-- The terminal format is `LMCODE_RETURN_BEGIN\n<json>\nLMCODE_RETURN_END\n`.
-  Success is `{"ok":true,"result":...}`; multiple files produce a builder frame
-  with `"result":[...],"parts":N`. Failure keys are compact (`"code":"RUN_HOST"`),
-  not the old spaced JSON.
+  (usage, host init, schema contract, membudget init). Do not frame twice.
+- Exit codes: 0 success, 2 cli/usage, 3 load/run, 4 app or output failure.
+  `Fail` does not exit; `WriteFrame` returns the status.
+- Terminal format: `LMCODE_RETURN_BEGIN\n<json>\nLMCODE_RETURN_END\n`. Success is
+  `{"ok":true,"result":...}`; multiple files add `"result":[...],"parts":N`.
+  Failure keys are compact (`"code":"RUN_HOST"`), not the old spaced JSON.
 - `ResultContractFromSchema` returns the zero contract for schemas without
   `result`; pass it to `Select`. `Select` also binds the registry result sink.
-- Dry mode comes from invocation metadata (`results.Dry()`), not an ambient
-  variable. Set `ctx.SetDry(...)`; if the host has no `DrySlot` coverage, skip
-  `Program.Run` entirely and still `Complete` the slot so the envelope carries
-  `"dry":true` and a null result. This preserves the old lmgcp `--dry-run`
-  no-write behavior without claiming computed previews.
-- Watchdog goroutines cannot safely call the collector. Emit
-  `FailureFrame(os.Stdout,"run",err)` and exit from the watchdog only, or the
-  main path may double-frame.
+- The run loop lives in `internal/invoke.Runner`: read/load/select, optional
+  `BeforeRun` (memory reset), optional watchdog, `Program.Run` in **both** real
+  and dry mode, auth check with cleanup, failure cleanup/hooks, `Complete`, and
+  one `WriteFrame`. Provider hosts supply `Hooks` (cleanup, auth error, watchdog,
+  run-error diagnostics) so lmoci/lmazure/lmaws can copy the same control flow.
+- Dry mode comes from invocation metadata (`results.Dry()`), not a CLI flag.
+  Pass it to `host.NewHost(dry)` so live/ADC setup is skipped; set
+  `ctx.SetDry(dry)`; still call `Program.Run`. The SDK substitutes a dummy value
+  for any callback without a `DrySlot`, so mutators naturally make zero writes.
+  Add `lmcode.Dry(realFn)` only to read-only list/get/report methods that should
+  really read (the fake transport is the default and safe). Mutators that return
+  objects get `mPreview` callbacks returning a zero object, so calls such as
+  compute/run create never touch the transport. Never skip `Program.Run` in dry
+  mode: assertions and reads must still execute.
+- Watchdog goroutines cannot safely call the collector. `invoke` emits
+  `FailureFrame(os.Stdout,"run",err)` and exits from the watchdog only, so the
+  main path cannot double-frame. Auth failures also call `CleanupLedger`.
 
 ## lmscript example migration
 
 - Removed forms: `_dsl_`, `savedsl`, `dsl_cli`. Use
-  `s = load_schema(cli="lmgcp")` (or `schema="file"`), then
+  `s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest")`, then
   `p = _lmcode_ s;` ... `end _lmcode_`, then `r = run_lmcode(p)`.
 - `load_schema` clauses are space-separated, not comma-separated:
   `load_schema(cli="lmdraw" install="github:lmctl-ai/lmdraw@latest")`.
@@ -42,24 +51,32 @@ Branch `go-lmcode-head` migrated lmgcp from `65f0ef2275b0` (`v0.6.38-12`) to
   `message`, `dry`, `parts`). Host stdout is forwarded to lmscript stdout; there
   is no `r.stdout`, so remove `split(r.stdout, ...)` uses and assert `r.ok`.
 - Helper names differ from older examples: use `contains(...)`, not
-  `str_contains(...)`.
-- The compiler capability probe cannot save bytecode anymore. `select-compiler.sh`
-  now validates `--lmcode-signatures` for the v3 std marker
-  `fn template_render(string, Json) -> string` plus `--lmcode-schema --json`.
+  `str_contains(...)`; inside `_lmcode_`, use `str_contains`/`str_starts_with`
+  and `assert_close`, not `assert`.
+- The compiler capability probe cannot save bytecode anymore.
+  `scripts/select-compiler.sh` validates `--lmcode-signatures` for
+  `fn template_render(string, Json) -> string`, `--lmcode-schema --json`, and
+  `--check` on a load_schema/`_lmcode_`/run_lmcode probe.
 - `compare/run.sh` must use `LMSCRIPT_BIN` (`LMSCRIPT="${LMSCRIPT_BIN:-lmscript}"`);
   a test-only PATH entry for `bin/lmgcp` does not expose lmscript.
+- `LMSCRIPT_BIN` must be `@lmctl-ai/lmctl@0.2.453` or newer; 0.2.420 predates
+  `load_schema` and 0.2.451 fails the dry envelope with `dry must be boolean`.
 
-## Known ecosystem blocker
+## Images and gallery
 
-- `lmdraw` and `lmplot` binaries still speak the retired `--dsl`/`--schema`
-  protocol and cannot read the new v6 invocation envelope. Their scenes were
-  removed from `examples/*.lms` (the lmgcp portions and cost evidence remain);
-  they should return once those hosts are ported. `docs/images/*.png` remain the
-  last committed renderings.
+- `examples/*.lms` stay pure lmgcp and no longer contain draw/plot blocks.
+  Restored scenes live in `gallery/NN_<name>.draw.lms`, unchanged inside, with
+  the new `load_schema(cli="lmdraw" install=...)` wrapper and optional
+  `ARGV[0]` input path.
+- `scripts/render-gallery.sh` probes `lmdraw`/`lmplot` for
+  `--lmcode-schema --json` plus a valid dry `run_lmcode` envelope. Until both
+  pass, it prints `SKIP lmdraw not envelope-capable` and `test.sh` prints
+  `ok N # SKIP ...`. Do not force the gallery: the released hosts are still on
+  the retired protocol. `docs/images/*.png` remain the last renderings.
 
 ## Verification gate
 
-`go vet ./...`, `go test ./...`, and
-`LMSCRIPT_BIN=/home/ubuntu/lmctl-mono/lmscript/bin/lmscript ./test.sh`.
-The suite now checks the envelope in the corrupt-bytecode and memory-budget
-cases and still runs all 41 examples plus the `lmcloud` comparison script.
+`go vet ./...`, `go test ./...`, and `./test.sh` with both the local mono
+`lmscript` and the published `@lmctl-ai/lmctl@0.2.453`. The suite covers the
+envelope, dry reads/dummy mutators/zero ledger writes, all 41 examples, the
+gallery skip probe, and the `lmcloud` comparison script.

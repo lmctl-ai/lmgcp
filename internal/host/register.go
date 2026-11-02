@@ -20,14 +20,36 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	m := func(typeName, name string, params []string, ret string, fn lmcode.Method) error {
 		return reg.Method(typeName, name, params, ret, fn)
 	}
+	mRead := func(typeName, name string, params []string, ret string, fn lmcode.Method) error {
+		dryFn := fn
+		if zeroHostObject(ret) != nil {
+			dryFn = func(self any, args []lmcode.Value) (lmcode.Value, error) {
+				value, err := fn(self, args)
+				if err != nil {
+					return value, err
+				}
+				if value.Kind == lmcode.KindObj && value.Obj == nil {
+					return lmcode.Object(ret, zeroHostObject(ret)), nil
+				}
+				return value, nil
+			}
+		}
+		return reg.Method(typeName, name, params, ret, fn, lmcode.Dry(dryFn))
+	}
+	mPreview := func(typeName, name string, params []string, ret string, fn lmcode.Method) error {
+		preview := lmcode.Method(func(any, []lmcode.Value) (lmcode.Value, error) {
+			return lmcode.Object(ret, zeroHostObject(ret)), nil
+		})
+		return reg.Method(typeName, name, params, ret, fn, lmcode.Dry(preview))
+	}
 
 	// --- Core & Safety on Gcp ---
-	if err := m("Gcp", "project", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "project", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(self.(*Host).Project()), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "masked_project", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "masked_project", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(self.(*Host).MaskedProject()), nil
 	}); err != nil {
 		return err
@@ -39,7 +61,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "region", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "region", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(self.(*Host).Region()), nil
 	}); err != nil {
 		return err
@@ -51,7 +73,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "zone", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "zone", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(self.(*Host).Zone()), nil
 	}); err != nil {
 		return err
@@ -63,22 +85,22 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "is_live", nil, "bool", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "is_live", nil, "bool", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(self.(*Host).IsLive()), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "auth_mode", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "auth_mode", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(self.(*Host).AuthMode()), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "endpoint", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "endpoint", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(self.(*Host).Endpoint()), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "run_id", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "run_id", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(self.(*Host).RunID()), nil
 	}); err != nil {
 		return err
@@ -90,12 +112,12 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "last_error", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "last_error", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(self.(*Host).LastError()), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "redact", []string{"string"}, "string", func(_ any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "redact", []string{"string"}, "string", func(_ any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(safety.RedactSecrets(a[0].Str)), nil
 	}); err != nil {
 		return err
@@ -107,22 +129,22 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "ledger_count", nil, "int", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "ledger_count", nil, "int", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(self.(*Host).LedgerCount()), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "ledger_entries", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "ledger_entries", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).LedgerEntries())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "ledger_owns", []string{"string", "string"}, "bool", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "ledger_owns", []string{"string", "string"}, "bool", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Bool(self.(*Host).LedgerOwns(a[0].Str, a[1].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "cost_cap_usd", nil, "float", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "cost_cap_usd", nil, "float", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Float(self.(*Host).CostCapUSD()), nil
 	}); err != nil {
 		return err
@@ -132,12 +154,12 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "estimated_cost_usd", nil, "float", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "estimated_cost_usd", nil, "float", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Float(self.(*Host).EstimatedCostUSD()), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "cost_report", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "cost_report", nil, "string", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(self.(*Host).CostReport()), nil
 	}); err != nil {
 		return err
@@ -157,7 +179,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "sweep_dry_run", []string{"int"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "sweep_dry_run", []string{"int"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).SweepDryRun(a[0].Int))
 	}); err != nil {
 		return err
@@ -180,27 +202,27 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 1. Compute Engine on Gcp ---
-	if err := m("Gcp", "compute_list_instances", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "compute_list_instances", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).ComputeListInstances(a[0].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "compute_get_instance", []string{"string", "string"}, "ComputeInstance", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "compute_get_instance", []string{"string", "string"}, "ComputeInstance", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("ComputeInstance", self.(*Host).ComputeGetInstance(a[0].Str, a[1].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "compute_instance_count", []string{"string"}, "int", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "compute_instance_count", []string{"string"}, "int", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(int64(len(self.(*Host).ComputeListInstances(a[0].Str)))), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "compute_list_disks", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "compute_list_disks", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).ComputeListDisks(a[0].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "compute_create_instance", []string{"string", "string", "string", "string"}, "ComputeInstance", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "compute_create_instance", []string{"string", "string", "string", "string"}, "ComputeInstance", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("ComputeInstance", self.(*Host).ComputeCreateInstance(a[0].Str, a[1].Str, a[2].Str, a[3].Str)), nil
 	}); err != nil {
 		return err
@@ -315,17 +337,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 2. Network, Subnets & Firewalls ---
-	if err := m("Gcp", "network_list_vpcs", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "network_list_vpcs", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).NetworkListVPCs())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "network_get_vpc", []string{"string"}, "VpcNetwork", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "network_get_vpc", []string{"string"}, "VpcNetwork", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("VpcNetwork", self.(*Host).NetworkGetVPC(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "network_create_vpc", []string{"string", "bool"}, "VpcNetwork", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "network_create_vpc", []string{"string", "bool"}, "VpcNetwork", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("VpcNetwork", self.(*Host).NetworkCreateVPC(a[0].Str, a[1].Bool)), nil
 	}); err != nil {
 		return err
@@ -335,17 +357,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "network_list_subnets", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "network_list_subnets", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).NetworkListSubnets(a[0].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "network_get_subnet", []string{"string", "string"}, "Subnet", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "network_get_subnet", []string{"string", "string"}, "Subnet", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("Subnet", self.(*Host).NetworkGetSubnet(a[0].Str, a[1].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "network_create_subnet", []string{"string", "string", "string", "string", "bool"}, "Subnet", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "network_create_subnet", []string{"string", "string", "string", "string", "bool"}, "Subnet", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("Subnet", self.(*Host).NetworkCreateSubnet(a[0].Str, a[1].Str, a[2].Str, a[3].Str, a[4].Bool)), nil
 	}); err != nil {
 		return err
@@ -355,17 +377,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "network_list_firewalls", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "network_list_firewalls", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).NetworkListFirewalls())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "network_get_firewall", []string{"string"}, "FirewallRule", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "network_get_firewall", []string{"string"}, "FirewallRule", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("FirewallRule", self.(*Host).NetworkGetFirewall(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "network_create_firewall", []string{"string", "string", "string", "int", "string", "string", "string"}, "FirewallRule", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "network_create_firewall", []string{"string", "string", "string", "int", "string", "string", "string"}, "FirewallRule", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("FirewallRule", self.(*Host).NetworkCreateFirewall(a[0].Str, a[1].Str, a[2].Str, a[3].Int, a[4].Str, a[5].Str, a[6].Str)), nil
 	}); err != nil {
 		return err
@@ -503,17 +525,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 3. Cloud Storage (GCS) ---
-	if err := m("Gcp", "storage_list_buckets", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "storage_list_buckets", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).StorageListBuckets())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "storage_get_bucket", []string{"string"}, "StorageBucket", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "storage_get_bucket", []string{"string"}, "StorageBucket", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("StorageBucket", self.(*Host).StorageGetBucket(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "storage_create_bucket", []string{"string", "string", "string"}, "StorageBucket", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "storage_create_bucket", []string{"string", "string", "string"}, "StorageBucket", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("StorageBucket", self.(*Host).StorageCreateBucket(a[0].Str, a[1].Str, a[2].Str)), nil
 	}); err != nil {
 		return err
@@ -543,17 +565,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "storage_list_objects", []string{"string", "string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "storage_list_objects", []string{"string", "string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).StorageListObjects(a[0].Str, a[1].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "storage_read_object", []string{"string", "string"}, "string", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "storage_read_object", []string{"string", "string"}, "string", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Str(self.(*Host).StorageReadObject(a[0].Str, a[1].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "storage_object_size", []string{"string", "string"}, "int", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "storage_object_size", []string{"string", "string"}, "int", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Int(self.(*Host).StorageObjectSize(a[0].Str, a[1].Str)), nil
 	}); err != nil {
 		return err
@@ -637,17 +659,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 4. Pub/Sub ---
-	if err := m("Gcp", "pubsub_list_topics", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "pubsub_list_topics", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).PubsubListTopics())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "pubsub_get_topic", []string{"string"}, "PubsubTopic", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "pubsub_get_topic", []string{"string"}, "PubsubTopic", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("PubsubTopic", self.(*Host).PubsubGetTopic(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "pubsub_create_topic", []string{"string"}, "PubsubTopic", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "pubsub_create_topic", []string{"string"}, "PubsubTopic", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("PubsubTopic", self.(*Host).PubsubCreateTopic(a[0].Str)), nil
 	}); err != nil {
 		return err
@@ -662,17 +684,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "pubsub_list_subscriptions", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "pubsub_list_subscriptions", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).PubsubListSubscriptions())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "pubsub_get_subscription", []string{"string"}, "PubsubSubscription", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "pubsub_get_subscription", []string{"string"}, "PubsubSubscription", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("PubsubSubscription", self.(*Host).PubsubGetSubscription(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "pubsub_create_subscription", []string{"string", "string", "int", "string"}, "PubsubSubscription", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "pubsub_create_subscription", []string{"string", "string", "int", "string"}, "PubsubSubscription", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("PubsubSubscription", self.(*Host).PubsubCreateSubscription(a[0].Str, a[1].Str, a[2].Int, a[3].Str)), nil
 	}); err != nil {
 		return err
@@ -751,17 +773,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 5. Cloud Run v2 ---
-	if err := m("Gcp", "run_list_services", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "run_list_services", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).RunListServices(a[0].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "run_get_service", []string{"string", "string"}, "CloudRunService", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "run_get_service", []string{"string", "string"}, "CloudRunService", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("CloudRunService", self.(*Host).RunGetService(a[0].Str, a[1].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "run_deploy_service", []string{"string", "string", "string", "int", "int", "int"}, "CloudRunService", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "run_deploy_service", []string{"string", "string", "string", "int", "int", "int"}, "CloudRunService", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("CloudRunService", self.(*Host).RunDeployService(a[0].Str, a[1].Str, a[2].Str, a[3].Int, a[4].Int, a[5].Int)), nil
 	}); err != nil {
 		return err
@@ -860,17 +882,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 6. Databases & Analytics (SQL, Firestore, BigQuery) ---
-	if err := m("Gcp", "sql_list_instances", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "sql_list_instances", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).SQLListInstances())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "sql_get_instance", []string{"string"}, "SqlInstance", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "sql_get_instance", []string{"string"}, "SqlInstance", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("SqlInstance", self.(*Host).SQLGetInstance(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "sql_create_instance", []string{"string", "string", "string", "string", "bool"}, "SqlInstance", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "sql_create_instance", []string{"string", "string", "string", "string", "bool"}, "SqlInstance", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("SqlInstance", self.(*Host).SQLCreateInstance(a[0].Str, a[1].Str, a[2].Str, a[3].Str, a[4].Bool)), nil
 	}); err != nil {
 		return err
@@ -944,7 +966,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// Firestore
-	if err := m("Gcp", "firestore_list_collections", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "firestore_list_collections", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).FirestoreListCollections())
 	}); err != nil {
 		return err
@@ -954,12 +976,12 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "firestore_get_doc", []string{"string", "string"}, "StrMap", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "firestore_get_doc", []string{"string", "string"}, "StrMap", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, self.(*Host).FirestoreGetDoc(a[0].Str, a[1].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "firestore_list_docs", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "firestore_list_docs", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).FirestoreListDocs(a[0].Str))
 	}); err != nil {
 		return err
@@ -971,27 +993,27 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// BigQuery
-	if err := m("Gcp", "bq_list_datasets", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "bq_list_datasets", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).BQListDatasets())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "bq_get_dataset", []string{"string"}, "BqDataset", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "bq_get_dataset", []string{"string"}, "BqDataset", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("BqDataset", self.(*Host).BQGetDataset(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "bq_create_dataset", []string{"string", "string"}, "BqDataset", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "bq_create_dataset", []string{"string", "string"}, "BqDataset", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("BqDataset", self.(*Host).BQCreateDataset(a[0].Str, a[1].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "bq_create_table", []string{"string", "string", "string", "string"}, "BqTable", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "bq_create_table", []string{"string", "string", "string", "string"}, "BqTable", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("BqTable", self.(*Host).BQCreateTable(a[0].Str, a[1].Str, a[2].Str, a[3].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "bq_get_table", []string{"string", "string"}, "BqTable", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "bq_get_table", []string{"string", "string"}, "BqTable", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("BqTable", self.(*Host).BQGetTable(a[0].Str, a[1].Str)), nil
 	}); err != nil {
 		return err
@@ -1060,17 +1082,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 7. IAM ---
-	if err := m("Gcp", "iam_list_service_accounts", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "iam_list_service_accounts", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).IAMListServiceAccounts())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "iam_get_service_account", []string{"string"}, "ServiceAccount", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "iam_get_service_account", []string{"string"}, "ServiceAccount", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("ServiceAccount", self.(*Host).IAMGetServiceAccount(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "iam_list_bindings", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "iam_list_bindings", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).IAMListBindings())
 	}); err != nil {
 		return err
@@ -1119,17 +1141,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 8. Secret Manager Metadata & KMS ---
-	if err := m("Gcp", "secrets_list", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "secrets_list", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).SecretsList())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "secrets_get_metadata", []string{"string"}, "SecretMetadata", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "secrets_get_metadata", []string{"string"}, "SecretMetadata", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("SecretMetadata", self.(*Host).SecretsGetMetadata(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "secrets_create_metadata", []string{"string", "string", "int", "StrMap"}, "SecretMetadata", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "secrets_create_metadata", []string{"string", "string", "int", "StrMap"}, "SecretMetadata", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("SecretMetadata", self.(*Host).SecretsCreateMetadata(a[0].Str, a[1].Str, a[2].Int, extractStrMap(a[3]))), nil
 	}); err != nil {
 		return err
@@ -1183,22 +1205,22 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// KMS
-	if err := m("Gcp", "kms_list_keyrings", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "kms_list_keyrings", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).KMSListKeyRings(a[0].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "kms_list_keys", []string{"string", "string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "kms_list_keys", []string{"string", "string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).KMSListKeys(a[0].Str, a[1].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "kms_get_key", []string{"string", "string", "string"}, "KmsKey", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "kms_get_key", []string{"string", "string", "string"}, "KmsKey", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("KmsKey", self.(*Host).KMSGetKey(a[0].Str, a[1].Str, a[2].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "kms_create_key", []string{"string", "string", "string", "string", "int"}, "KmsKey", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "kms_create_key", []string{"string", "string", "string", "string", "int"}, "KmsKey", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("KmsKey", self.(*Host).KMSCreateKey(a[0].Str, a[1].Str, a[2].Str, a[3].Str, a[4].Int)), nil
 	}); err != nil {
 		return err
@@ -1242,12 +1264,12 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 9. Container Services (GKE & Artifact Registry) ---
-	if err := m("Gcp", "gke_list_clusters", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "gke_list_clusters", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).GKEListClusters(a[0].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "gke_get_cluster", []string{"string", "string"}, "GkeCluster", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "gke_get_cluster", []string{"string", "string"}, "GkeCluster", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("GkeCluster", self.(*Host).GKEGetCluster(a[0].Str, a[1].Str)), nil
 	}); err != nil {
 		return err
@@ -1321,17 +1343,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// Artifact Registry
-	if err := m("Gcp", "ar_list_repositories", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "ar_list_repositories", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).ARListRepositories(a[0].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "ar_get_repository", []string{"string", "string"}, "ArtifactRepo", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "ar_get_repository", []string{"string", "string"}, "ArtifactRepo", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("ArtifactRepo", self.(*Host).ARGetRepository(a[0].Str, a[1].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "ar_create_repository", []string{"string", "string", "string", "bool"}, "ArtifactRepo", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "ar_create_repository", []string{"string", "string", "string", "bool"}, "ArtifactRepo", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("ArtifactRepo", self.(*Host).ARCreateRepository(a[0].Str, a[1].Str, a[2].Str, a[3].Bool)), nil
 	}); err != nil {
 		return err
@@ -1385,22 +1407,22 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 10. Cloud DNS ---
-	if err := m("Gcp", "dns_list_zones", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "dns_list_zones", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).DNSListZones())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "dns_get_zone", []string{"string"}, "DnsZone", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "dns_get_zone", []string{"string"}, "DnsZone", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("DnsZone", self.(*Host).DNSGetZone(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "dns_create_zone", []string{"string", "string", "string", "bool"}, "DnsZone", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "dns_create_zone", []string{"string", "string", "string", "bool"}, "DnsZone", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("DnsZone", self.(*Host).DNSCreateZone(a[0].Str, a[1].Str, a[2].Str, a[3].Bool)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "dns_list_records", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "dns_list_records", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).DNSListRecords(a[0].Str))
 	}); err != nil {
 		return err
@@ -1449,17 +1471,17 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 11. Cloud Logging & Cloud Monitoring ---
-	if err := m("Gcp", "logging_list_sinks", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "logging_list_sinks", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).LoggingListSinks())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "logging_get_sink", []string{"string"}, "LogSink", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "logging_get_sink", []string{"string"}, "LogSink", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("LogSink", self.(*Host).LoggingGetSink(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "logging_create_sink", []string{"string", "string", "string"}, "LogSink", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "logging_create_sink", []string{"string", "string", "string"}, "LogSink", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("LogSink", self.(*Host).LoggingCreateSink(a[0].Str, a[1].Str, a[2].Str)), nil
 	}); err != nil {
 		return err
@@ -1474,7 +1496,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "logging_severity_counts", nil, "StrMap", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "logging_severity_counts", nil, "StrMap", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, self.(*Host).LoggingSeverityCounts())
 	}); err != nil {
 		return err
@@ -1503,27 +1525,27 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// Monitoring
-	if err := m("Gcp", "monitoring_list_metrics", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "monitoring_list_metrics", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).MonitoringListMetrics())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "monitoring_query_series", []string{"string", "int"}, "FloatList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "monitoring_query_series", []string{"string", "int"}, "FloatList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeFloatList(reg, self.(*Host).MonitoringQuerySeries(a[0].Str, a[1].Int))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "monitoring_list_alert_policies", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "monitoring_list_alert_policies", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).MonitoringListAlertPolicies())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "monitoring_get_alert_policy", []string{"string"}, "AlertPolicy", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "monitoring_get_alert_policy", []string{"string"}, "AlertPolicy", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("AlertPolicy", self.(*Host).MonitoringGetAlertPolicy(a[0].Str)), nil
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "monitoring_create_alert_policy", []string{"string", "string", "float", "int"}, "AlertPolicy", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mPreview("Gcp", "monitoring_create_alert_policy", []string{"string", "string", "float", "int"}, "AlertPolicy", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return lmcode.Obj("AlertPolicy", self.(*Host).MonitoringCreateAlertPolicy(a[0].Str, a[1].Str, a[2].Float, a[3].Int)), nil
 	}); err != nil {
 		return err
@@ -1567,26 +1589,73 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 
 	// --- 12. Cross-Service Inventory, Compliance & Topology ---
-	if err := m("Gcp", "inventory_summary", nil, "StrMap", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "inventory_summary", nil, "StrMap", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, self.(*Host).InventorySummary())
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "find_prefix", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "find_prefix", []string{"string"}, "StrList", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).FindPrefix(a[0].Str))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "audit_label_compliance", []string{"StrList"}, "StrMap", func(self any, a []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "audit_label_compliance", []string{"StrList"}, "StrMap", func(self any, a []lmcode.Value) (lmcode.Value, error) {
 		return makeStrMap(reg, self.(*Host).AuditLabelCompliance(extractStrList(a[0])))
 	}); err != nil {
 		return err
 	}
-	if err := m("Gcp", "resource_graph_edges", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
+	if err := mRead("Gcp", "resource_graph_edges", nil, "StrList", func(self any, _ []lmcode.Value) (lmcode.Value, error) {
 		return makeStrList(reg, self.(*Host).ResourceGraphEdges())
 	}); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// zeroHostObject returns a non-nil zero value for each schema object type so dry
+// preview callbacks satisfy the SDK's concrete-receiver requirement.
+func zeroHostObject(typeName string) any {
+	switch typeName {
+	case "ComputeInstance":
+		return &ComputeInstance{}
+	case "VpcNetwork":
+		return &VpcNetwork{}
+	case "Subnet":
+		return &Subnet{}
+	case "FirewallRule":
+		return &FirewallRule{}
+	case "StorageBucket":
+		return &StorageBucket{}
+	case "PubsubTopic":
+		return &PubsubTopic{}
+	case "PubsubSubscription":
+		return &PubsubSubscription{}
+	case "CloudRunService":
+		return &CloudRunService{}
+	case "SqlInstance":
+		return &SqlInstance{}
+	case "BqDataset":
+		return &BqDataset{}
+	case "BqTable":
+		return &BqTable{}
+	case "SecretMetadata":
+		return &SecretMetadata{}
+	case "KmsKey":
+		return &KmsKey{}
+	case "ArtifactRepo":
+		return &ArtifactRepo{}
+	case "DnsZone":
+		return &DnsZone{}
+	case "LogSink":
+		return &LogSink{}
+	case "AlertPolicy":
+		return &AlertPolicy{}
+	case "GkeCluster":
+		return &GkeCluster{}
+	case "ServiceAccount":
+		return &ServiceAccount{}
+	default:
+		return nil
+	}
 }

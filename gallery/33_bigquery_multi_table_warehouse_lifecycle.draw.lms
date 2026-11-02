@@ -1,0 +1,29 @@
+# Gallery scene restored from examples/33_bigquery_multi_table_warehouse_lifecycle.lms (pre-migration), content unchanged below.
+# Inputs: optional JSON metrics path in ARGV[0]; the scene uses its committed baseline literals.
+s = load_schema(cli="lmdraw" install="github:lmctl-ai/lmdraw@latest");
+p = _lmcode_ s;
+  scene.canvas(960, 500, "#0d1117");
+  scene.text(480.0, 34.0, 20.0, "BigQuery Multi-Table FinOps Mart & Time-Partitioning Lifecycle", "#e6edf3").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 56.0, 12.5, "Dataset: lmgcp_finops_mart (US, 30d default TTL) + 2 DAY-partitioned tables created, verified & torn down in LIFO order", "#8b949e").set_attr("text-anchor", "middle");
+
+  scene.rect(50.0, 95.0, 860.0, 110.0, "#161b22").set_attr("stroke", "#58a6ff").set_attr("stroke-width", "2");
+  scene.text(480.0, 132.0, 16.0, "Dataset: lmgcp_finops_mart (Location: US | Default Table Expiration: 30 Days)", "#58a6ff").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(480.0, 162.0, 12.5, "Labels: lmgcp_test=run-20261024 | Enforces partition pruning on analytical queries", "#c9d1d9").set_attr("text-anchor", "middle");
+
+  scene.rect(50.0, 235.0, 410.0, 210.0, "#161b22").set_attr("stroke", "#3fb950").set_attr("stroke-width", "2");
+  scene.text(255.0, 272.0, 15.0, "Table 1: lmgcp_daily_sku_spend", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(255.0, 305.0, 12.0, "DAY Partition Field: usage_date", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(255.0, 335.0, 11.5, "Columns: usage_date, service, sku, cost_usd", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(255.0, 395.0, 12.5, "VERIFIED & DELETED", "#3fb950").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.rect(500.0, 235.0, 410.0, 210.0, "#161b22").set_attr("stroke", "#a371f7").set_attr("stroke-width", "2");
+  scene.text(705.0, 272.0, 15.0, "Table 2: lmgcp_anomaly_alerts", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+  scene.text(705.0, 305.0, 12.0, "DAY Partition Field: detected_at", "#e6edf3").set_attr("text-anchor", "middle");
+  scene.text(705.0, 335.0, 11.5, "Columns: detected_at, project, delta_pct", "#8b949e").set_attr("text-anchor", "middle");
+  scene.text(705.0, 395.0, 12.5, "VERIFIED & DELETED", "#a371f7").set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+
+  scene.render_png("images/33_bigquery_multi_table_warehouse_lifecycle.png", 960, 500, 1);
+end _lmcode_
+r = run_lmcode(p, {args: ARGV});
+assert(r.ok, "lmdraw host failed");
+copy_file("images/33_bigquery_multi_table_warehouse_lifecycle.png", "docs/images/33_bigquery_multi_table_warehouse_lifecycle.png");

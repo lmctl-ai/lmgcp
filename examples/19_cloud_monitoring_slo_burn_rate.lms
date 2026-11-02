@@ -3,7 +3,7 @@ mkdir("build/examples");
 mkdir("images");
 mkdir("docs/images");
 
-s = load_schema(cli="lmgcp");
+s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest");
 p = _lmcode_ s;
   fn check(ok: bool) -> void { if (ok) { assert_close(1.0, 1.0, 0.01); } else { assert_close(0.0, 1.0, 0.01); } }
   gcp.set_run_id("monitoring-slo-19");
