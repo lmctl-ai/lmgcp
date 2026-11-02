@@ -142,9 +142,9 @@ func Register(reg *lmcode.Registry, h *Host) error {
 		return err
 	}
 	stubs := map[string][2]string{
-		"bucket_create": {"string", "bool"}, "bucket_delete": {"string", "bool"}, "bucket_exists": {"string", "bool"}, "bucket_list": {"", "StrList"},
-		"object_get": {"string,string", "string"}, "object_delete": {"string,string", "void"}, "object_list_all": {"string,string", "StrList"},
-		"queue_create": {"string", "bool"}, "queue_delete": {"string", "bool"}, "queue_exists": {"string", "bool"}, "queue_list": {"", "StrList"},
+		"bucket_create": {"string", "bool"}, "bucket_delete": {"string", "bool"}, "bucket_exists": {"string", "bool"},
+		"object_get": {"string,string", "string"}, "object_delete": {"string,string", "void"},
+		"queue_create": {"string", "bool"}, "queue_delete": {"string", "bool"}, "queue_exists": {"string", "bool"},
 		"queue_send": {"string,string", "string"}, "queue_receive": {"string", "QueueMessageList"}, "queue_ack": {"string,string", "void"}, "queue_nack": {"string,string,int", "string"},
 	}
 	for name, sig := range stubs {
@@ -153,7 +153,7 @@ func Register(reg *lmcode.Registry, h *Host) error {
 			params = splitParams(sig[0])
 		}
 		op := name
-		if err := m(name, params, sig[1], func(any, []lmcode.Value) (lmcode.Value, error) { return stub(op) }); err != nil {
+		if err := m(name, params, sig[1], func(_ any, a []lmcode.Value) (lmcode.Value, error) { return h.Op(op, a) }); err != nil {
 			return err
 		}
 	}
@@ -172,9 +172,37 @@ func Register(reg *lmcode.Registry, h *Host) error {
 	}
 	for _, o := range overloads {
 		op := o.name
-		if err := m(o.name, o.params, o.ret, func(any, []lmcode.Value) (lmcode.Value, error) { return stub(op) }); err != nil {
+		if err := m(o.name, o.params, o.ret, func(_ any, a []lmcode.Value) (lmcode.Value, error) { return h.Op(op, a) }); err != nil {
 			return err
 		}
+	}
+
+	if err := m("bucket_list", nil, "StrList", func(_ any, _ []lmcode.Value) (lmcode.Value, error) {
+		v, err := h.BucketList()
+		if err != nil {
+			return lmcode.None(), err
+		}
+		return strList(reg, v)
+	}); err != nil {
+		return err
+	}
+	if err := m("object_list_all", []string{"string", "string"}, "StrList", func(_ any, a []lmcode.Value) (lmcode.Value, error) {
+		v, err := h.ObjectListAll(a[0].Str, a[1].Str)
+		if err != nil {
+			return lmcode.None(), err
+		}
+		return strList(reg, v)
+	}); err != nil {
+		return err
+	}
+	if err := m("queue_list", nil, "StrList", func(_ any, _ []lmcode.Value) (lmcode.Value, error) {
+		v, err := h.QueueList()
+		if err != nil {
+			return lmcode.None(), err
+		}
+		return strList(reg, v)
+	}); err != nil {
+		return err
 	}
 
 	// Getter registrations.

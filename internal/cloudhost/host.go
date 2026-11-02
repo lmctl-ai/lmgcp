@@ -67,15 +67,15 @@ func validService(s string) bool {
 func validateEndpoint(raw string) (string, *CloudError) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		return "", &CloudError{Code: CodeInvalid, Message: "invalid endpoint URL"}
+		return "", &CloudError{Code: CodeInvalidArgument, Message: "invalid endpoint URL"}
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return "", &CloudError{Code: CodeInvalid, Message: "endpoint must be http(s)"}
+		return "", &CloudError{Code: CodeInvalidArgument, Message: "endpoint must be http(s)"}
 	}
 	host := u.Hostname()
 	loop := host == "127.0.0.1" || host == "localhost" || host == "::1"
 	if u.Scheme == "http" && !loop {
-		return "", &CloudError{Code: CodeInvalid, Message: "plain http endpoint must be loopback"}
+		return "", &CloudError{Code: CodeInvalidArgument, Message: "plain http endpoint must be loopback"}
 	}
 	u.User = nil
 	u.RawQuery = ""
@@ -87,7 +87,12 @@ func (h *Host) Endpoint(service string) (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !validService(service) {
-		return "", h.failLocked("endpoint", service, &CloudError{Code: CodeInvalid, Message: "unknown service"})
+		e := &CloudError{Code: CodeInvalidArgument, Message: "unknown service"}
+		h.lastError = e
+		if h.abortOnError {
+			return "", h.failLocked("endpoint", service, e)
+		}
+		return "", nil
 	}
 	return h.resolveLocked(service), nil
 }
@@ -96,11 +101,20 @@ func (h *Host) SetEndpoint(service, raw string) (*Host, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !validService(service) {
-		return h, h.failLocked("set_endpoint", service, &CloudError{Code: CodeInvalid, Message: "unknown service"})
+		e := &CloudError{Code: CodeInvalidArgument, Message: "unknown service"}
+		h.lastError = e
+		if h.abortOnError {
+			return h, h.failLocked("set_endpoint", service, e)
+		}
+		return h, nil
 	}
 	ep, cerr := validateEndpoint(raw)
 	if cerr != nil {
-		return h, h.failLocked("set_endpoint", raw, cerr)
+		h.lastError = cerr
+		if h.abortOnError {
+			return h, h.failLocked("set_endpoint", raw, cerr)
+		}
+		return h, nil
 	}
 	h.endpoints[service] = ep
 	if service == "" || service == "all" {

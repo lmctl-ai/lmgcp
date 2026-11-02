@@ -3,14 +3,14 @@ package cloudhost
 import "strings"
 
 const (
-	CodeOK              = "OK"
-	CodeInvalid         = "INVALID_ARGUMENT"
-	CodeNotFound        = "NOT_FOUND"
-	CodeConflict        = "CONFLICT"
-	CodePrecondition    = "PRECONDITION_FAILED"
-	CodeUnauthenticated = "UNAUTHENTICATED"
-	CodePermission      = "PERMISSION_DENIED"
-	CodeInternal        = "INTERNAL"
+	CodeOK                 = "OK"
+	CodeInvalidArgument    = "INVALID_ARGUMENT"
+	CodeNotFound           = "NOT_FOUND"
+	CodeConflict           = "CONFLICT"
+	CodePreconditionFailed = "PRECONDITION_FAILED"
+	CodeUnauthenticated    = "UNAUTHENTICATED"
+	CodePermissionDenied   = "PERMISSION_DENIED"
+	CodeInternal           = "INTERNAL"
 )
 
 type CloudError struct {
@@ -22,6 +22,13 @@ type CloudError struct {
 }
 
 func okError() *CloudError { return &CloudError{OK: true, Code: CodeOK} }
+
+func newCloudError(code string, httpStatus int, providerCode, message string) *CloudError {
+	if code == "" || code == CodeOK {
+		code = CodeInternal
+	}
+	return &CloudError{OK: false, Code: code, HTTPStatus: httpStatus, ProviderCode: providerCode, Message: message}
+}
 
 type ObjectMeta struct {
 	Exists      bool
