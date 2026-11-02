@@ -47,7 +47,7 @@ Branch `hostkit-port` from `635a665`.
 
 ## Hostkit v3 adoption
 
-- `go.mod` adds `replace github.com/lmctl-ai/lmcode-go => ../lmcode-go-patched`
+- `go.mod` adds `replace github.com/lmctl-ai/lmcode-go => published lmcode-go 06cd9ae991d9`
   (remove when Registry.Enum is upstream and pins bump); hostkit v3 enum dry
   runs now work.
 - GCP adapter implements `BucketCreateTokenReader`/`QueueCreateTokenReader`.
