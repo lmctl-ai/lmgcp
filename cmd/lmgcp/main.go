@@ -90,6 +90,9 @@ func main() {
 }
 
 func realMain(args []string) int {
+	if len(args) >= 2 && args[1] == "cloud" {
+		return cloudRealMain(args[2:])
+	}
 	if _, err := membudget.InitFromEnv(); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, err.Error()))
