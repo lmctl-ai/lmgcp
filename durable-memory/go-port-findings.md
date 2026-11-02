@@ -49,3 +49,8 @@ Branch `shared-schema` cut from `go-lmcode-head` `4ba074b`.
   scripts.
 - `print(bool|float|int|string)` overloads are required in addition to
   `lmcode.RegisterTesting` for signature parity.
+
+## Hostkit v2 migration
+
+See `durable-memory/hostkit-port.md`. Shared-schema subcommand now uses
+hostkit v2; legacy lmgcp surface is unchanged.

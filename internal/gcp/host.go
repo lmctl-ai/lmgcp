@@ -1,4 +1,4 @@
-package cloudhost
+package gcp
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ type Host struct {
 	project      string
 }
 
-func New() *Host {
+func NewHost() *Host {
 	def := strings.TrimSpace(os.Getenv("LMCLOUD_ENDPOINT"))
 	if def == "" {
 		def = strings.TrimSpace(os.Getenv("LMGCP_ENDPOINT"))

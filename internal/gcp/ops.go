@@ -1,4 +1,4 @@
-package cloudhost
+package gcp
 
 import (
 	"bytes"
@@ -33,7 +33,7 @@ func (h *Host) setErr(op, target string, e *CloudError) error {
 	abort := h.abortOnError
 	h.mu.Unlock()
 	if abort {
-		return fmt.Errorf("[%s] %s (%s): %s (http=%d)", e.Code, op, target, e.Message, e.HTTPStatus)
+		return e
 	}
 	return nil
 }
@@ -162,6 +162,8 @@ func (h *Host) BucketDelete(name string) (bool, error) {
 	}
 	return false, h.setErr("bucket_delete", name, h.classify(status, data))
 }
+func (h *Host) BucketDeleteErr(name string) error { _, err := h.BucketDelete(name); return err }
+
 func (h *Host) BucketExists(name string) (bool, error) {
 	if e := ValidateBucketName(name); e != nil {
 		return false, h.setErr("bucket_exists", name, e)
@@ -283,8 +285,12 @@ func (h *Host) ObjectHead(bucket, key string) (*ObjectMeta, error) {
 		return nil, h.setErr("object_head", key, newCloudError(CodeInternal, 0, "transport", err.Error()))
 	}
 	if status == 404 {
-		if _, berr := h.BucketExists(bucket); berr != nil {
+		exists, berr := h.BucketExists(bucket)
+		if berr != nil {
 			return nil, berr
+		}
+		if !exists {
+			return nil, h.setErr("object_head", bucket, newCloudError(CodeNotFound, 404, "bucketNotFound", "bucket not found"))
 		}
 		return &ObjectMeta{Exists: false, Bucket: bucket, Key: key, Metadata: map[string]string{}}, nil
 	}
@@ -302,8 +308,12 @@ func (h *Host) ObjectDelete(bucket, key string) error {
 		return nil
 	}
 	if status == 404 {
-		if _, berr := h.BucketExists(bucket); berr != nil {
+		exists, berr := h.BucketExists(bucket)
+		if berr != nil {
 			return berr
+		}
+		if !exists {
+			return h.setErr("object_delete", bucket, newCloudError(CodeNotFound, 404, "notFound", "bucket not found"))
 		}
 		return nil
 	}
@@ -650,6 +660,89 @@ func (h *Host) QueueNack(queue, receipt string, visibility int64) (string, error
 		return "", h.setErr("queue_nack", queue, h.classify(status, data))
 	}
 	return receipt, nil
+}
+
+type RawMessage struct{ ID, Wire, Receipt string }
+
+func (h *Host) QueueSendWire(queue, wire string) (string, error) {
+	req, _ := json.Marshal(map[string]any{"messages": []map[string]string{{"data": base64.StdEncoding.EncodeToString([]byte(wire))}}})
+	status, data, err := h.request(context.Background(), http.MethodPost, h.topicPath(queue)+":publish", req, "application/json")
+	if err != nil {
+		return "", h.setErr("queue_send", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
+	}
+	if status < 200 || status >= 300 {
+		return "", h.setErr("queue_send", queue, h.classify(status, data))
+	}
+	var res struct {
+		MessageIds []string `json:"messageIds"`
+	}
+	if err := json.Unmarshal(data, &res); err != nil || len(res.MessageIds) == 0 {
+		return "", h.setErr("queue_send", queue, newCloudError(CodeInternal, status, "decode", "missing messageIds"))
+	}
+	return res.MessageIds[0], nil
+}
+
+func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibility int64) ([]RawMessage, error) {
+	if maxMessages == 0 {
+		maxMessages = 1
+	}
+	if waitSeconds == 0 {
+		waitSeconds = 1
+	}
+	deadline := time.Now().Add(time.Duration(waitSeconds) * time.Second)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return []RawMessage{}, nil
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), remaining)
+		req, _ := json.Marshal(map[string]any{"maxMessages": maxMessages, "returnImmediately": false})
+		status, data, err := h.request(ctx, http.MethodPost, h.subPath(queue)+":pull", req, "application/json")
+		cancel()
+		if err != nil {
+			if time.Now().Before(deadline) {
+				continue
+			}
+			return []RawMessage{}, nil
+		}
+		if status < 200 || status >= 300 {
+			return nil, h.setErr("queue_receive", queue, h.classify(status, data))
+		}
+		var pull struct {
+			ReceivedMessages []struct {
+				AckId   string `json:"ackId"`
+				Message struct {
+					Data string `json:"data"`
+				} `json:"message"`
+			} `json:"receivedMessages"`
+		}
+		if err := json.Unmarshal(data, &pull); err != nil {
+			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, status, "decode", err.Error()))
+		}
+		if len(pull.ReceivedMessages) == 0 {
+			if time.Now().Before(deadline) {
+				time.Sleep(50 * time.Millisecond)
+				continue
+			}
+			return []RawMessage{}, nil
+		}
+		ids := make([]string, 0, len(pull.ReceivedMessages))
+		out := make([]RawMessage, 0, len(pull.ReceivedMessages))
+		for _, rm := range pull.ReceivedMessages {
+			ids = append(ids, rm.AckId)
+			raw, _ := base64.StdEncoding.DecodeString(rm.Message.Data)
+			out = append(out, RawMessage{ID: rm.AckId, Wire: string(raw), Receipt: rm.AckId})
+		}
+		mod, _ := json.Marshal(map[string]any{"ackIds": ids, "ackDeadlineSeconds": visibility})
+		status, data, err = h.request(context.Background(), http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mod, "application/json")
+		if err != nil {
+			return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, 0, "transport", err.Error()))
+		}
+		if status < 200 || status >= 300 {
+			return nil, h.setErr("queue_receive", queue, h.classify(status, data))
+		}
+		return out, nil
+	}
 }
 
 // Op dispatches a registered Cloud operation.

@@ -1,4 +1,4 @@
-package cloudhost
+package gcp
 
 import (
 	"encoding/base64"

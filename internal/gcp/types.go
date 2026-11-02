@@ -1,4 +1,4 @@
-package cloudhost
+package gcp
 
 import "strings"
 
@@ -22,6 +22,8 @@ type CloudError struct {
 }
 
 func okError() *CloudError { return &CloudError{OK: true, Code: CodeOK} }
+
+func (e *CloudError) Error() string { return "[" + e.Code + "] " + e.Message }
 
 func newCloudError(code string, httpStatus int, providerCode, message string) *CloudError {
 	if code == "" || code == CodeOK {

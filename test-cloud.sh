@@ -19,6 +19,22 @@ r = run_lmcode(p, {command:["./bin/lmgcp","cloud","--lmcode","$DSLFILE"]});
 assert(r.ok && r.result.prov == "gcp", "trivial shared-schema host failed");
 '
 go vet ./...
+# Dry-run spy: mutators must not touch the provider. The endpoint is loopback
+# but closed, so any real mutator call would fail the dry invocation.
+DRY_DIR="$(mktemp -d)"; cat > "$DRY_DIR/dry.lms" <<LMS
+s = load_schema(schema="$PWD/schema/lmcloud.dsl.json");
+p = _lmcode_ s;
+  cloud.set_endpoint("all", "http://127.0.0.1:1");
+  cloud.bucket_create("lmcloud-dry-bucket");
+  cloud.object_put("lmcloud-dry-bucket", "k", "v");
+  cloud.queue_create("lmcloud-dry-queue");
+  cloud.queue_send("lmcloud-dry-queue", "m");
+end _lmcode_
+r = run_lmcode(p, {command:["$PWD/bin/lmgcp","cloud","--lmcode","\$DSLFILE"]});
+LMS
+"$LMSCRIPT_BIN" --dry-run "$DRY_DIR/dry.lms" >/dev/null || { rm -rf "$DRY_DIR"; echo "FAIL dry-run mutator spy"; exit 1; }
+rm -rf "$DRY_DIR"
+echo "dry-run mutator spy PASS"
 SIM_SH="${SIM_SH:-/home/ubuntu/cloud/lmcloud-sims/scripts/sim.sh}"
 LMCLOUD_DIR="${LMCLOUD_DIR:-/home/ubuntu/cloud/lmcloud}"
 if [[ -x "$LMCLOUD_DIR/tests/run-conformance.sh" ]]; then

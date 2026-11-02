@@ -1,4 +1,4 @@
-package cloudhost
+package gcp
 
 import (
 	"fmt"
@@ -57,7 +57,7 @@ func dryMethod(fn lmcode.Method) lmcode.DrySlot[lmcode.Method] { return lmcode.D
 
 func Register(reg *lmcode.Registry, h *Host) error {
 	if h == nil {
-		h = New()
+		h = NewHost()
 	}
 	if err := lmcode.RegisterTesting(reg, os.Stdout); err != nil {
 		return err

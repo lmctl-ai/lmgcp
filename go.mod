@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	cloud.google.com/go/auth v0.23.0
 	cloud.google.com/go/compute/metadata v0.9.0
+	github.com/lmctl-ai/lmcloud v0.0.0-00010101000000-000000000000
 	github.com/lmctl-ai/lmcode-go v0.6.39-0.20261031234045-77932bf7134a
 	google.golang.org/api v0.293.0
 )
@@ -33,3 +34,6 @@ require (
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
+
+// github.com/lmctl-ai/lmcloud (hostkit) is not published yet: local checkout.
+replace github.com/lmctl-ai/lmcloud => ../lmcloud
