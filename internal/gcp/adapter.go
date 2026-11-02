@@ -85,6 +85,9 @@ func (a *Adapter) CreateBucket(ctx context.Context, b string) (bool, error) {
 		return a.fake.CreateBucket(ctx, b)
 	}
 	v, e := h.BucketCreate(b)
+	if e == nil && !v {
+		return false, hostkit.ProviderError(hostkit.Conflict, 409, "conflict", "bucket already exists")
+	}
 	return v, cerr(e)
 }
 func (a *Adapter) DeleteBucket(ctx context.Context, b string) error {

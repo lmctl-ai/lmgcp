@@ -36,7 +36,7 @@ LMS
 "$LMSCRIPT_BIN" --dry-run "$DRY_DIR/dry.lms" >/dev/null || { rm -rf "$DRY_DIR"; echo "FAIL dry-run mutator spy"; exit 1; }
 rm -rf "$DRY_DIR"
 echo "dry-run mutator spy PASS"
-SIM_SH="${SIM_SH:-/home/ubuntu/cloud/lmcloud-sims/scripts/sim.sh}"
+SIM_SH="${SIM_SH:-${LMCLOUD_DIR:-/home/ubuntu/cloud/lmcloud}/scripts/sim.sh}"
 LMCLOUD_DIR="${LMCLOUD_DIR:-/home/ubuntu/cloud/lmcloud}"
 if [[ -x "$LMCLOUD_DIR/tests/run-conformance.sh" ]]; then
   export LMCLOUD_SIM_DIR="${LMCLOUD_SIM_DIR:-/home/ubuntu/cloud/lmcloud-sims/.cache/sims}"

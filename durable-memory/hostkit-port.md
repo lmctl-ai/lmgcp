@@ -90,6 +90,19 @@ Branch `hostkit-port` from `635a665`.
 - `QueueCapsFor` reports offline fake `LongPoll=false` and simulator
   `LongPoll=true`.
 
+## Additional test-gap closure
+
+- Lost-reply bucket create: first POST commits with our token and returns 500,
+  retry sees 409, token read-back matches, host resolves created=true. A
+  pre-existing bucket with a different token remains false. Covered in
+  `TestGCPLostReplyCreateTokens`.
+- Provider page limit: an endless stream of unique page tokens for bucket and
+  queue listing fails at hostkit MaxPages with an error, not a deadline loop.
+- `test-cloud.sh` now defaults to `${LMCLOUD_DIR:-/home/ubuntu/cloud/lmcloud}/scripts/sim.sh`.
+- Remaining gap: the equivalent lost-reply create test for Pub/Sub
+  topic+subscription is not yet deterministic under the hostkit cloud host; the
+  queue token-reader test covers label storage/read-back only.
+
 ## Hostkit gaps observed
 
 - `hostkit` validates the receipt before the queue exists probe, so a
