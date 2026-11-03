@@ -386,7 +386,7 @@ func (h *Host) DeleteTable(ctx context.Context, name string) error {
 	const purgeBatchSize = 100
 	for {
 		var docs []fsDocument
-		if err := runDeleteSubOp(ctx, "item_query", 4096, func(sctx context.Context) error {
+		if err := runDeleteSubOp(ctx, "item_query", int64(purgeBatchSize)*4096, func(sctx context.Context) error {
 			var qerr error
 			docs, qerr = h.firestoreRunQuery(sctx, &fsRunQueryRequest{
 				Parent: h.firestoreDocumentsRoot(),
@@ -417,30 +417,51 @@ func (h *Host) DeleteTable(ctx context.Context, name string) error {
 			}
 			docName := d.Name
 			var commitResp fsCommitResponse
-			err = runDeleteSubOp(ctx, "item_delete", 1024, func(sctx context.Context) error {
-				return h.firestoreUnary(sctx, rpcCommit, false, &fsCommitRequest{
-					Database: h.firestoreDatabaseRoot(),
-					Writes: []fsWrite{
-						{
-							Update: &fsDocument{
-								Name: catDocPath,
-								Fields: map[string]fsValue{
-									"state":        fsString("deleting"),
-									"incarnation":  fsString(cat.incarnation),
-									"delete_claim": fsString(claimID),
+			err = runDeleteSubOp(ctx, "item_update", 1024, func(fenceCtx context.Context) error {
+				dispatched := false
+				derr := runDeleteSubOp(fenceCtx, "item_delete", 1024, func(delCtx context.Context) error {
+					orig := hostkit.RetryHooksFrom(delCtx)
+					trackCtx := hostkit.WithRetryHooks(delCtx, hostkit.RetryHooks{
+						BeforeAttempt: orig.BeforeAttempt,
+						AfterAttempt: func(c context.Context, attempt int, a hostkit.Attempt) {
+							if !a.NotSent {
+								dispatched = true
+							}
+							if orig.AfterAttempt != nil {
+								orig.AfterAttempt(c, attempt, a)
+							}
+						},
+					})
+					return h.firestoreUnary(trackCtx, rpcCommit, false, &fsCommitRequest{
+						Database: h.firestoreDatabaseRoot(),
+						Writes: []fsWrite{
+							{
+								Update: &fsDocument{
+									Name: catDocPath,
+									Fields: map[string]fsValue{
+										"state":        fsString("deleting"),
+										"incarnation":  fsString(cat.incarnation),
+										"delete_claim": fsString(claimID),
+									},
 								},
+								UpdateMask: &fsDocumentMask{
+									FieldPaths: []string{"state", "incarnation", "delete_claim"},
+								},
+								CurrentDocument: claimPre,
 							},
-							UpdateMask: &fsDocumentMask{
-								FieldPaths: []string{"state", "incarnation", "delete_claim"},
+							{
+								Delete:          docName,
+								CurrentDocument: childPre,
 							},
-							CurrentDocument: claimPre,
 						},
-						{
-							Delete:          docName,
-							CurrentDocument: childPre,
-						},
-					},
-				}, &commitResp)
+					}, &commitResp)
+				})
+				if !dispatched {
+					if fh := hostkit.RetryHooksFrom(fenceCtx); fh.AfterAttempt != nil {
+						fh.AfterAttempt(fenceCtx, 0, hostkit.Attempt{Err: derr, NotSent: true})
+					}
+				}
+				return derr
 			})
 			if err == nil {
 				if len(commitResp.WriteResults) > 0 && !commitResp.WriteResults[0].UpdateTime.IsZero() {
@@ -652,7 +673,32 @@ func (h *Host) commitCatalogFencedWrite(ctx context.Context, catDoc fsDocument, 
 		},
 	}
 	var resp fsCommitResponse
-	if err := h.firestoreUnary(ctx, rpcCommit, false, req, &resp); err != nil {
+	err = hostkit.RunSubOperation(ctx, hostkit.SubOperationSpec{
+		Operation:    "item_update",
+		PayloadBytes: 1024,
+	}, func(fenceCtx context.Context) error {
+		dispatched := false
+		orig := hostkit.RetryHooksFrom(ctx)
+		trackCtx := hostkit.WithRetryHooks(ctx, hostkit.RetryHooks{
+			BeforeAttempt: orig.BeforeAttempt,
+			AfterAttempt: func(c context.Context, attempt int, a hostkit.Attempt) {
+				if !a.NotSent {
+					dispatched = true
+				}
+				if orig.AfterAttempt != nil {
+					orig.AfterAttempt(c, attempt, a)
+				}
+			},
+		})
+		callErr := h.firestoreUnary(trackCtx, rpcCommit, false, req, &resp)
+		if !dispatched {
+			if fh := hostkit.RetryHooksFrom(fenceCtx); fh.AfterAttempt != nil {
+				fh.AfterAttempt(fenceCtx, 0, hostkit.Attempt{Err: callErr, NotSent: true})
+			}
+		}
+		return callErr
+	})
+	if err != nil {
 		return fsCommitResponse{}, err
 	}
 	return resp, nil

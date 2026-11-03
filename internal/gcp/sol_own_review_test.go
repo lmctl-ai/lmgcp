@@ -237,6 +237,10 @@ func TestSolOwnPurgeCost(t *testing.T) {
 	if _, e := h.ItemPut(false, "orders", item, hostkit.PutIfAbsent, ""); e != nil {
 		t.Fatal(e)
 	}
+	putLine := h.CostReport().Item("item_put")
+	if putLine.EstimatedUSD < 0.0000025 {
+		t.Errorf("fenced ItemPut did not price both catalog fence and child write: %+v", putLine)
+	}
 	if _, e := h.TableDelete(false, "orders"); e != nil {
 		t.Fatal(e)
 	}
@@ -388,6 +392,10 @@ func TestSolR2PurgeSpendLowerBound(t *testing.T) {
 	if _, e := h.ItemPut(false, "orders", item, hostkit.PutIfAbsent, ""); e != nil {
 		t.Fatal(e)
 	}
+	putLine := h.CostReport().Item("item_put")
+	if putLine.EstimatedUSD < 0.0000025 {
+		t.Errorf("fenced ItemPut did not price both catalog fence and child write: %+v", putLine)
+	}
 	if _, e := h.TableDelete(false, "orders"); e != nil {
 		t.Fatal(e)
 	}
@@ -448,5 +456,36 @@ func TestSolR2StalePurgeDeletesReplacementChild(t *testing.T) {
 	t.Logf("replacement child after stale purge: survives=%v err=%v", survives, e)
 	if !survives {
 		t.Error("unconditional child delete removed replacement incarnation's document")
+	}
+}
+
+func TestSolR3FencedPurgeNativeWrites(t *testing.T) {
+	_, ep := newMockFirestoreServer(t)
+	a := NewAdapter()
+	defer a.Close()
+	t.Setenv("LMGCP_ENDPOINT", ep)
+	h := cloudhost.New(cloudhost.Config{Provider: "gcp", Store: a, Queue: a, Tables: a, Endpoints: Endpoints(), CampaignStatePath: t.TempDir() + "/campaign"})
+	h.SetAbortOnError(false)
+	if _, e := h.TableCreate(false, "orders", false); e != nil {
+		t.Fatal(e)
+	}
+	it, _ := h.ItemNew("p", "", false)
+	it.SetInt("n", 1)
+	if _, e := h.ItemPut(false, "orders", it, hostkit.PutIfAbsent, ""); e != nil {
+		t.Fatal(e)
+	}
+	putLine := h.CostReport().Item("item_put")
+	if putLine.EstimatedUSD < 0.0000025 {
+		t.Errorf("fenced ItemPut did not price both catalog fence and child write: %+v", putLine)
+	}
+	if _, e := h.TableDelete(false, "orders"); e != nil {
+		t.Fatal(e)
+	}
+	// Catalog read + queried child (2*250), tombstone + catalog fence update +
+	// child deletion + final catalog deletion (4*1250) => 5500 nanoUSD minimum.
+	line := h.CostReport().Item("table_delete")
+	t.Logf("fenced purge cost=%+v, native minimum 5500 nanoUSD", line)
+	if line.EstimatedUSD < 0.0000055 {
+		t.Error("two-write Commit priced as one delete")
 	}
 }
