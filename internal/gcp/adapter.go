@@ -15,22 +15,27 @@ import (
 )
 
 type Adapter struct {
-	fake         *fakeadapter.Fake
-	client       *http.Client
-	grpcPool     *firestorePool
-	tableLayouts *tableLayoutCache
-	knownQueues  *tableLayoutCache
-	ctx          context.Context
+	fake        *fakeadapter.Fake
+	client      *http.Client
+	grpcPool    *firestorePool
+	knownQueues *tableLayoutCache
+	ctx         context.Context
 }
 
 func NewAdapter() *Adapter {
 	return &Adapter{
-		fake:         fakeadapter.New(fakeadapter.Options{}),
-		client:       hostkit.NewHTTPClient(60 * time.Second),
-		grpcPool:     defaultFirestorePool,
-		tableLayouts: newTableLayoutCache(),
-		knownQueues:  newTableLayoutCache(),
+		fake:        fakeadapter.New(fakeadapter.Options{}),
+		client:      hostkit.NewHTTPClient(60 * time.Second),
+		grpcPool:    newFirestorePool(),
+		knownQueues: newTableLayoutCache(),
 	}
+}
+
+func (a *Adapter) Close() error {
+	if a == nil || a.grpcPool == nil {
+		return nil
+	}
+	return a.grpcPool.Close()
 }
 
 func Endpoints() *hostkit.EndpointResolver {
@@ -66,9 +71,6 @@ func (a *Adapter) route(ctx context.Context) (*Host, bool, error) {
 	h.client = a.client
 	if a.grpcPool != nil {
 		h.grpcPool = a.grpcPool
-	}
-	if a.tableLayouts != nil {
-		h.tableLayouts = a.tableLayouts
 	}
 	h.createToken = hostkit.CreateToken(ctx)
 	h.authToken = strings.TrimSpace(os.Getenv("LMGCP_SIM_TOKEN"))

@@ -69,12 +69,12 @@ func (rawProtoCodec) Unmarshal(data []byte, v any) error {
 	return fmt.Errorf("firestore wire codec: unsupported unmarshal type %T", v)
 }
 
+const maxFirestorePoolConns = 16
+
 type firestorePool struct {
 	mu    sync.Mutex
 	conns map[string]*grpc.ClientConn
 }
-
-var defaultFirestorePool = newFirestorePool()
 
 func newFirestorePool() *firestorePool {
 	return &firestorePool{conns: make(map[string]*grpc.ClientConn)}
@@ -83,8 +83,18 @@ func newFirestorePool() *firestorePool {
 func (p *firestorePool) conn(target string) (*grpc.ClientConn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.conns == nil {
+		p.conns = make(map[string]*grpc.ClientConn)
+	}
 	if c, ok := p.conns[target]; ok {
 		return c, nil
+	}
+	if len(p.conns) >= maxFirestorePoolConns {
+		for k, old := range p.conns {
+			_ = old.Close()
+			delete(p.conns, k)
+			break
+		}
 	}
 	c, err := grpc.NewClient(
 		"passthrough:///"+target,
@@ -103,6 +113,22 @@ func (p *firestorePool) conn(target string) (*grpc.ClientConn, error) {
 	return c, nil
 }
 
+func (p *firestorePool) Close() error {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var firstErr error
+	for k, c := range p.conns {
+		if err := c.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		delete(p.conns, k)
+	}
+	return firstErr
+}
+
 func (h *Host) firestoreTarget() (string, error) {
 	ep, err := h.Endpoint("tables")
 	if err != nil || ep == "" {
@@ -111,6 +137,9 @@ func (h *Host) firestoreTarget() (string, error) {
 	u, err := url.Parse(ep)
 	if err != nil || u.Host == "" {
 		return "", hostkit.ProviderError(hostkit.InvalidArgument, 0, "InvalidEndpoint", "invalid tables endpoint")
+	}
+	if u.Scheme != "" && !strings.EqualFold(u.Scheme, "http") {
+		return "", hostkit.ProviderError(hostkit.InvalidArgument, 0, "InvalidEndpoint", "loopback Firestore emulator endpoint must use http scheme")
 	}
 	if !hostkit.IsLoopbackHost(u.Hostname()) {
 		return "", hostkit.ProviderError(hostkit.Unauthenticated, 0, "LiveCredentialsNotImplemented", "live GCP credentials are not implemented; use a loopback emulator")
@@ -166,20 +195,7 @@ func httpStatusForGRPCCode(c codes.Code) int {
 }
 
 func isGRPCNotSent(err error) bool {
-	if err == nil {
-		return false
-	}
-	if hostkit.RequestNotSent(err) {
-		return true
-	}
-	st, ok := status.FromError(err)
-	if !ok || st.Code() != codes.Unavailable {
-		return false
-	}
-	msg := strings.ToLower(st.Message())
-	return strings.Contains(msg, "connection refused") ||
-		strings.Contains(msg, "error while dialing") ||
-		strings.Contains(msg, "connection error: desc = \"transport:")
+	return err != nil && hostkit.RequestNotSent(err)
 }
 
 func httpStatusFromGRPCMessage(msg string) int {
@@ -205,7 +221,7 @@ func httpStatusFromGRPCMessage(msg string) int {
 	}
 }
 
-func classifyFirestoreError(err error) *hostkit.CloudError {
+func (h *Host) classifyFirestoreError(err error) *hostkit.CloudError {
 	if err == nil {
 		return nil
 	}
@@ -215,10 +231,10 @@ func classifyFirestoreError(err error) *hostkit.CloudError {
 	}
 	st, ok := status.FromError(err)
 	if !ok {
-		return hostkit.ProviderError(hostkit.Internal, 0, "transport", err.Error())
+		return hostkit.ProviderError(hostkit.Internal, 0, "transport", h.redactSecrets(err.Error()))
 	}
 	code := st.Code()
-	msg := st.Message()
+	msg := h.redactSecrets(st.Message())
 	switch httpStatusFromGRPCMessage(msg) {
 	case 401:
 		return hostkit.ProviderError(hostkit.Unauthenticated, 401, "UNAUTHENTICATED", msg)
@@ -264,21 +280,25 @@ func (h *Host) doGCP(ctx context.Context, idempotent bool, fn func(callCtx conte
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	target, err := h.firestoreTarget()
-	if err != nil {
-		return err
-	}
 	pool := h.grpcPool
 	if pool == nil {
-		pool = defaultFirestorePool
-	}
-	conn, err := pool.conn(target)
-	if err != nil {
-		return hostkit.ProviderError(hostkit.Internal, 0, "transport", err.Error())
+		pool = newFirestorePool()
+		h.grpcPool = pool
 	}
 
 	var lastCallErr error
 	last, _ := h.retry.Do(ctx, idempotent, func(attemptCtx context.Context, _ int) hostkit.Attempt {
+		target, terr := h.firestoreTarget()
+		if terr != nil {
+			lastCallErr = terr
+			return hostkit.Attempt{Err: terr, NotSent: true}
+		}
+		conn, cerr := pool.conn(target)
+		if cerr != nil {
+			werr := hostkit.ProviderError(hostkit.Internal, 0, "transport", h.redactSecrets(cerr.Error()))
+			lastCallErr = werr
+			return hostkit.Attempt{Err: werr, NotSent: true}
+		}
 		callCtx := attemptCtx
 		if _, hasDeadline := callCtx.Deadline(); !hasDeadline {
 			var cancel context.CancelFunc
@@ -326,10 +346,10 @@ func (h *Host) doGCP(ctx context.Context, idempotent bool, fn func(callCtx conte
 		if errors.As(last.Err, &ce) {
 			return ce
 		}
-		return classifyFirestoreError(last.Err)
+		return h.classifyFirestoreError(last.Err)
 	}
 	if lastCallErr != nil {
-		return classifyFirestoreError(lastCallErr)
+		return h.classifyFirestoreError(lastCallErr)
 	}
 	return nil
 }

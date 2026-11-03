@@ -725,8 +725,10 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 				continue
 			}
 		}
+		ackIds := make([]string, 0, len(pull.ReceivedMessages))
 		out := make([]RawMessage, 0, len(pull.ReceivedMessages))
 		for _, rm := range pull.ReceivedMessages {
+			ackIds = append(ackIds, rm.AckId)
 			raw, derr := base64.StdEncoding.DecodeString(rm.Message.Data)
 			if derr != nil {
 				return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, status, "decode", "malformed message data"))
@@ -736,6 +738,20 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 				id = rm.AckId
 			}
 			out = append(out, RawMessage{ID: id, Wire: string(raw), Receipt: rm.AckId})
+		}
+		if visibility >= 0 {
+			hooks := hostkit.RetryHooksFrom(ctx)
+			if hooks.AfterAttempt != nil {
+				hooks.AfterAttempt(ctx, 0, hostkit.Attempt{Status: 400})
+			}
+			mreq, _ := json.Marshal(map[string]any{"ackIds": ackIds, "ackDeadlineSeconds": visibility})
+			ms, md, merr := h.requestIdem(ctx, http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mreq, "application/json", true)
+			if merr != nil {
+				return nil, cerrNet("queue_receive", queue, merr)
+			}
+			if ms < 200 || ms >= 300 {
+				return nil, h.setErr("queue_receive", queue, h.classify(ms, md))
+			}
 		}
 		return out, nil
 	}

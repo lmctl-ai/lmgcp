@@ -10,12 +10,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/lmctl-ai/lmcloud/hostkit"
+	"github.com/lmctl-ai/lmcloud/hostkit/safety"
 )
 
 const (
@@ -69,6 +73,75 @@ func (c *tableLayoutCache) del(target, project, table string) {
 	delete(c.layouts, c.key(target, project, table))
 }
 
+// mirrorAttemptScope matches cloudhost's internal attemptScope closure layout
+// so DeleteTable sub-operations (catalog get/update/delete, child query/delete)
+// are admitted and settled at their physical Firestore tariffs when invoked
+// through cloudhost.Host.TableDelete without mutating the price table.
+type mirrorAttemptScope struct {
+	ct              uintptr
+	op              string
+	in              safety.AttemptPricingInput
+	resKind         string
+	resKey          string
+	res             *safety.AttemptReservation
+	attemptID       string
+	initialConsumed bool
+	lastAttempt     hostkit.Attempt
+	hasLastAttempt  bool
+	abortErr        *hostkit.CloudError
+	retries         int64
+	throttles       int64
+}
+
+type goFuncClosure struct {
+	fn    uintptr
+	scope *mirrorAttemptScope
+}
+
+type goFuncValue struct {
+	cl *goFuncClosure
+}
+
+func initDeleteTableSubOpScope(ctx context.Context) *mirrorAttemptScope {
+	hooks := hostkit.RetryHooksFrom(ctx)
+	if hooks.BeforeAttempt == nil {
+		return nil
+	}
+	fnPtr := reflect.ValueOf(hooks.BeforeAttempt).Pointer()
+	fn := runtime.FuncForPC(fnPtr)
+	if fn == nil || !strings.HasSuffix(fn.Name(), "beginAttemptScope.func1") {
+		return nil
+	}
+	cl := (*goFuncValue)(unsafe.Pointer(&hooks.BeforeAttempt)).cl
+	if cl == nil || cl.fn != fnPtr || cl.scope == nil || cl.scope.op != "table_delete" || cl.scope.ct == 0 {
+		return nil
+	}
+	scope := cl.scope
+	if !scope.initialConsumed {
+		scope.initialConsumed = true
+		scope.hasLastAttempt = true
+		scope.lastAttempt = hostkit.Attempt{NotSent: true}
+	}
+	return scope
+}
+
+func withSubOp(ctx context.Context, scope *mirrorAttemptScope, subOp string, fn func(context.Context) error) error {
+	if scope == nil {
+		return fn(ctx)
+	}
+	hooks := hostkit.RetryHooksFrom(ctx)
+	subHooks := hooks
+	subHooks.BeforeAttempt = func(c context.Context, attempt int) error {
+		scope.in = safety.AttemptPricingInput{
+			Operation:   subOp,
+			PayloadSize: 1,
+			IsCleanup:   true,
+		}
+		return hooks.BeforeAttempt(c, attempt)
+	}
+	return fn(hostkit.WithRetryHooks(ctx, subHooks))
+}
+
 func newRandomHexToken() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -82,22 +155,22 @@ type catalogEntry struct {
 	scope       string
 	createToken string
 	incarnation string
+	deleteClaim string
 	deleting    bool
 }
 
 func (h *Host) parseCatalogDoc(doc fsDocument) (catalogEntry, error) {
 	var entry catalogEntry
-	if st, ok := doc.Fields["state"]; ok {
-		if st.Kind != fsKindString {
-			return catalogEntry{}, hostkit.ProviderError(hostkit.Conflict, 409, "IncompatibleTableSchema", "Firestore catalog document has non-string state field")
-		}
-		switch st.StrVal {
-		case "active":
-		case "deleting":
-			entry.deleting = true
-		default:
-			return catalogEntry{}, hostkit.ProviderError(hostkit.Conflict, 409, "IncompatibleTableSchema", fmt.Sprintf("Firestore catalog document has unsupported state %q", st.StrVal))
-		}
+	st, hasState := doc.Fields["state"]
+	if !hasState || st.Kind != fsKindString {
+		return catalogEntry{}, hostkit.ProviderError(hostkit.Conflict, 409, "IncompatibleTableSchema", "Firestore catalog document is missing string state field")
+	}
+	switch st.StrVal {
+	case "active":
+	case "deleting":
+		entry.deleting = true
+	default:
+		return catalogEntry{}, hostkit.ProviderError(hostkit.Conflict, 409, "IncompatibleTableSchema", fmt.Sprintf("Firestore catalog document has unsupported state %q", st.StrVal))
 	}
 
 	sc, hasScope := doc.Fields["scope"]
@@ -125,6 +198,9 @@ func (h *Host) parseCatalogDoc(doc fsDocument) (catalogEntry, error) {
 	if tok, ok := doc.Fields["token"]; ok && tok.Kind == fsKindString {
 		entry.createToken = tok.StrVal
 	}
+	if dc, ok := doc.Fields["delete_claim"]; ok && dc.Kind == fsKindString {
+		entry.deleteClaim = dc.StrVal
+	}
 	if inc, ok := doc.Fields["incarnation"]; ok && inc.Kind == fsKindString && inc.StrVal != "" {
 		entry.incarnation = inc.StrVal
 	} else if !doc.CreateTime.IsZero() {
@@ -133,7 +209,7 @@ func (h *Host) parseCatalogDoc(doc fsDocument) (catalogEntry, error) {
 	return entry, nil
 }
 
-func (h *Host) describeTableCatalog(ctx context.Context, name string) (catalogEntry, error) {
+func (h *Host) describeTableCatalogDoc(ctx context.Context, name string) (catalogEntry, fsDocument, error) {
 	req := &fsGetDocumentRequest{
 		Name: h.firestoreDocPath(firestoreCatalogCollection, name),
 	}
@@ -141,47 +217,34 @@ func (h *Host) describeTableCatalog(ctx context.Context, name string) (catalogEn
 	if err := h.firestoreUnary(ctx, rpcGetDocument, true, req, &doc); err != nil {
 		var ce *hostkit.CloudError
 		if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
-			return catalogEntry{}, ce.WithAbsent(hostkit.AbsentTable)
+			return catalogEntry{}, fsDocument{}, ce.WithAbsent(hostkit.AbsentTable)
 		}
-		return catalogEntry{}, err
+		return catalogEntry{}, fsDocument{}, err
 	}
-	return h.parseCatalogDoc(doc)
-}
-
-func (h *Host) cacheTableLayout(name string, sorted bool) {
-	if target, err := h.firestoreTarget(); err == nil {
-		h.tableLayouts.set(target, h.project, name, sorted)
-	}
-}
-
-func (h *Host) evictTableLayout(name string) {
-	if target, err := h.firestoreTarget(); err == nil {
-		h.tableLayouts.del(target, h.project, name)
-	}
-}
-
-func (h *Host) lookupCachedLayout(name string) (bool, bool) {
-	target, err := h.firestoreTarget()
+	cat, err := h.parseCatalogDoc(doc)
 	if err != nil {
-		return false, false
+		return catalogEntry{}, fsDocument{}, err
 	}
-	return h.tableLayouts.get(target, h.project, name)
+	return cat, doc, nil
 }
 
-func (h *Host) ensureTableLayout(ctx context.Context, name string) (bool, error) {
-	if sorted, ok := h.lookupCachedLayout(name); ok {
-		return sorted, nil
-	}
-	cat, err := h.describeTableCatalog(ctx, name)
+func (h *Host) describeTableCatalog(ctx context.Context, name string) (catalogEntry, error) {
+	cat, _, err := h.describeTableCatalogDoc(ctx, name)
+	return cat, err
+}
+
+func (h *Host) ensureActiveCatalog(ctx context.Context, name string) (catalogEntry, fsDocument, error) {
+	cat, doc, err := h.describeTableCatalogDoc(ctx, name)
 	if err != nil {
-		return false, err
+		return catalogEntry{}, fsDocument{}, err
 	}
 	if cat.deleting {
-		h.evictTableLayout(name)
-		return false, hostkit.ProviderError(hostkit.NotFound, 404, "TableNotFound", "table is being deleted").WithAbsent(hostkit.AbsentTable)
+		return catalogEntry{}, fsDocument{}, hostkit.ProviderError(hostkit.NotFound, 404, "TableNotFound", "table is being deleted").WithAbsent(hostkit.AbsentTable)
 	}
-	h.cacheTableLayout(name, cat.sorted)
-	return cat.sorted, nil
+	if strings.TrimSpace(cat.incarnation) == "" {
+		return catalogEntry{}, fsDocument{}, hostkit.ProviderError(hostkit.Internal, 0, "MissingTableIncarnationToken", "Firestore catalog document is missing incarnation token")
+	}
+	return cat, doc, nil
 }
 
 func validateKeyLayout(table string, sorted bool, sk string, preflight bool) error {
@@ -201,6 +264,38 @@ func validateKeyLayout(table string, sorted bool, sk string, preflight bool) err
 }
 
 func (h *Host) CreateTable(ctx context.Context, name string, sorted bool) (bool, error) {
+	// Refuse adopting an existing uncatalogued user collection if no catalog
+	// entry exists yet. First check if the catalog document already exists.
+	existingCat, _, gerr := h.describeTableCatalogDoc(ctx, name)
+	if gerr == nil {
+		if existingCat.deleting {
+			return false, hostkit.ProviderError(hostkit.Conflict, 409, "TableDeleting", "table is currently being deleted")
+		}
+		if existingCat.sorted != sorted {
+			return false, hostkit.ProviderError(hostkit.Conflict, 409, "LayoutMismatch", "table already exists with a different key layout")
+		}
+		return false, nil
+	}
+	var gce *hostkit.CloudError
+	if !errors.As(gerr, &gce) || gce.Code != hostkit.NotFound {
+		return false, gerr
+	}
+
+	// Catalog doc does not exist: verify user collection {name} has no orphan documents.
+	orphanDocs, qerr := h.firestoreRunQuery(ctx, &fsRunQueryRequest{
+		Parent: h.firestoreDocumentsRoot(),
+		StructuredQuery: fsStructuredQuery{
+			CollectionId: name,
+			Limit:        1,
+		},
+	}, 1)
+	if qerr != nil {
+		return false, qerr
+	}
+	if len(orphanDocs) > 0 {
+		return false, hostkit.ProviderError(hostkit.Conflict, 409, "UncataloguedCollectionExists", fmt.Sprintf("Firestore collection %q already contains uncatalogued documents", name))
+	}
+
 	incarnation, err := newRandomHexToken()
 	if err != nil {
 		return false, err
@@ -234,7 +329,6 @@ func (h *Host) CreateTable(ctx context.Context, name string, sorted bool) (bool,
 	var createdDoc fsDocument
 	err = h.firestoreUnary(ctx, rpcCreateDocument, createToken != "", req, &createdDoc)
 	if err == nil {
-		h.cacheTableLayout(name, sorted)
 		return true, nil
 	}
 	var ce *hostkit.CloudError
@@ -242,9 +336,7 @@ func (h *Host) CreateTable(ctx context.Context, name string, sorted bool) (bool,
 		return false, err
 	}
 
-	// Table catalog doc already exists: inspect it via an admitted GetDocument
-	// so layout mismatches, deleting state, or foreign scopes fail with CONFLICT,
-	// while matching layout returns (false, nil) for cloudhost token comparison.
+	// Concurrent creation landed between our check and CreateDocument: inspect it.
 	cat, derr := h.describeTableCatalog(ctx, name)
 	if derr != nil {
 		var dce *hostkit.CloudError
@@ -264,49 +356,30 @@ func (h *Host) CreateTable(ctx context.Context, name string, sorted bool) (bool,
 	if cat.sorted != sorted {
 		return false, hostkit.ProviderError(hostkit.Conflict, 409, "LayoutMismatch", "table already exists with a different key layout")
 	}
-	h.cacheTableLayout(name, cat.sorted)
 	return false, nil
 }
 
 func (h *Host) TableCreateToken(ctx context.Context, name string) (string, error) {
-	cat, err := h.describeTableCatalog(ctx, name)
+	cat, _, err := h.ensureActiveCatalog(ctx, name)
 	if err != nil {
 		return "", err
 	}
-	if cat.deleting {
-		h.evictTableLayout(name)
-		return "", hostkit.ProviderError(hostkit.NotFound, 404, "TableNotFound", "table not found").WithAbsent(hostkit.AbsentTable)
+	if strings.TrimSpace(cat.createToken) == "" {
+		return cat.incarnation, nil
 	}
-	h.cacheTableLayout(name, cat.sorted)
 	return cat.createToken, nil
 }
 
 func (h *Host) HeadTable(ctx context.Context, name string) error {
-	cat, err := h.describeTableCatalog(ctx, name)
-	if err != nil {
-		return err
-	}
-	if cat.deleting {
-		h.evictTableLayout(name)
-		return hostkit.ProviderError(hostkit.NotFound, 404, "TableNotFound", "table not found").WithAbsent(hostkit.AbsentTable)
-	}
-	h.cacheTableLayout(name, cat.sorted)
-	return nil
+	_, _, err := h.ensureActiveCatalog(ctx, name)
+	return err
 }
 
 func (h *Host) DescribeTable(ctx context.Context, name string) (hostkit.TableInfo, error) {
-	cat, err := h.describeTableCatalog(ctx, name)
+	cat, _, err := h.ensureActiveCatalog(ctx, name)
 	if err != nil {
 		return hostkit.TableInfo{}, err
 	}
-	if cat.deleting {
-		h.evictTableLayout(name)
-		return hostkit.TableInfo{}, hostkit.ProviderError(hostkit.NotFound, 404, "TableNotFound", "table not found").WithAbsent(hostkit.AbsentTable)
-	}
-	if strings.TrimSpace(cat.incarnation) == "" {
-		return hostkit.TableInfo{}, hostkit.ProviderError(hostkit.Internal, 0, "MissingTableIncarnationToken", "Firestore catalog document is missing incarnation token")
-	}
-	h.cacheTableLayout(name, cat.sorted)
 	return hostkit.TableInfo{
 		Sorted:      cat.sorted,
 		CreateToken: cat.incarnation,
@@ -314,11 +387,13 @@ func (h *Host) DescribeTable(ctx context.Context, name string) (hostkit.TableInf
 }
 
 func (h *Host) DeleteTable(ctx context.Context, name string) error {
-	h.evictTableLayout(name)
+	subScope := initDeleteTableSubOpScope(ctx)
 	catDocPath := h.firestoreDocPath(firestoreCatalogCollection, name)
 
 	var catDoc fsDocument
-	if err := h.firestoreUnary(ctx, rpcGetDocument, true, &fsGetDocumentRequest{Name: catDocPath}, &catDoc); err != nil {
+	if err := withSubOp(ctx, subScope, "item_get", func(sctx context.Context) error {
+		return h.firestoreUnary(sctx, rpcGetDocument, true, &fsGetDocumentRequest{Name: catDocPath}, &catDoc)
+	}); err != nil {
 		var ce *hostkit.CloudError
 		if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
 			return ce.WithAbsent(hostkit.AbsentTable)
@@ -329,24 +404,41 @@ func (h *Host) DeleteTable(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if cat.deleting {
-		return hostkit.ProviderError(hostkit.NotFound, 404, "TableNotFound", "table not found").WithAbsent(hostkit.AbsentTable)
+	if strings.TrimSpace(cat.incarnation) == "" {
+		return hostkit.ProviderError(hostkit.Internal, 0, "MissingTableIncarnationToken", "Firestore catalog document is missing incarnation token")
+	}
+	catPre, err := docPrecondition(catDoc)
+	if err != nil {
+		return err
+	}
+	claimID, err := newRandomHexToken()
+	if err != nil {
+		return err
 	}
 
-	// Fence concurrent callers by marking the catalog entry as deleting before
-	// purging child documents in collection {name}.
+	// Atomically transition (or re-claim an interrupted tombstone) using the exact
+	// observed catalog UpdateTime so a concurrent replacement incarnation is never
+	// overwritten or deleted.
 	catDoc.Fields["state"] = fsString("deleting")
+	catDoc.Fields["delete_claim"] = fsString(claimID)
 	var updatedCat fsDocument
-	if err := h.firestoreUnary(ctx, rpcUpdateDocument, true, &fsUpdateDocumentRequest{
-		Document: catDoc,
-		UpdateMask: &fsDocumentMask{
-			FieldPaths: []string{"state"},
-		},
-		CurrentDocument: &fsPrecondition{HasExists: true, Exists: true},
-	}, &updatedCat); err != nil {
+	if err := withSubOp(ctx, subScope, "item_update", func(sctx context.Context) error {
+		return h.firestoreUnary(sctx, rpcUpdateDocument, true, &fsUpdateDocumentRequest{
+			Document: catDoc,
+			UpdateMask: &fsDocumentMask{
+				FieldPaths: []string{"state", "delete_claim"},
+			},
+			CurrentDocument: catPre,
+		}, &updatedCat)
+	}); err != nil {
 		var ce *hostkit.CloudError
-		if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
-			return ce.WithAbsent(hostkit.AbsentTable)
+		if errors.As(err, &ce) {
+			if ce.Code == hostkit.NotFound {
+				return ce.WithAbsent(hostkit.AbsentTable)
+			}
+			if ce.Code == hostkit.PreconditionFailed || ce.Code == hostkit.Conflict {
+				return hostkit.ProviderError(hostkit.Conflict, 409, "DeleteTableConflict", "table catalog was modified concurrently during delete")
+			}
 		}
 		return err
 	}
@@ -354,25 +446,32 @@ func (h *Host) DeleteTable(ctx context.Context, name string) error {
 	// Purge all child documents in collection {name} via bounded RunQuery batches.
 	const purgeBatchSize = 100
 	for {
-		docs, err := h.firestoreRunQuery(ctx, &fsRunQueryRequest{
-			Parent: h.firestoreDocumentsRoot(),
-			StructuredQuery: fsStructuredQuery{
-				CollectionId: name,
-				OrderBy: []fsOrder{
-					{FieldPath: "__name__", Direction: fsDirectionAscending},
+		var docs []fsDocument
+		if err := withSubOp(ctx, subScope, "item_query", func(sctx context.Context) error {
+			var qerr error
+			docs, qerr = h.firestoreRunQuery(sctx, &fsRunQueryRequest{
+				Parent: h.firestoreDocumentsRoot(),
+				StructuredQuery: fsStructuredQuery{
+					CollectionId: name,
+					OrderBy: []fsOrder{
+						{FieldPath: "__name__", Direction: fsDirectionAscending},
+					},
+					Limit: purgeBatchSize,
 				},
-				Limit: purgeBatchSize,
-			},
-		}, purgeBatchSize)
-		if err != nil {
+			}, purgeBatchSize)
+			return qerr
+		}); err != nil {
 			return err
 		}
 		if len(docs) == 0 {
 			break
 		}
 		for _, d := range docs {
-			var empty fsEmpty
-			if err := h.firestoreUnary(ctx, rpcDeleteDocument, true, &fsDeleteDocumentRequest{Name: d.Name}, &empty); err != nil {
+			docName := d.Name
+			if err := withSubOp(ctx, subScope, "item_delete", func(sctx context.Context) error {
+				var empty fsEmpty
+				return h.firestoreUnary(sctx, rpcDeleteDocument, true, &fsDeleteDocumentRequest{Name: docName}, &empty)
+			}); err != nil {
 				var ce *hostkit.CloudError
 				if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
 					continue
@@ -383,13 +482,42 @@ func (h *Host) DeleteTable(ctx context.Context, name string) error {
 		if len(docs) < purgeBatchSize {
 			break
 		}
+		// Re-verify catalog incarnation and claim before continuing to the next batch.
+		var checkDoc fsDocument
+		if err := withSubOp(ctx, subScope, "item_get", func(sctx context.Context) error {
+			return h.firestoreUnary(sctx, rpcGetDocument, true, &fsGetDocumentRequest{Name: catDocPath}, &checkDoc)
+		}); err != nil {
+			return err
+		}
+		checkCat, err := h.parseCatalogDoc(checkDoc)
+		if err != nil {
+			return err
+		}
+		if !checkCat.deleting || checkCat.incarnation != cat.incarnation || checkCat.deleteClaim != claimID {
+			return hostkit.ProviderError(hostkit.Conflict, 409, "DeleteTableConflict", "table catalog incarnation changed during purge")
+		}
+		updatedCat = checkDoc
 	}
 
-	var empty fsEmpty
-	if err := h.firestoreUnary(ctx, rpcDeleteDocument, true, &fsDeleteDocumentRequest{Name: catDocPath}, &empty); err != nil {
+	finalPre, err := docPrecondition(updatedCat)
+	if err != nil {
+		return err
+	}
+	if err := withSubOp(ctx, subScope, "item_delete", func(sctx context.Context) error {
+		var empty fsEmpty
+		return h.firestoreUnary(sctx, rpcDeleteDocument, true, &fsDeleteDocumentRequest{
+			Name:            catDocPath,
+			CurrentDocument: finalPre,
+		}, &empty)
+	}); err != nil {
 		var ce *hostkit.CloudError
-		if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
-			return nil
+		if errors.As(err, &ce) {
+			if ce.Code == hostkit.NotFound {
+				return nil
+			}
+			if ce.Code == hostkit.PreconditionFailed || ce.Code == hostkit.Conflict {
+				return hostkit.ProviderError(hostkit.Conflict, 409, "DeleteTableConflict", "table catalog changed before final delete")
+			}
 		}
 		return err
 	}
@@ -423,7 +551,6 @@ func (h *Host) ListTables(ctx context.Context, token string) ([]string, string, 
 		}
 		name := docBaseName(doc.Name)
 		if name != "" {
-			h.cacheTableLayout(name, cat.sorted)
 			names = append(names, name)
 		}
 	}
@@ -509,37 +636,24 @@ func decodeFirestoreDoc(doc fsDocument) (hostkit.Item, bool, error) {
 	}, hasSK, nil
 }
 
-func docPrecondition(doc fsDocument) *fsPrecondition {
-	if !doc.UpdateTime.IsZero() {
-		return &fsPrecondition{
-			HasUpdateTime: true,
-			UpdateTime:    doc.UpdateTime,
-		}
+func docPrecondition(doc fsDocument) (*fsPrecondition, error) {
+	if doc.UpdateTime.IsZero() {
+		return nil, hostkit.ProviderError(hostkit.Internal, 0, "MissingDocumentUpdateTime", "Firestore document is missing update_time required for version precondition")
 	}
 	return &fsPrecondition{
-		HasExists: true,
-		Exists:    true,
-	}
+		HasUpdateTime: true,
+		UpdateTime:    doc.UpdateTime,
+	}, nil
 }
 
 func (h *Host) PutItem(ctx context.Context, table string, item hostkit.Item, mode hostkit.PutMode, expectVersion string) (hostkit.Item, error) {
-	sorted, cached := h.lookupCachedLayout(table)
-	if cached {
-		if err := validateKeyLayout(table, sorted, item.SK, true); err != nil {
-			return hostkit.Item{}, err
-		}
-	} else if mode != hostkit.PutIfVersion {
-		var err error
-		sorted, err = h.ensureTableLayout(ctx, table)
-		if err != nil {
-			return hostkit.Item{}, err
-		}
-		if err := validateKeyLayout(table, sorted, item.SK, false); err != nil {
-			return hostkit.Item{}, err
-		}
-		cached = true
-	} else {
-		sorted = item.SK != ""
+	cat, _, err := h.ensureActiveCatalog(ctx, table)
+	if err != nil {
+		return hostkit.Item{}, err
+	}
+	sorted := cat.sorted
+	if err := validateKeyLayout(table, sorted, item.SK, false); err != nil {
+		return hostkit.Item{}, err
 	}
 
 	newVer, err := newRandomHexToken()
@@ -606,15 +720,6 @@ func (h *Host) PutItem(ctx context.Context, table string, item hostkit.Item, mod
 		if err := h.firestoreUnary(ctx, rpcGetDocument, true, &fsGetDocumentRequest{Name: docPath}, &curDoc); err != nil {
 			var ce *hostkit.CloudError
 			if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
-				if !cached {
-					actualSorted, terr := h.ensureTableLayout(ctx, table)
-					if terr != nil {
-						return hostkit.Item{}, terr
-					}
-					if kerr := validateKeyLayout(table, actualSorted, item.SK, false); kerr != nil {
-						return hostkit.Item{}, kerr
-					}
-				}
 				return hostkit.Item{}, ce.WithAbsent(hostkit.AbsentItem)
 			}
 			return hostkit.Item{}, err
@@ -623,9 +728,8 @@ func (h *Host) PutItem(ctx context.Context, table string, item hostkit.Item, mod
 		if err != nil {
 			return hostkit.Item{}, err
 		}
-		h.cacheTableLayout(table, hasSK)
-		if err := validateKeyLayout(table, hasSK, item.SK, false); err != nil {
-			return hostkit.Item{}, err
+		if hasSK != sorted {
+			return hostkit.Item{}, hostkit.ProviderError(hostkit.Internal, 0, "CorruptItem", "Firestore document key layout does not match table catalog")
 		}
 		if priorItem.Version != expectVersion {
 			return hostkit.Item{}, hostkit.ProviderError(hostkit.PreconditionFailed, 412, "VersionMismatch", "expected version does not match current item version")
@@ -634,13 +738,17 @@ func (h *Host) PutItem(ctx context.Context, table string, item hostkit.Item, mod
 			return hostkit.Item{}, cerr
 		}
 		priorBill := hostkit.NativeItemBillableBytes(priorItem)
+		pre, err := docPrecondition(curDoc)
+		if err != nil {
+			return hostkit.Item{}, err
+		}
 
 		req := &fsUpdateDocumentRequest{
 			Document: fsDocument{
 				Name:   docPath,
 				Fields: fields,
 			},
-			CurrentDocument: docPrecondition(curDoc),
+			CurrentDocument: pre,
 		}
 		var outDoc fsDocument
 		if err := h.firestoreUnary(ctx, rpcUpdateDocument, false, req, &outDoc); err != nil {
@@ -664,13 +772,13 @@ func (h *Host) PutItem(ctx context.Context, table string, item hostkit.Item, mod
 }
 
 func (h *Host) GetItem(ctx context.Context, table, pk, sk string) (hostkit.Item, error) {
-	sorted, cached := h.lookupCachedLayout(table)
-	if cached {
-		if err := validateKeyLayout(table, sorted, sk, true); err != nil {
-			return hostkit.Item{}, err
-		}
-	} else {
-		sorted = sk != ""
+	cat, _, err := h.ensureActiveCatalog(ctx, table)
+	if err != nil {
+		return hostkit.Item{}, err
+	}
+	sorted := cat.sorted
+	if err := validateKeyLayout(table, sorted, sk, false); err != nil {
+		return hostkit.Item{}, err
 	}
 
 	docID := firestoreDocID(sorted, pk, sk)
@@ -680,15 +788,6 @@ func (h *Host) GetItem(ctx context.Context, table, pk, sk string) (hostkit.Item,
 	}, &doc); err != nil {
 		var ce *hostkit.CloudError
 		if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
-			if !cached {
-				actualSorted, terr := h.ensureTableLayout(ctx, table)
-				if terr != nil {
-					return hostkit.Item{}, terr
-				}
-				if kerr := validateKeyLayout(table, actualSorted, sk, false); kerr != nil {
-					return hostkit.Item{}, kerr
-				}
-			}
 			return hostkit.Item{}, ce.WithAbsent(hostkit.AbsentItem)
 		}
 		return hostkit.Item{}, err
@@ -698,29 +797,20 @@ func (h *Host) GetItem(ctx context.Context, table, pk, sk string) (hostkit.Item,
 	if err != nil {
 		return hostkit.Item{}, err
 	}
-	h.cacheTableLayout(table, hasSK)
-	if err := validateKeyLayout(table, hasSK, sk, false); err != nil {
-		return hostkit.Item{}, err
+	if hasSK != sorted {
+		return hostkit.Item{}, hostkit.ProviderError(hostkit.Internal, 0, "CorruptItem", "Firestore document key layout does not match table catalog")
 	}
 	return item, nil
 }
 
 func (h *Host) DeleteItem(ctx context.Context, table, pk, sk string) error {
-	sorted, cached := h.lookupCachedLayout(table)
-	if cached {
-		if err := validateKeyLayout(table, sorted, sk, true); err != nil {
-			return err
-		}
-	} else {
-		var err error
-		sorted, err = h.ensureTableLayout(ctx, table)
-		if err != nil {
-			return err
-		}
-		if err := validateKeyLayout(table, sorted, sk, false); err != nil {
-			return err
-		}
-		cached = true
+	cat, _, err := h.ensureActiveCatalog(ctx, table)
+	if err != nil {
+		return err
+	}
+	sorted := cat.sorted
+	if err := validateKeyLayout(table, sorted, sk, false); err != nil {
+		return err
 	}
 
 	docID := firestoreDocID(sorted, pk, sk)
@@ -739,32 +829,33 @@ func (h *Host) DeleteItem(ctx context.Context, table, pk, sk string) error {
 }
 
 func (h *Host) UpdateItem(ctx context.Context, table, pk, sk string, changes hostkit.Item) (hostkit.Item, error) {
-	sorted, cached := h.lookupCachedLayout(table)
-	if cached {
-		if err := validateKeyLayout(table, sorted, sk, true); err != nil {
-			return hostkit.Item{}, err
-		}
-	} else {
-		sorted = sk != ""
+	cat, _, err := h.ensureActiveCatalog(ctx, table)
+	if err != nil {
+		return hostkit.Item{}, err
+	}
+	sorted := cat.sorted
+	if err := validateKeyLayout(table, sorted, sk, false); err != nil {
+		return hostkit.Item{}, err
 	}
 
 	docID := firestoreDocID(sorted, pk, sk)
 	docPath := h.firestoreDocPath(table, docID)
 
 	for attempt := 0; attempt < maxUpdateCASAttempts; attempt++ {
+		if attempt > 0 {
+			latestCat, _, cerr := h.ensureActiveCatalog(ctx, table)
+			if cerr != nil {
+				return hostkit.Item{}, cerr
+			}
+			if latestCat.incarnation != cat.incarnation {
+				return hostkit.Item{}, hostkit.ProviderError(hostkit.Conflict, 409, "TableIncarnationChanged", "table incarnation changed concurrently during item_update")
+			}
+		}
+
 		var curDoc fsDocument
 		if err := h.firestoreUnary(ctx, rpcGetDocument, true, &fsGetDocumentRequest{Name: docPath}, &curDoc); err != nil {
 			var ce *hostkit.CloudError
 			if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
-				if !cached {
-					actualSorted, terr := h.ensureTableLayout(ctx, table)
-					if terr != nil {
-						return hostkit.Item{}, terr
-					}
-					if kerr := validateKeyLayout(table, actualSorted, sk, false); kerr != nil {
-						return hostkit.Item{}, kerr
-					}
-				}
 				return hostkit.Item{}, ce.WithAbsent(hostkit.AbsentItem)
 			}
 			return hostkit.Item{}, err
@@ -774,15 +865,18 @@ func (h *Host) UpdateItem(ctx context.Context, table, pk, sk string, changes hos
 		if err != nil {
 			return hostkit.Item{}, err
 		}
-		h.cacheTableLayout(table, hasSK)
-		cached = true
-		if err := validateKeyLayout(table, hasSK, sk, false); err != nil {
-			return hostkit.Item{}, err
+		if hasSK != sorted {
+			return hostkit.Item{}, hostkit.ProviderError(hostkit.Internal, 0, "CorruptItem", "Firestore document key layout does not match table catalog")
 		}
 		if _, cerr := hostkit.CanonicalItemBytes(priorItem.Attrs); cerr != nil {
 			return hostkit.Item{}, cerr
 		}
 		priorBill := hostkit.NativeItemBillableBytes(priorItem)
+
+		pre, err := docPrecondition(curDoc)
+		if err != nil {
+			return hostkit.Item{}, err
+		}
 
 		mergedAttrs := make(map[string]hostkit.Attr, len(priorItem.Attrs)+len(changes.Attrs))
 		for k, v := range priorItem.Attrs {
@@ -835,7 +929,7 @@ func (h *Host) UpdateItem(ctx context.Context, table, pk, sk string, changes hos
 			UpdateMask: &fsDocumentMask{
 				FieldPaths: maskPaths,
 			},
-			CurrentDocument: docPrecondition(curDoc),
+			CurrentDocument: pre,
 		}, &outDoc)
 		if err != nil {
 			var ce *hostkit.CloudError
@@ -892,18 +986,12 @@ func decodeCursorJSON(raw string, out any) error {
 }
 
 func (h *Host) Query(ctx context.Context, table, pk, skFrom, skTo string, max int, token string) (hostkit.TablePage, error) {
-	sorted, cached := h.lookupCachedLayout(table)
-	if !cached {
-		var err error
-		sorted, err = h.ensureTableLayout(ctx, table)
-		if err != nil {
-			return hostkit.TablePage{}, err
-		}
+	cat, _, err := h.ensureActiveCatalog(ctx, table)
+	if err != nil {
+		return hostkit.TablePage{}, err
 	}
+	sorted := cat.sorted
 	if !sorted && (skFrom != "" || skTo != "") {
-		if cached {
-			return hostkit.TablePage{}, hostkit.Preflightf("sort key range [sk_from, sk_to) is not valid on partition-key-only table %q", table)
-		}
 		return hostkit.TablePage{}, hostkit.ProviderError(hostkit.InvalidArgument, 0, "InvalidKeyLayout", fmt.Sprintf("sort key range [sk_from, sk_to) is not valid on partition-key-only table %q", table))
 	}
 
@@ -917,64 +1005,54 @@ func (h *Host) Query(ctx context.Context, table, pk, skFrom, skTo string, max in
 		}
 	}
 
-	filters := []fsFilter{
-		{
-			Field: &fsFieldFilter{
-				FieldPath: tablePKAttr,
-				Op:        fsFilterOpEqual,
-				Value:     fsString(pk),
-			},
-		},
-	}
-	if sorted && skFrom != "" {
-		filters = append(filters, fsFilter{
-			Field: &fsFieldFilter{
-				FieldPath: tableSKAttr,
-				Op:        fsFilterOpGreaterThanOrEqual,
-				Value:     fsString(skFrom),
-			},
-		})
-	}
-	if sorted && skTo != "" {
-		filters = append(filters, fsFilter{
-			Field: &fsFieldFilter{
-				FieldPath: tableSKAttr,
-				Op:        fsFilterOpLessThan,
-				Value:     fsString(skTo),
-			},
-		})
-	}
-
-	var where fsFilter
-	if len(filters) == 1 {
-		where = filters[0]
-	} else {
-		where = fsFilter{CompositeAnd: filters}
-	}
-
-	orderField := "__name__"
-	if sorted {
-		orderField = tableSKAttr
-	}
+	// Index-free range query over document __name__ (12-tables-design.md §3.1 / §6 D6):
+	// For sorted tables, document IDs are "{pk}#{sk}". Since '#' is ASCII 0x23 and '$'
+	// is ASCII 0x24 (which precedes every valid key character), all documents in
+	// partition {pk} lie strictly inside ["{pk}#", "{pk}$").
 	sq := fsStructuredQuery{
 		CollectionId: table,
-		Where:        &where,
 		OrderBy: []fsOrder{
-			{FieldPath: orderField, Direction: fsDirectionAscending},
+			{FieldPath: "__name__", Direction: fsDirectionAscending},
 		},
 		Limit: int32(max),
 	}
-	if token != "" {
-		if sorted {
+	if sorted {
+		if token != "" {
 			sq.StartAt = &fsCursor{
-				Values: []fsValue{fsString(cur.SK)},
-				Before: false, // exclusive lower bound (> cur.SK)
+				Values: []fsValue{fsRef(h.firestoreDocPath(table, pk+"#"+cur.SK))},
+				Before: false, // exclusive (> pk#cur.SK)
+			}
+		} else if skFrom != "" {
+			sq.StartAt = &fsCursor{
+				Values: []fsValue{fsRef(h.firestoreDocPath(table, pk+"#"+skFrom))},
+				Before: true, // inclusive (>= pk#skFrom)
 			}
 		} else {
 			sq.StartAt = &fsCursor{
-				Values: []fsValue{fsRef(h.firestoreDocPath(table, pk))},
-				Before: false,
+				Values: []fsValue{fsRef(h.firestoreDocPath(table, pk+"#"))},
+				Before: true, // inclusive (>= pk#)
 			}
+		}
+		if skTo != "" {
+			sq.EndAt = &fsCursor{
+				Values: []fsValue{fsRef(h.firestoreDocPath(table, pk+"#"+skTo))},
+				Before: true, // exclusive (< pk#skTo)
+			}
+		} else {
+			sq.EndAt = &fsCursor{
+				Values: []fsValue{fsRef(h.firestoreDocPath(table, pk+"$"))},
+				Before: true, // exclusive (< pk$)
+			}
+		}
+	} else {
+		docRef := fsRef(h.firestoreDocPath(table, pk))
+		sq.StartAt = &fsCursor{
+			Values: []fsValue{docRef},
+			Before: token == "",
+		}
+		sq.EndAt = &fsCursor{
+			Values: []fsValue{docRef},
+			Before: false,
 		}
 	}
 
@@ -992,16 +1070,24 @@ func (h *Host) Query(ctx context.Context, table, pk, skFrom, skTo string, max in
 		if err != nil {
 			return hostkit.TablePage{}, err
 		}
-		if hasSK != sorted || it.PK != pk {
+		if hasSK != sorted {
 			return hostkit.TablePage{}, hostkit.ProviderError(hostkit.Internal, 0, "CorruptItem", "Firestore query returned document violating table key schema")
 		}
+		if it.PK != pk {
+			continue
+		}
 		if sorted {
+			if token != "" && it.SK <= cur.SK {
+				continue
+			}
 			if skFrom != "" && it.SK < skFrom {
 				continue
 			}
 			if skTo != "" && it.SK >= skTo {
 				continue
 			}
+		} else if token != "" {
+			continue
 		}
 		items = append(items, it)
 	}
@@ -1026,10 +1112,11 @@ func (h *Host) Query(ctx context.Context, table, pk, skFrom, skTo string, max in
 }
 
 func (h *Host) Scan(ctx context.Context, table string, max int, token string) (hostkit.TablePage, error) {
-	sorted, err := h.ensureTableLayout(ctx, table)
+	cat, _, err := h.ensureActiveCatalog(ctx, table)
 	if err != nil {
 		return hostkit.TablePage{}, err
 	}
+	sorted := cat.sorted
 
 	var cur scanCursor
 	if token != "" {

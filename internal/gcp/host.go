@@ -18,7 +18,6 @@ type Host struct {
 	ctx          context.Context
 	client       *http.Client
 	grpcPool     *firestorePool
-	tableLayouts *tableLayoutCache
 	retry        hostkit.RetryPolicy
 	createToken  string
 	authToken    string
@@ -51,7 +50,14 @@ func NewHost() *Host {
 		project = "gcpsim-local"
 	}
 	return &Host{abortOnError: true, lastError: okError(), endpoints: map[string]string{}, defaultEP: strings.TrimRight(def, "/"), project: project,
-		ctx: context.Background(), client: hostkit.NewHTTPClient(60 * time.Second), grpcPool: defaultFirestorePool, tableLayouts: newTableLayoutCache(), retry: hostkit.DefaultRetryPolicy()}
+		ctx: context.Background(), client: hostkit.NewHTTPClient(60 * time.Second), grpcPool: newFirestorePool(), retry: hostkit.DefaultRetryPolicy()}
+}
+
+func (h *Host) Close() error {
+	if h == nil || h.grpcPool == nil {
+		return nil
+	}
+	return h.grpcPool.Close()
 }
 
 func (h *Host) Provider() string   { return "gcp" }
@@ -180,4 +186,11 @@ func (h *Host) finishOK() *CloudError {
 	defer h.mu.Unlock()
 	h.lastError = okError()
 	return h.lastError
+}
+
+func (h *Host) redactSecrets(msg string) string {
+	if h != nil && h.authToken != "" && len(h.authToken) >= 4 {
+		msg = strings.ReplaceAll(msg, h.authToken, "[REDACTED]")
+	}
+	return msg
 }

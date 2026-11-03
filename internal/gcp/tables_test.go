@@ -211,10 +211,18 @@ func (m *mockFirestoreServer) handleStream(_ any, stream grpc.ServerStream) erro
 		}
 		pre := parseDeletePrecondition(rawReq)
 		m.mu.Lock()
-		_, exists := m.docs[req.Name]
-		if pre != nil && pre.HasExists && pre.Exists && !exists {
-			m.mu.Unlock()
-			return status.Error(codes.NotFound, "no document to delete: "+req.Name)
+		existing, exists := m.docs[req.Name]
+		if pre != nil {
+			if pre.HasExists && pre.Exists && !exists {
+				m.mu.Unlock()
+				return status.Error(codes.NotFound, "no document to delete: "+req.Name)
+			}
+			if pre.HasUpdateTime {
+				if !exists || existing.UpdateTime != pre.UpdateTime {
+					m.mu.Unlock()
+					return status.Error(codes.FailedPrecondition, "update_time precondition failed")
+				}
+			}
 		}
 		delete(m.docs, req.Name)
 		m.mu.Unlock()
