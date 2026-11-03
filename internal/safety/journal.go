@@ -240,7 +240,10 @@ func (j *Journal) append(record JournalRecord) error {
 		return err
 	}
 	payload = append(payload, '\n')
-	if _, err = j.file.Write(payload); err == nil {
+	if _, err = j.file.Seek(offset, io.SeekStart); err == nil {
+		_, err = j.file.Write(payload)
+	}
+	if err == nil {
 		err = j.file.Sync()
 	}
 	if err != nil {

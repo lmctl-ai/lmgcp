@@ -17,6 +17,8 @@ var journalLocks sync.Map // map[*os.File]*windows.Overlapped
 
 func lockFile(file *os.File) error {
 	overlapped := &windows.Overlapped{}
+	// Reserve a byte outside journal data so readers can inspect active logs.
+	overlapped.Offset = 0x7fffffff
 	flags := uint32(windows.LOCKFILE_EXCLUSIVE_LOCK | windows.LOCKFILE_FAIL_IMMEDIATELY)
 	if err := windows.LockFileEx(windows.Handle(file.Fd()), flags, 0, 1, 0, overlapped); err != nil {
 		return err
@@ -33,7 +35,8 @@ func unlockFile(file *os.File) error {
 	if !ok {
 		return errors.New("journal file is not locked")
 	}
-	return windows.UnlockFileEx(windows.Handle(file.Fd()), 0, 1, 0, value.(*windows.Overlapped))
+	overlapped := value.(*windows.Overlapped)
+	return windows.UnlockFileEx(windows.Handle(file.Fd()), 0, 1, 0, overlapped)
 }
 
 func platformDirCheck(string, os.FileInfo) error { return nil }
