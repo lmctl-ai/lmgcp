@@ -4,7 +4,7 @@ package host
 
 import (
 	"os"
-	"strings"
+	"path/filepath"
 	"testing"
 
 	"github.com/lmctl-ai/lmgcp/internal/fakegcp"
@@ -137,7 +137,7 @@ func TestOpusRunIDTraversal(t *testing.T) {
 	if got := safety.JournalPath("/var/state/lmgcp", "../../../tmp/evil"); got != "" {
 		t.Errorf("TRAVERSAL: JournalPath escapes state dir: %s", got)
 	}
-	if !strings.HasPrefix(safety.JournalPath("/var/state/lmgcp", "run-1234567890-abcdefabcdef"), "/var/state/lmgcp/") {
+	if filepath.Dir(safety.JournalPath("/var/state/lmgcp", "run-1234567890-abcdefabcdef")) != filepath.Clean("/var/state/lmgcp") {
 		t.Error("valid run id path rejected")
 	}
 }

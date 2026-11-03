@@ -154,7 +154,7 @@ func OpenJournal(path string, meta JournalMeta, lock bool) (*Journal, error) {
 			return nil, errors.New("recovery journal metadata does not match this host")
 		}
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR|oNoFollow, 0o600)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|oNoFollow, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open recovery journal: %w", err)
 	}
