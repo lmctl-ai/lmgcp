@@ -17,6 +17,8 @@ type Host struct {
 	mu           sync.Mutex
 	ctx          context.Context
 	client       *http.Client
+	grpcPool     *firestorePool
+	tableLayouts *tableLayoutCache
 	retry        hostkit.RetryPolicy
 	createToken  string
 	authToken    string
@@ -38,6 +40,9 @@ func NewHost() *Host {
 	if def == "" {
 		def = strings.TrimSpace(os.Getenv("PUBSUB_EMULATOR_HOST"))
 	}
+	if def == "" {
+		def = strings.TrimSpace(os.Getenv("FIRESTORE_EMULATOR_HOST"))
+	}
 	project := strings.TrimSpace(os.Getenv("LMGCP_SIM_PROJECT"))
 	if project == "" {
 		project = strings.TrimSpace(os.Getenv("GOOGLE_CLOUD_PROJECT"))
@@ -46,7 +51,7 @@ func NewHost() *Host {
 		project = "gcpsim-local"
 	}
 	return &Host{abortOnError: true, lastError: okError(), endpoints: map[string]string{}, defaultEP: strings.TrimRight(def, "/"), project: project,
-		ctx: context.Background(), client: hostkit.NewHTTPClient(60 * time.Second), retry: hostkit.DefaultRetryPolicy()}
+		ctx: context.Background(), client: hostkit.NewHTTPClient(60 * time.Second), grpcPool: defaultFirestorePool, tableLayouts: newTableLayoutCache(), retry: hostkit.DefaultRetryPolicy()}
 }
 
 func (h *Host) Provider() string   { return "gcp" }
@@ -69,7 +74,7 @@ func (h *Host) LastError() *CloudError {
 
 func validService(s string) bool {
 	switch s {
-	case "", "storage", "object-storage", "object_storage", "gcs", "objectstorage", "queue", "pubsub", "sqs", "all":
+	case "", "storage", "object-storage", "object_storage", "gcs", "objectstorage", "queue", "pubsub", "sqs", "tables", "table", "firestore", "dynamodb", "all":
 		return true
 	}
 	return false
@@ -149,6 +154,10 @@ func (h *Host) resolveLocked(service string) string {
 		}
 	case "queue", "pubsub", "sqs":
 		if ep := h.endpoints["queue"]; ep != "" {
+			return ep
+		}
+	case "tables", "table", "firestore", "dynamodb":
+		if ep := h.endpoints["tables"]; ep != "" {
 			return ep
 		}
 	}

@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	cloud.google.com/go/auth v0.23.0
 	cloud.google.com/go/compute/metadata v0.9.0
-	github.com/lmctl-ai/lmcloud v0.1.0
+	github.com/lmctl-ai/lmcloud v0.1.1-0.20261103161455-d1eaed3d015e
 	github.com/lmctl-ai/lmcode-go v0.6.39-0.20261102140952-06cd9ae991d9
 	google.golang.org/api v0.293.0
 )

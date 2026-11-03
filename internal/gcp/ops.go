@@ -694,6 +694,9 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 		req, _ := json.Marshal(map[string]any{"maxMessages": maxMessages, "returnImmediately": returnImmediately})
 		status, data, err := h.requestIdem(ctx, http.MethodPost, h.subPath(queue)+":pull", req, "application/json", false)
 		if err != nil {
+			if wait > 0 && ctx.Err() == context.DeadlineExceeded && h.ctx.Err() == nil {
+				return []RawMessage{}, nil
+			}
 			return nil, cerrNet("queue_receive", queue, err)
 		}
 		if status < 200 || status >= 300 {
@@ -722,10 +725,8 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 				continue
 			}
 		}
-		ids := make([]string, 0, len(pull.ReceivedMessages))
 		out := make([]RawMessage, 0, len(pull.ReceivedMessages))
 		for _, rm := range pull.ReceivedMessages {
-			ids = append(ids, rm.AckId)
 			raw, derr := base64.StdEncoding.DecodeString(rm.Message.Data)
 			if derr != nil {
 				return nil, h.setErr("queue_receive", queue, newCloudError(CodeInternal, status, "decode", "malformed message data"))
@@ -735,14 +736,6 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 				id = rm.AckId
 			}
 			out = append(out, RawMessage{ID: id, Wire: string(raw), Receipt: rm.AckId})
-		}
-		mod, _ := json.Marshal(map[string]any{"ackIds": ids, "ackDeadlineSeconds": visibility})
-		status, data, err = h.requestIdem(h.ctx, http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mod, "application/json", false)
-		if err != nil {
-			return nil, cerrNet("queue_receive", queue, err)
-		}
-		if status < 200 || status >= 300 {
-			return nil, h.setErr("queue_receive", queue, h.classify(status, data))
 		}
 		return out, nil
 	}

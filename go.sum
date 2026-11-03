@@ -27,8 +27,8 @@ github.com/googleapis/enterprise-certificate-proxy v0.3.20 h1:t/xL64VUoN69MuMRQu
 github.com/googleapis/enterprise-certificate-proxy v0.3.20/go.mod h1:L3D/IQExI6LqEjBdXcZQ1WluSgigQmSwBboFstVPM4w=
 github.com/googleapis/gax-go/v2 v2.24.0 h1:myMaPYyF9MecEmvQqMqomIwn9t/4KCZN9qnwsS76wlg=
 github.com/googleapis/gax-go/v2 v2.24.0/go.mod h1:IaTHBDd7NHxSCiu0vEs8pQZu4dGZrWwuSoxCnk16OFM=
-github.com/lmctl-ai/lmcloud v0.1.0 h1:WCYsVhdLwYJMFKZUEhTv7YM/HEjqMhQOrj2GMJOilro=
-github.com/lmctl-ai/lmcloud v0.1.0/go.mod h1:99qHT0EFulWuhlIG2mBtQs5bqL2era3MuuYtiCNk6TI=
+github.com/lmctl-ai/lmcloud v0.1.1-0.20261103161455-d1eaed3d015e h1:2VRbs139JNWrvRe3lUCpPLhEeGnovJhg/O3lYj88njg=
+github.com/lmctl-ai/lmcloud v0.1.1-0.20261103161455-d1eaed3d015e/go.mod h1:99qHT0EFulWuhlIG2mBtQs5bqL2era3MuuYtiCNk6TI=
 github.com/lmctl-ai/lmcode-go v0.6.39-0.20261102140952-06cd9ae991d9 h1:FM1pg6GQqiKtMPIJLyX7TZsDqFw9lDzOzwTkpzs+nMs=
 github.com/lmctl-ai/lmcode-go v0.6.39-0.20261102140952-06cd9ae991d9/go.mod h1:Wfm1dj/9Uek4C4Y6LOkL5kFNRojgFUej7DDRGStSfVc=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=

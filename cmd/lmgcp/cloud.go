@@ -40,6 +40,7 @@ func cloudRealMain(args []string) int {
 				Provider:  "gcp",
 				Store:     a,
 				Queue:     a,
+				Tables:    a,
 				Endpoints: gcp.Endpoints(),
 			}, nil
 		},

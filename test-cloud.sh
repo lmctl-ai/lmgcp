@@ -29,6 +29,8 @@ p = _lmcode_ s;
   cloud.object_put("lmcloud-dry-bucket", "k", "v");
   cloud.queue_create("lmcloud-dry-queue");
   cloud.queue_send("lmcloud-dry-queue", "m");
+  cloud.table_create("lmclouddrytable");
+  cloud.item_put("lmclouddrytable", cloud.item_new("k").set_string("a", "v"));
   if (cloud.last_error().code() == ErrorCode.OK) { assert_close(1.0, 1.0, 0.0); } else { assert_close(0.0, 1.0, 0.0); }
 end _lmcode_
 r = run_lmcode(p, {command:["$PWD/bin/lmgcp","cloud","--lmcode","\$DSLFILE"]});
@@ -59,6 +61,8 @@ if [[ -x "$LMCLOUD_DIR/tests/run-conformance.sh" ]]; then
   trap cleanup EXIT
   "$LMCLOUD_DIR/tests/run-conformance.sh" "$PWD/scripts/lmgcp-cloud-host.sh" "$ENDPOINT" object-storage
   "$LMCLOUD_DIR/tests/run-conformance.sh" "$PWD/scripts/lmgcp-cloud-host.sh" "$ENDPOINT" queue
+  "$LMCLOUD_DIR/tests/run-conformance.sh" "$PWD/scripts/lmgcp-cloud-host.sh" "$ENDPOINT" cost-perf
+  "$LMCLOUD_DIR/tests/run-conformance.sh" "$PWD/scripts/lmgcp-cloud-host.sh" "$ENDPOINT" tables
   if [[ -n "${GCPSIM_JVM_JAR:-}" ]]; then
     AUTH_CFG="$(mktemp)"
     cat > "$AUTH_CFG" <<'JSON'
@@ -70,9 +74,10 @@ JSON
     for _ in $(seq 1 80); do curl -sf -o /dev/null "http://127.0.0.1:$EPORT/health" && break; sleep 0.25; done
     LMCLOUD_ENFORCE_DENIED_GCP_TOKEN=denied-token "$LMSCRIPT_BIN" "$LMCLOUD_DIR/tests/conformance/object-storage/12-auth-enforced-denial.lms" "$PWD/scripts/lmgcp-cloud-host.sh" "http://127.0.0.1:$EPORT" "enf-gcp-blob"
     LMCLOUD_ENFORCE_DENIED_GCP_TOKEN=denied-token "$LMSCRIPT_BIN" "$LMCLOUD_DIR/tests/conformance/queue/13-queue-auth-enforced-denial.lms" "$PWD/scripts/lmgcp-cloud-host.sh" "http://127.0.0.1:$EPORT" "enf-gcp-queue"
+    LMCLOUD_ENFORCE_DENIED_GCP_TOKEN=denied-token "$LMSCRIPT_BIN" "$LMCLOUD_DIR/tests/conformance/tables/14-tables-auth-enforced-denial.lms" "$PWD/scripts/lmgcp-cloud-host.sh" "http://127.0.0.1:$EPORT" "enfgcptbl"
     kill "$EPID" 2>/dev/null || true; wait "$EPID" 2>/dev/null || true
     rm -f "$AUTH_CFG"
-    echo "Auth enforce scenarios 12 & 13 PASS"
+    echo "Auth enforce scenarios 12, 13 & 14 PASS"
   fi
   cleanup; trap - EXIT
 else
