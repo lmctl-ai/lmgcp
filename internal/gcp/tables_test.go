@@ -276,6 +276,94 @@ func (m *mockFirestoreServer) handleStream(_ any, stream grpc.ServerStream) erro
 		}
 		return nil
 
+	case rpcCommit:
+		var req fsCommitRequest
+		if err := req.unmarshalProto(rawReq); err != nil {
+			return status.Error(codes.InvalidArgument, err.Error())
+		}
+		if m.updateHook != nil {
+			var hookTarget *fsWrite
+			for i := range req.Writes {
+				if req.Writes[i].Update != nil {
+					hookTarget = &req.Writes[i]
+				}
+			}
+			if hookTarget != nil {
+				if herr := m.updateHook(&fsUpdateDocumentRequest{
+					Document:        *hookTarget.Update,
+					UpdateMask:      hookTarget.UpdateMask,
+					CurrentDocument: hookTarget.CurrentDocument,
+				}); herr != nil {
+					return herr
+				}
+			}
+		}
+		m.mu.Lock()
+		for _, w := range req.Writes {
+			var name string
+			if w.Update != nil {
+				name = w.Update.Name
+			} else {
+				name = w.Delete
+			}
+			existing, exists := m.docs[name]
+			if pre := w.CurrentDocument; pre != nil {
+				if pre.HasExists {
+					if pre.Exists && !exists {
+						m.mu.Unlock()
+						return status.Error(codes.NotFound, "no document: "+name)
+					}
+					if !pre.Exists && exists {
+						m.mu.Unlock()
+						return status.Error(codes.AlreadyExists, "document already exists: "+name)
+					}
+				} else if pre.HasUpdateTime {
+					if !exists || existing.UpdateTime != pre.UpdateTime {
+						m.mu.Unlock()
+						return status.Error(codes.FailedPrecondition, "update_time precondition failed: "+name)
+					}
+				}
+			}
+		}
+		ts := m.nextTimestampLocked()
+		resp := fsCommitResponse{
+			CommitTime:   ts,
+			WriteResults: make([]fsWriteResult, len(req.Writes)),
+		}
+		for i, w := range req.Writes {
+			if w.Update != nil {
+				name := w.Update.Name
+				existing, exists := m.docs[name]
+				var nextDoc fsDocument
+				if w.UpdateMask != nil && len(w.UpdateMask.FieldPaths) > 0 && exists {
+					nextDoc = cloneDoc(existing)
+					for _, p := range w.UpdateMask.FieldPaths {
+						if v, ok := w.Update.Fields[p]; ok {
+							nextDoc.Fields[p] = v
+						} else {
+							delete(nextDoc.Fields, p)
+						}
+					}
+					nextDoc.UpdateTime = ts
+				} else {
+					nextDoc = cloneDoc(*w.Update)
+					if exists {
+						nextDoc.CreateTime = existing.CreateTime
+					} else {
+						nextDoc.CreateTime = ts
+					}
+					nextDoc.UpdateTime = ts
+				}
+				m.docs[name] = nextDoc
+				resp.WriteResults[i] = fsWriteResult{UpdateTime: ts}
+			} else if w.Delete != "" {
+				delete(m.docs, w.Delete)
+				resp.WriteResults[i] = fsWriteResult{UpdateTime: ts}
+			}
+		}
+		m.mu.Unlock()
+		return stream.SendMsg(&resp)
+
 	default:
 		return status.Error(codes.Unimplemented, "unknown method: "+method)
 	}

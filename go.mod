@@ -5,9 +5,11 @@ go 1.26.0
 require (
 	cloud.google.com/go/auth v0.23.0
 	cloud.google.com/go/compute/metadata v0.9.0
-	github.com/lmctl-ai/lmcloud v0.1.1-0.20261103161455-d1eaed3d015e
+	github.com/lmctl-ai/lmcloud v0.1.1-0.20261103203253-10fdb5d8693a
 	github.com/lmctl-ai/lmcode-go v0.6.39-0.20261102140952-06cd9ae991d9
 	google.golang.org/api v0.293.0
+	google.golang.org/grpc v1.83.2
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -31,6 +33,4 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260807164820-c8921c73eeea // indirect
-	google.golang.org/grpc v1.83.2 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 )

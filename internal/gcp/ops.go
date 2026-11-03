@@ -740,12 +740,14 @@ func (h *Host) QueueReceiveWire(queue string, maxMessages, waitSeconds, visibili
 			out = append(out, RawMessage{ID: id, Wire: string(raw), Receipt: rm.AckId})
 		}
 		if visibility >= 0 {
-			hooks := hostkit.RetryHooksFrom(ctx)
-			if hooks.AfterAttempt != nil {
-				hooks.AfterAttempt(ctx, 0, hostkit.Attempt{Status: 400})
-			}
 			mreq, _ := json.Marshal(map[string]any{"ackIds": ackIds, "ackDeadlineSeconds": visibility})
-			ms, md, merr := h.requestIdem(ctx, http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mreq, "application/json", true)
+			var ms int
+			var md []byte
+			merr := hostkit.RunSubOperation(ctx, hostkit.SubOperationSpec{Operation: "queue_nack"}, func(subCtx context.Context) error {
+				var err error
+				ms, md, err = h.requestIdem(subCtx, http.MethodPost, h.subPath(queue)+":modifyAckDeadline", mreq, "application/json", true)
+				return err
+			})
 			if merr != nil {
 				return nil, cerrNet("queue_receive", queue, merr)
 			}

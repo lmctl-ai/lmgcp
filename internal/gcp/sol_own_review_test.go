@@ -257,7 +257,7 @@ func solOwnSpy(t *testing.T) (*mockFirestoreServer, string, *atomic.Int32, *atom
 	var reads, writes atomic.Int32
 	srv := grpc.NewServer(grpc.ForceServerCodec(rawProtoCodec{}), grpc.UnknownServiceHandler(func(v any, s grpc.ServerStream) error {
 		method, _ := grpc.MethodFromServerStream(s)
-		if method == rpcCreateDocument || method == rpcUpdateDocument || method == rpcDeleteDocument {
+		if method == rpcCreateDocument || method == rpcUpdateDocument || method == rpcDeleteDocument || method == rpcCommit {
 			writes.Add(1)
 		} else {
 			reads.Add(1)
@@ -335,5 +335,118 @@ func TestSolOwnAllLiveRefused(t *testing.T) {
 	}
 	if reads.Load() != 0 || writes.Load() != 0 {
 		t.Fatal("live calls reached network")
+	}
+}
+
+func TestSolR2ReadThenDeleteThenWrite(t *testing.T) {
+	m, ep := newMockFirestoreServer(t)
+	a := NewAdapter()
+	defer a.Close()
+	ctx := hostkit.WithEndpoint(context.Background(), ep)
+	if _, e := a.CreateTable(ctx, "orders", false); e != nil {
+		t.Fatal(e)
+	}
+	h := NewHost()
+	catPath := h.firestoreDocPath(firestoreCatalogCollection, "orders")
+	var injected atomic.Bool
+	m.getHook = func(req *fsGetDocumentRequest) (*fsDocument, error) {
+		if req.Name == catPath && injected.CompareAndSwap(false, true) {
+			m.mu.Lock()
+			old := cloneDoc(m.docs[catPath])
+			m.mu.Unlock()
+			if e := a.DeleteTable(ctx, "orders"); e != nil {
+				t.Errorf("delete during stale catalog read: %v", e)
+			}
+			return &old, nil
+		}
+		return nil, nil
+	}
+	_, e := a.PutItem(ctx, "orders", hostkit.Item{PK: "late", Attrs: map[string]hostkit.Attr{}}, hostkit.PutIfAbsent, "")
+	m.mu.Lock()
+	_, catExists := m.docs[catPath]
+	_, childExists := m.docs[h.firestoreDocPath("orders", "late")]
+	m.mu.Unlock()
+	t.Logf("write resumed after table deletion: err=%v catalog=%v child=%v", e, catExists, childExists)
+	if childExists {
+		t.Error("catalog pre-read failed to fence concurrent deletion")
+	}
+}
+
+func TestSolR2PurgeSpendLowerBound(t *testing.T) {
+	_, ep := newMockFirestoreServer(t)
+	a := NewAdapter()
+	defer a.Close()
+	t.Setenv("LMGCP_ENDPOINT", ep)
+	t.Setenv("LMCLOUD_CAMPAIGN_STATE", filepath.Join(t.TempDir(), "campaign-state.json"))
+	h := cloudhost.New(cloudhost.Config{Provider: "gcp", Store: a, Queue: a, Tables: a, Endpoints: Endpoints()})
+	h.SetAbortOnError(false)
+	if _, e := h.TableCreate(false, "orders", false); e != nil {
+		t.Fatal(e)
+	}
+	item, _ := h.ItemNew("p", "", false)
+	item.SetString("n", "v")
+	if _, e := h.ItemPut(false, "orders", item, hostkit.PutIfAbsent, ""); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := h.TableDelete(false, "orders"); e != nil {
+		t.Fatal(e)
+	}
+	// Per-operation synthetic tariffs: catalog get 250, tombstone write 1250,
+	// one query 250, child delete 1250, catalog delete 1250 => minimum 4250 nanoUSD.
+	line := h.CostReport().Item("table_delete")
+	t.Logf("purge line=%+v", line)
+	if line.EstimatedUSD < 0.00000425 {
+		t.Error("purge settled less than admitted physical operations")
+	}
+}
+
+func TestSolR2StalePurgeDeletesReplacementChild(t *testing.T) {
+	lis, e := net.Listen("tcp", "127.0.0.1:0")
+	if e != nil {
+		t.Fatal(e)
+	}
+	m := &mockFirestoreServer{docs: map[string]fsDocument{}, nextTick: 1000}
+	var enabled, injected atomic.Bool
+	h := NewHost()
+	catPath := h.firestoreDocPath(firestoreCatalogCollection, "orders")
+	childPath := h.firestoreDocPath("orders", "p")
+	srv := grpc.NewServer(grpc.ForceServerCodec(rawProtoCodec{}), grpc.UnknownServiceHandler(func(v any, s grpc.ServerStream) error {
+		method, _ := grpc.MethodFromServerStream(s)
+		err := m.handleStream(v, s)
+		if method == rpcRunQuery && enabled.Load() && injected.CompareAndSwap(false, true) {
+			m.mu.Lock()
+			cat := cloneDoc(m.docs[catPath])
+			cat.Fields["state"] = fsString("active")
+			cat.Fields["incarnation"] = fsString("replacement-incarnation")
+			cat.UpdateTime = fsTimestamp{Seconds: 9999}
+			m.docs[catPath] = cat
+			child := cloneDoc(m.docs[childPath])
+			child.Fields[tableVersionAttr] = fsString("replacement-version")
+			child.UpdateTime = fsTimestamp{Seconds: 9999}
+			m.docs[childPath] = child
+			m.mu.Unlock()
+		}
+		return err
+	}))
+	go srv.Serve(lis)
+	defer srv.Stop()
+	defer lis.Close()
+	a := NewAdapter()
+	defer a.Close()
+	ctx := hostkit.WithEndpoint(context.Background(), "http://"+lis.Addr().String())
+	if _, e := a.CreateTable(ctx, "orders", false); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := a.PutItem(ctx, "orders", hostkit.Item{PK: "p", Attrs: map[string]hostkit.Attr{}}, hostkit.PutIfAbsent, ""); e != nil {
+		t.Fatal(e)
+	}
+	enabled.Store(true)
+	e = a.DeleteTable(ctx, "orders")
+	m.mu.Lock()
+	_, survives := m.docs[childPath]
+	m.mu.Unlock()
+	t.Logf("replacement child after stale purge: survives=%v err=%v", survives, e)
+	if !survives {
+		t.Error("unconditional child delete removed replacement incarnation's document")
 	}
 }

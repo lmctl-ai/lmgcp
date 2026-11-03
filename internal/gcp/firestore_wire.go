@@ -34,6 +34,7 @@ const (
 	rpcDeleteDocument      = firestoreServicePrefix + "DeleteDocument"
 	rpcListDocuments       = firestoreServicePrefix + "ListDocuments"
 	rpcRunQuery            = firestoreServicePrefix + "RunQuery"
+	rpcCommit              = firestoreServicePrefix + "Commit"
 )
 
 // protoMsg is implemented by minimal hand-rolled Firestore wire structs.
@@ -790,6 +791,50 @@ func (p fsPrecondition) marshalProto() ([]byte, error) {
 	return b, nil
 }
 
+func (p *fsPrecondition) unmarshalProto(b []byte) error {
+	*p = fsPrecondition{}
+	for len(b) > 0 {
+		num, wtype, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return protowire.ParseError(n)
+		}
+		b = b[n:]
+		switch num {
+		case 1:
+			if wtype != protowire.VarintType {
+				return fmt.Errorf("precondition.exists unexpected wire type %d", wtype)
+			}
+			u, m := protowire.ConsumeVarint(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			p.HasExists = true
+			p.Exists = u != 0
+			b = b[m:]
+		case 2:
+			if wtype != protowire.BytesType {
+				return fmt.Errorf("precondition.update_time unexpected wire type %d", wtype)
+			}
+			tb, m := protowire.ConsumeBytes(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			if err := p.UpdateTime.unmarshalProto(tb); err != nil {
+				return err
+			}
+			p.HasUpdateTime = true
+			b = b[m:]
+		default:
+			m := protowire.ConsumeFieldValue(num, wtype, b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			b = b[m:]
+		}
+	}
+	return nil
+}
+
 type fsDocumentMask struct {
 	FieldPaths []string
 }
@@ -801,6 +846,314 @@ func (m fsDocumentMask) marshalProto() ([]byte, error) {
 		b = protowire.AppendString(b, p)
 	}
 	return b, nil
+}
+
+func (m *fsDocumentMask) unmarshalProto(b []byte) error {
+	*m = fsDocumentMask{}
+	for len(b) > 0 {
+		num, wtype, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return protowire.ParseError(n)
+		}
+		b = b[n:]
+		if num == 1 && wtype == protowire.BytesType {
+			s, k := protowire.ConsumeString(b)
+			if k < 0 {
+				return protowire.ParseError(k)
+			}
+			m.FieldPaths = append(m.FieldPaths, s)
+			b = b[k:]
+		} else {
+			k := protowire.ConsumeFieldValue(num, wtype, b)
+			if k < 0 {
+				return protowire.ParseError(k)
+			}
+			b = b[k:]
+		}
+	}
+	return nil
+}
+
+type fsWrite struct {
+	Update          *fsDocument
+	Delete          string
+	UpdateMask      *fsDocumentMask
+	CurrentDocument *fsPrecondition
+}
+
+func (w fsWrite) marshalProto() ([]byte, error) {
+	var b []byte
+	if w.Update != nil {
+		db, err := w.Update.marshalProto()
+		if err != nil {
+			return nil, err
+		}
+		b = protowire.AppendTag(b, 1, protowire.BytesType)
+		b = protowire.AppendBytes(b, db)
+	} else if w.Delete != "" {
+		b = protowire.AppendTag(b, 2, protowire.BytesType)
+		b = protowire.AppendString(b, w.Delete)
+	}
+	if w.UpdateMask != nil {
+		mb, err := w.UpdateMask.marshalProto()
+		if err != nil {
+			return nil, err
+		}
+		b = protowire.AppendTag(b, 3, protowire.BytesType)
+		b = protowire.AppendBytes(b, mb)
+	}
+	if w.CurrentDocument != nil {
+		pb, err := w.CurrentDocument.marshalProto()
+		if err != nil {
+			return nil, err
+		}
+		b = protowire.AppendTag(b, 4, protowire.BytesType)
+		b = protowire.AppendBytes(b, pb)
+	}
+	return b, nil
+}
+
+func (w *fsWrite) unmarshalProto(b []byte) error {
+	*w = fsWrite{}
+	for len(b) > 0 {
+		num, wtype, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return protowire.ParseError(n)
+		}
+		b = b[n:]
+		switch num {
+		case 1:
+			db, m := protowire.ConsumeBytes(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			var d fsDocument
+			if err := d.unmarshalProto(db); err != nil {
+				return err
+			}
+			w.Update = &d
+			b = b[m:]
+		case 2:
+			s, m := protowire.ConsumeString(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			w.Delete = s
+			b = b[m:]
+		case 3:
+			mb, m := protowire.ConsumeBytes(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			var mask fsDocumentMask
+			if err := mask.unmarshalProto(mb); err != nil {
+				return err
+			}
+			w.UpdateMask = &mask
+			b = b[m:]
+		case 4:
+			pb, m := protowire.ConsumeBytes(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			var pre fsPrecondition
+			if err := pre.unmarshalProto(pb); err != nil {
+				return err
+			}
+			w.CurrentDocument = &pre
+			b = b[m:]
+		default:
+			m := protowire.ConsumeFieldValue(num, wtype, b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			b = b[m:]
+		}
+	}
+	return nil
+}
+
+type fsCommitRequest struct {
+	Database    string
+	Writes      []fsWrite
+	Transaction []byte
+}
+
+func (r *fsCommitRequest) marshalProto() ([]byte, error) {
+	var b []byte
+	if r.Database != "" {
+		b = protowire.AppendTag(b, 1, protowire.BytesType)
+		b = protowire.AppendString(b, r.Database)
+	}
+	for _, w := range r.Writes {
+		wb, err := w.marshalProto()
+		if err != nil {
+			return nil, err
+		}
+		b = protowire.AppendTag(b, 2, protowire.BytesType)
+		b = protowire.AppendBytes(b, wb)
+	}
+	if len(r.Transaction) > 0 {
+		b = protowire.AppendTag(b, 3, protowire.BytesType)
+		b = protowire.AppendBytes(b, r.Transaction)
+	}
+	return b, nil
+}
+
+func (r *fsCommitRequest) unmarshalProto(b []byte) error {
+	*r = fsCommitRequest{}
+	for len(b) > 0 {
+		num, wtype, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return protowire.ParseError(n)
+		}
+		b = b[n:]
+		switch num {
+		case 1:
+			s, m := protowire.ConsumeString(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			r.Database = s
+			b = b[m:]
+		case 2:
+			wb, m := protowire.ConsumeBytes(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			var w fsWrite
+			if err := w.unmarshalProto(wb); err != nil {
+				return err
+			}
+			r.Writes = append(r.Writes, w)
+			b = b[m:]
+		case 3:
+			tb, m := protowire.ConsumeBytes(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			r.Transaction = append([]byte(nil), tb...)
+			b = b[m:]
+		default:
+			m := protowire.ConsumeFieldValue(num, wtype, b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			b = b[m:]
+		}
+	}
+	return nil
+}
+
+type fsWriteResult struct {
+	UpdateTime fsTimestamp
+}
+
+func (r fsWriteResult) marshalProto() ([]byte, error) {
+	var b []byte
+	if !r.UpdateTime.IsZero() {
+		tb, err := r.UpdateTime.marshalProto()
+		if err != nil {
+			return nil, err
+		}
+		b = protowire.AppendTag(b, 1, protowire.BytesType)
+		b = protowire.AppendBytes(b, tb)
+	}
+	return b, nil
+}
+
+func (r *fsWriteResult) unmarshalProto(b []byte) error {
+	*r = fsWriteResult{}
+	for len(b) > 0 {
+		num, wtype, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return protowire.ParseError(n)
+		}
+		b = b[n:]
+		if num == 1 && wtype == protowire.BytesType {
+			tb, m := protowire.ConsumeBytes(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			if err := r.UpdateTime.unmarshalProto(tb); err != nil {
+				return err
+			}
+			b = b[m:]
+		} else {
+			m := protowire.ConsumeFieldValue(num, wtype, b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			b = b[m:]
+		}
+	}
+	return nil
+}
+
+type fsCommitResponse struct {
+	WriteResults []fsWriteResult
+	CommitTime   fsTimestamp
+}
+
+func (r *fsCommitResponse) marshalProto() ([]byte, error) {
+	var b []byte
+	for _, wr := range r.WriteResults {
+		wb, err := wr.marshalProto()
+		if err != nil {
+			return nil, err
+		}
+		b = protowire.AppendTag(b, 1, protowire.BytesType)
+		b = protowire.AppendBytes(b, wb)
+	}
+	if !r.CommitTime.IsZero() {
+		tb, err := r.CommitTime.marshalProto()
+		if err != nil {
+			return nil, err
+		}
+		b = protowire.AppendTag(b, 2, protowire.BytesType)
+		b = protowire.AppendBytes(b, tb)
+	}
+	return b, nil
+}
+
+func (r *fsCommitResponse) unmarshalProto(b []byte) error {
+	*r = fsCommitResponse{}
+	for len(b) > 0 {
+		num, wtype, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return protowire.ParseError(n)
+		}
+		b = b[n:]
+		switch num {
+		case 1:
+			wb, m := protowire.ConsumeBytes(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			var wr fsWriteResult
+			if err := wr.unmarshalProto(wb); err != nil {
+				return err
+			}
+			r.WriteResults = append(r.WriteResults, wr)
+			b = b[m:]
+		case 2:
+			tb, m := protowire.ConsumeBytes(b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			if err := r.CommitTime.unmarshalProto(tb); err != nil {
+				return err
+			}
+			b = b[m:]
+		default:
+			m := protowire.ConsumeFieldValue(num, wtype, b)
+			if m < 0 {
+				return protowire.ParseError(m)
+			}
+			b = b[m:]
+		}
+	}
+	return nil
 }
 
 type fsGetDocumentRequest struct {

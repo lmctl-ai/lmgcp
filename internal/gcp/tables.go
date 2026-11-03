@@ -10,16 +10,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/lmctl-ai/lmcloud/hostkit"
-	"github.com/lmctl-ai/lmcloud/hostkit/safety"
 )
 
 const (
@@ -73,73 +69,12 @@ func (c *tableLayoutCache) del(target, project, table string) {
 	delete(c.layouts, c.key(target, project, table))
 }
 
-// mirrorAttemptScope matches cloudhost's internal attemptScope closure layout
-// so DeleteTable sub-operations (catalog get/update/delete, child query/delete)
-// are admitted and settled at their physical Firestore tariffs when invoked
-// through cloudhost.Host.TableDelete without mutating the price table.
-type mirrorAttemptScope struct {
-	ct              uintptr
-	op              string
-	in              safety.AttemptPricingInput
-	resKind         string
-	resKey          string
-	res             *safety.AttemptReservation
-	attemptID       string
-	initialConsumed bool
-	lastAttempt     hostkit.Attempt
-	hasLastAttempt  bool
-	abortErr        *hostkit.CloudError
-	retries         int64
-	throttles       int64
-}
-
-type goFuncClosure struct {
-	fn    uintptr
-	scope *mirrorAttemptScope
-}
-
-type goFuncValue struct {
-	cl *goFuncClosure
-}
-
-func initDeleteTableSubOpScope(ctx context.Context) *mirrorAttemptScope {
-	hooks := hostkit.RetryHooksFrom(ctx)
-	if hooks.BeforeAttempt == nil {
-		return nil
-	}
-	fnPtr := reflect.ValueOf(hooks.BeforeAttempt).Pointer()
-	fn := runtime.FuncForPC(fnPtr)
-	if fn == nil || !strings.HasSuffix(fn.Name(), "beginAttemptScope.func1") {
-		return nil
-	}
-	cl := (*goFuncValue)(unsafe.Pointer(&hooks.BeforeAttempt)).cl
-	if cl == nil || cl.fn != fnPtr || cl.scope == nil || cl.scope.op != "table_delete" || cl.scope.ct == 0 {
-		return nil
-	}
-	scope := cl.scope
-	if !scope.initialConsumed {
-		scope.initialConsumed = true
-		scope.hasLastAttempt = true
-		scope.lastAttempt = hostkit.Attempt{NotSent: true}
-	}
-	return scope
-}
-
-func withSubOp(ctx context.Context, scope *mirrorAttemptScope, subOp string, fn func(context.Context) error) error {
-	if scope == nil {
-		return fn(ctx)
-	}
-	hooks := hostkit.RetryHooksFrom(ctx)
-	subHooks := hooks
-	subHooks.BeforeAttempt = func(c context.Context, attempt int) error {
-		scope.in = safety.AttemptPricingInput{
-			Operation:   subOp,
-			PayloadSize: 1,
-			IsCleanup:   true,
-		}
-		return hooks.BeforeAttempt(c, attempt)
-	}
-	return fn(hostkit.WithRetryHooks(ctx, subHooks))
+func runDeleteSubOp(ctx context.Context, subOp string, payloadBytes int64, fn func(context.Context) error) error {
+	return hostkit.RunSubOperation(ctx, hostkit.SubOperationSpec{
+		Operation:    subOp,
+		PayloadBytes: payloadBytes,
+		IsCleanup:    true,
+	}, fn)
 }
 
 func newRandomHexToken() (string, error) {
@@ -387,11 +322,10 @@ func (h *Host) DescribeTable(ctx context.Context, name string) (hostkit.TableInf
 }
 
 func (h *Host) DeleteTable(ctx context.Context, name string) error {
-	subScope := initDeleteTableSubOpScope(ctx)
 	catDocPath := h.firestoreDocPath(firestoreCatalogCollection, name)
 
 	var catDoc fsDocument
-	if err := withSubOp(ctx, subScope, "item_get", func(sctx context.Context) error {
+	if err := runDeleteSubOp(ctx, "item_get", 4096, func(sctx context.Context) error {
 		return h.firestoreUnary(sctx, rpcGetDocument, true, &fsGetDocumentRequest{Name: catDocPath}, &catDoc)
 	}); err != nil {
 		var ce *hostkit.CloudError
@@ -422,7 +356,7 @@ func (h *Host) DeleteTable(ctx context.Context, name string) error {
 	catDoc.Fields["state"] = fsString("deleting")
 	catDoc.Fields["delete_claim"] = fsString(claimID)
 	var updatedCat fsDocument
-	if err := withSubOp(ctx, subScope, "item_update", func(sctx context.Context) error {
+	if err := runDeleteSubOp(ctx, "item_put", 1024, func(sctx context.Context) error {
 		return h.firestoreUnary(sctx, rpcUpdateDocument, true, &fsUpdateDocumentRequest{
 			Document: catDoc,
 			UpdateMask: &fsDocumentMask{
@@ -444,10 +378,15 @@ func (h *Host) DeleteTable(ctx context.Context, name string) error {
 	}
 
 	// Purge all child documents in collection {name} via bounded RunQuery batches.
+	// Every child delete is executed atomically with a catalog deletion-claim fence
+	// (state == "deleting", incarnation == cat.incarnation, delete_claim == claimID,
+	// CurrentDocument.UpdateTime == updatedCat.UpdateTime) AND the child document's
+	// observed UpdateTime from the query batch, so a stale purge cannot delete a
+	// replacement child created under a new table incarnation.
 	const purgeBatchSize = 100
 	for {
 		var docs []fsDocument
-		if err := withSubOp(ctx, subScope, "item_query", func(sctx context.Context) error {
+		if err := runDeleteSubOp(ctx, "item_query", 4096, func(sctx context.Context) error {
 			var qerr error
 			docs, qerr = h.firestoreRunQuery(sctx, &fsRunQueryRequest{
 				Parent: h.firestoreDocumentsRoot(),
@@ -466,44 +405,86 @@ func (h *Host) DeleteTable(ctx context.Context, name string) error {
 		if len(docs) == 0 {
 			break
 		}
+		retryBatch := false
 		for _, d := range docs {
-			docName := d.Name
-			if err := withSubOp(ctx, subScope, "item_delete", func(sctx context.Context) error {
-				var empty fsEmpty
-				return h.firestoreUnary(sctx, rpcDeleteDocument, true, &fsDeleteDocumentRequest{Name: docName}, &empty)
-			}); err != nil {
-				var ce *hostkit.CloudError
-				if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
-					continue
-				}
+			childPre, err := docPrecondition(d)
+			if err != nil {
 				return err
 			}
+			claimPre, err := docPrecondition(updatedCat)
+			if err != nil {
+				return err
+			}
+			docName := d.Name
+			var commitResp fsCommitResponse
+			err = runDeleteSubOp(ctx, "item_delete", 1024, func(sctx context.Context) error {
+				return h.firestoreUnary(sctx, rpcCommit, false, &fsCommitRequest{
+					Database: h.firestoreDatabaseRoot(),
+					Writes: []fsWrite{
+						{
+							Update: &fsDocument{
+								Name: catDocPath,
+								Fields: map[string]fsValue{
+									"state":        fsString("deleting"),
+									"incarnation":  fsString(cat.incarnation),
+									"delete_claim": fsString(claimID),
+								},
+							},
+							UpdateMask: &fsDocumentMask{
+								FieldPaths: []string{"state", "incarnation", "delete_claim"},
+							},
+							CurrentDocument: claimPre,
+						},
+						{
+							Delete:          docName,
+							CurrentDocument: childPre,
+						},
+					},
+				}, &commitResp)
+			})
+			if err == nil {
+				if len(commitResp.WriteResults) > 0 && !commitResp.WriteResults[0].UpdateTime.IsZero() {
+					updatedCat.UpdateTime = commitResp.WriteResults[0].UpdateTime
+				} else if !commitResp.CommitTime.IsZero() {
+					updatedCat.UpdateTime = commitResp.CommitTime
+				}
+				continue
+			}
+			var ce *hostkit.CloudError
+			if !errors.As(err, &ce) || (ce.Code != hostkit.PreconditionFailed && ce.Code != hostkit.Conflict && ce.Code != hostkit.NotFound) {
+				return err
+			}
+			// Re-verify catalog incarnation and claim before continuing.
+			var checkDoc fsDocument
+			if gerr := runDeleteSubOp(ctx, "item_get", 4096, func(sctx context.Context) error {
+				return h.firestoreUnary(sctx, rpcGetDocument, true, &fsGetDocumentRequest{Name: catDocPath}, &checkDoc)
+			}); gerr != nil {
+				var gce *hostkit.CloudError
+				if errors.As(gerr, &gce) && gce.Code == hostkit.NotFound {
+					return hostkit.ProviderError(hostkit.Conflict, 409, "DeleteTableConflict", "table catalog was removed concurrently during purge")
+				}
+				return gerr
+			}
+			checkCat, perr := h.parseCatalogDoc(checkDoc)
+			if perr != nil {
+				return perr
+			}
+			if !checkCat.deleting || checkCat.incarnation != cat.incarnation || checkCat.deleteClaim != claimID {
+				return hostkit.ProviderError(hostkit.Conflict, 409, "DeleteTableConflict", "table catalog incarnation changed during purge")
+			}
+			updatedCat = checkDoc
+			retryBatch = true
 		}
-		if len(docs) < purgeBatchSize {
+		if len(docs) < purgeBatchSize && !retryBatch {
 			break
 		}
-		// Re-verify catalog incarnation and claim before continuing to the next batch.
-		var checkDoc fsDocument
-		if err := withSubOp(ctx, subScope, "item_get", func(sctx context.Context) error {
-			return h.firestoreUnary(sctx, rpcGetDocument, true, &fsGetDocumentRequest{Name: catDocPath}, &checkDoc)
-		}); err != nil {
-			return err
-		}
-		checkCat, err := h.parseCatalogDoc(checkDoc)
-		if err != nil {
-			return err
-		}
-		if !checkCat.deleting || checkCat.incarnation != cat.incarnation || checkCat.deleteClaim != claimID {
-			return hostkit.ProviderError(hostkit.Conflict, 409, "DeleteTableConflict", "table catalog incarnation changed during purge")
-		}
-		updatedCat = checkDoc
 	}
 
 	finalPre, err := docPrecondition(updatedCat)
 	if err != nil {
 		return err
 	}
-	if err := withSubOp(ctx, subScope, "item_delete", func(sctx context.Context) error {
+	if err := runDeleteSubOp(ctx, "item_delete", 1024, func(sctx context.Context) error {
 		var empty fsEmpty
 		return h.firestoreUnary(sctx, rpcDeleteDocument, true, &fsDeleteDocumentRequest{
 			Name:            catDocPath,
@@ -646,8 +627,39 @@ func docPrecondition(doc fsDocument) (*fsPrecondition, error) {
 	}, nil
 }
 
+func (h *Host) commitCatalogFencedWrite(ctx context.Context, catDoc fsDocument, cat catalogEntry, childWrite fsWrite) (fsCommitResponse, error) {
+	catPre, err := docPrecondition(catDoc)
+	if err != nil {
+		return fsCommitResponse{}, err
+	}
+	req := &fsCommitRequest{
+		Database: h.firestoreDatabaseRoot(),
+		Writes: []fsWrite{
+			{
+				Update: &fsDocument{
+					Name: catDoc.Name,
+					Fields: map[string]fsValue{
+						"state":       fsString("active"),
+						"incarnation": fsString(cat.incarnation),
+					},
+				},
+				UpdateMask: &fsDocumentMask{
+					FieldPaths: []string{"state", "incarnation"},
+				},
+				CurrentDocument: catPre,
+			},
+			childWrite,
+		},
+	}
+	var resp fsCommitResponse
+	if err := h.firestoreUnary(ctx, rpcCommit, false, req, &resp); err != nil {
+		return fsCommitResponse{}, err
+	}
+	return resp, nil
+}
+
 func (h *Host) PutItem(ctx context.Context, table string, item hostkit.Item, mode hostkit.PutMode, expectVersion string) (hostkit.Item, error) {
-	cat, _, err := h.ensureActiveCatalog(ctx, table)
+	cat, catDoc, err := h.ensureActiveCatalog(ctx, table)
 	if err != nil {
 		return hostkit.Item{}, err
 	}
@@ -676,95 +688,141 @@ func (h *Host) PutItem(ctx context.Context, table string, item hostkit.Item, mod
 
 	switch mode {
 	case hostkit.PutIfAbsent:
-		req := &fsCreateDocumentRequest{
-			Parent:       h.firestoreDocumentsRoot(),
-			CollectionId: table,
-			DocumentId:   docID,
-			Document: fsDocument{
-				Fields: fields,
-			},
+		for attempt := 0; attempt < maxUpdateCASAttempts; attempt++ {
+			if attempt > 0 {
+				latestCat, latestDoc, cerr := h.ensureActiveCatalog(ctx, table)
+				if cerr != nil {
+					return hostkit.Item{}, cerr
+				}
+				if latestCat.incarnation != cat.incarnation {
+					return hostkit.Item{}, hostkit.ProviderError(hostkit.Conflict, 409, "TableIncarnationChanged", "table incarnation changed concurrently during item_put")
+				}
+				cat, catDoc = latestCat, latestDoc
+			}
+			_, err := h.commitCatalogFencedWrite(ctx, catDoc, cat, fsWrite{
+				Update: &fsDocument{
+					Name:   docPath,
+					Fields: fields,
+				},
+				CurrentDocument: &fsPrecondition{HasExists: true, Exists: false},
+			})
+			if err != nil {
+				var ce *hostkit.CloudError
+				if errors.As(err, &ce) && ce.Code == hostkit.PreconditionFailed {
+					continue
+				}
+				return hostkit.Item{}, err
+			}
+			hostkit.ReportTableOpMetrics(ctx, hostkit.TableOpMetrics{
+				PriorExists:   false,
+				PriorBytes:    0,
+				NewBytes:      newBill,
+				Authoritative: true,
+			})
+			return stored, nil
 		}
-		var outDoc fsDocument
-		if err := h.firestoreUnary(ctx, rpcCreateDocument, false, req, &outDoc); err != nil {
-			return hostkit.Item{}, err
-		}
-		hostkit.ReportTableOpMetrics(ctx, hostkit.TableOpMetrics{
-			PriorExists:   false,
-			PriorBytes:    0,
-			NewBytes:      newBill,
-			Authoritative: true,
-		})
-		return stored, nil
+		return hostkit.Item{}, hostkit.ProviderError(hostkit.Conflict, 409, "ConcurrentPutConflict", "item_put exceeded maximum concurrent catalog retries")
 
 	case hostkit.PutUnconditional:
-		req := &fsUpdateDocumentRequest{
-			Document: fsDocument{
-				Name:   docPath,
-				Fields: fields,
-			},
+		for attempt := 0; attempt < maxUpdateCASAttempts; attempt++ {
+			if attempt > 0 {
+				latestCat, latestDoc, cerr := h.ensureActiveCatalog(ctx, table)
+				if cerr != nil {
+					return hostkit.Item{}, cerr
+				}
+				if latestCat.incarnation != cat.incarnation {
+					return hostkit.Item{}, hostkit.ProviderError(hostkit.Conflict, 409, "TableIncarnationChanged", "table incarnation changed concurrently during item_put")
+				}
+				cat, catDoc = latestCat, latestDoc
+			}
+			_, err := h.commitCatalogFencedWrite(ctx, catDoc, cat, fsWrite{
+				Update: &fsDocument{
+					Name:   docPath,
+					Fields: fields,
+				},
+			})
+			if err != nil {
+				var ce *hostkit.CloudError
+				if errors.As(err, &ce) && ce.Code == hostkit.PreconditionFailed {
+					continue
+				}
+				return hostkit.Item{}, err
+			}
+			hostkit.ReportTableOpMetrics(ctx, hostkit.TableOpMetrics{
+				PriorExists:   false,
+				PriorBytes:    0,
+				NewBytes:      newBill,
+				Authoritative: false,
+			})
+			return stored, nil
 		}
-		var outDoc fsDocument
-		if err := h.firestoreUnary(ctx, rpcUpdateDocument, false, req, &outDoc); err != nil {
-			return hostkit.Item{}, err
-		}
-		hostkit.ReportTableOpMetrics(ctx, hostkit.TableOpMetrics{
-			PriorExists:   false,
-			PriorBytes:    0,
-			NewBytes:      newBill,
-			Authoritative: false,
-		})
-		return stored, nil
+		return hostkit.Item{}, hostkit.ProviderError(hostkit.Conflict, 409, "ConcurrentPutConflict", "item_put exceeded maximum concurrent catalog retries")
 
 	case hostkit.PutIfVersion:
-		var curDoc fsDocument
-		if err := h.firestoreUnary(ctx, rpcGetDocument, true, &fsGetDocumentRequest{Name: docPath}, &curDoc); err != nil {
-			var ce *hostkit.CloudError
-			if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
-				return hostkit.Item{}, ce.WithAbsent(hostkit.AbsentItem)
+		for attempt := 0; attempt < maxUpdateCASAttempts; attempt++ {
+			var curDoc fsDocument
+			if err := h.firestoreUnary(ctx, rpcGetDocument, true, &fsGetDocumentRequest{Name: docPath}, &curDoc); err != nil {
+				var ce *hostkit.CloudError
+				if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
+					return hostkit.Item{}, ce.WithAbsent(hostkit.AbsentItem)
+				}
+				return hostkit.Item{}, err
 			}
-			return hostkit.Item{}, err
-		}
-		priorItem, hasSK, err := decodeFirestoreDoc(curDoc)
-		if err != nil {
-			return hostkit.Item{}, err
-		}
-		if hasSK != sorted {
-			return hostkit.Item{}, hostkit.ProviderError(hostkit.Internal, 0, "CorruptItem", "Firestore document key layout does not match table catalog")
-		}
-		if priorItem.Version != expectVersion {
-			return hostkit.Item{}, hostkit.ProviderError(hostkit.PreconditionFailed, 412, "VersionMismatch", "expected version does not match current item version")
-		}
-		if _, cerr := hostkit.CanonicalItemBytes(priorItem.Attrs); cerr != nil {
-			return hostkit.Item{}, cerr
-		}
-		priorBill := hostkit.NativeItemBillableBytes(priorItem)
-		pre, err := docPrecondition(curDoc)
-		if err != nil {
-			return hostkit.Item{}, err
-		}
+			priorItem, hasSK, err := decodeFirestoreDoc(curDoc)
+			if err != nil {
+				return hostkit.Item{}, err
+			}
+			if hasSK != sorted {
+				return hostkit.Item{}, hostkit.ProviderError(hostkit.Internal, 0, "CorruptItem", "Firestore document key layout does not match table catalog")
+			}
+			if priorItem.Version != expectVersion {
+				return hostkit.Item{}, hostkit.ProviderError(hostkit.PreconditionFailed, 412, "VersionMismatch", "expected version does not match current item version")
+			}
+			if _, cerr := hostkit.CanonicalItemBytes(priorItem.Attrs); cerr != nil {
+				return hostkit.Item{}, cerr
+			}
+			priorBill := hostkit.NativeItemBillableBytes(priorItem)
+			pre, err := docPrecondition(curDoc)
+			if err != nil {
+				return hostkit.Item{}, err
+			}
 
-		req := &fsUpdateDocumentRequest{
-			Document: fsDocument{
-				Name:   docPath,
-				Fields: fields,
-			},
-			CurrentDocument: pre,
-		}
-		var outDoc fsDocument
-		if err := h.firestoreUnary(ctx, rpcUpdateDocument, false, req, &outDoc); err != nil {
-			var ce *hostkit.CloudError
-			if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
-				return hostkit.Item{}, ce.WithAbsent(hostkit.AbsentItem)
+			_, err = h.commitCatalogFencedWrite(ctx, catDoc, cat, fsWrite{
+				Update: &fsDocument{
+					Name:   docPath,
+					Fields: fields,
+				},
+				CurrentDocument: pre,
+			})
+			if err != nil {
+				var ce *hostkit.CloudError
+				if errors.As(err, &ce) && (ce.Code == hostkit.PreconditionFailed || ce.Code == hostkit.NotFound) {
+					latestCat, latestDoc, cerr := h.ensureActiveCatalog(ctx, table)
+					if cerr != nil {
+						return hostkit.Item{}, cerr
+					}
+					if latestCat.incarnation != cat.incarnation {
+						return hostkit.Item{}, hostkit.ProviderError(hostkit.Conflict, 409, "TableIncarnationChanged", "table incarnation changed concurrently during item_put")
+					}
+					if latestDoc.UpdateTime != catDoc.UpdateTime {
+						cat, catDoc = latestCat, latestDoc
+						continue
+					}
+					if ce.Code == hostkit.NotFound {
+						return hostkit.Item{}, ce.WithAbsent(hostkit.AbsentItem)
+					}
+				}
+				return hostkit.Item{}, err
 			}
-			return hostkit.Item{}, err
+			hostkit.ReportTableOpMetrics(ctx, hostkit.TableOpMetrics{
+				PriorExists:   true,
+				PriorBytes:    priorBill,
+				NewBytes:      newBill,
+				Authoritative: false,
+			})
+			return stored, nil
 		}
-		hostkit.ReportTableOpMetrics(ctx, hostkit.TableOpMetrics{
-			PriorExists:   true,
-			PriorBytes:    priorBill,
-			NewBytes:      newBill,
-			Authoritative: false,
-		})
-		return stored, nil
+		return hostkit.Item{}, hostkit.ProviderError(hostkit.Conflict, 409, "ConcurrentPutConflict", "item_put exceeded maximum concurrent catalog retries")
 
 	default:
 		return hostkit.Item{}, hostkit.ProviderError(hostkit.InvalidArgument, 0, "InvalidPutMode", "unsupported put mode")
@@ -804,7 +862,7 @@ func (h *Host) GetItem(ctx context.Context, table, pk, sk string) (hostkit.Item,
 }
 
 func (h *Host) DeleteItem(ctx context.Context, table, pk, sk string) error {
-	cat, _, err := h.ensureActiveCatalog(ctx, table)
+	cat, catDoc, err := h.ensureActiveCatalog(ctx, table)
 	if err != nil {
 		return err
 	}
@@ -814,22 +872,41 @@ func (h *Host) DeleteItem(ctx context.Context, table, pk, sk string) error {
 	}
 
 	docID := firestoreDocID(sorted, pk, sk)
-	var empty fsEmpty
-	if err := h.firestoreUnary(ctx, rpcDeleteDocument, true, &fsDeleteDocumentRequest{
-		Name:            h.firestoreDocPath(table, docID),
-		CurrentDocument: &fsPrecondition{HasExists: true, Exists: true},
-	}, &empty); err != nil {
-		var ce *hostkit.CloudError
-		if errors.As(err, &ce) && ce.Code == hostkit.NotFound {
-			return ce.WithAbsent(hostkit.AbsentItem)
+	docPath := h.firestoreDocPath(table, docID)
+	for attempt := 0; attempt < maxUpdateCASAttempts; attempt++ {
+		if attempt > 0 {
+			latestCat, latestDoc, cerr := h.ensureActiveCatalog(ctx, table)
+			if cerr != nil {
+				return cerr
+			}
+			if latestCat.incarnation != cat.incarnation {
+				return hostkit.ProviderError(hostkit.Conflict, 409, "TableIncarnationChanged", "table incarnation changed concurrently during item_delete")
+			}
+			cat, catDoc = latestCat, latestDoc
 		}
-		return err
+		_, err := h.commitCatalogFencedWrite(ctx, catDoc, cat, fsWrite{
+			Delete:          docPath,
+			CurrentDocument: &fsPrecondition{HasExists: true, Exists: true},
+		})
+		if err != nil {
+			var ce *hostkit.CloudError
+			if errors.As(err, &ce) {
+				if ce.Code == hostkit.NotFound {
+					return ce.WithAbsent(hostkit.AbsentItem)
+				}
+				if ce.Code == hostkit.PreconditionFailed {
+					continue
+				}
+			}
+			return err
+		}
+		return nil
 	}
-	return nil
+	return hostkit.ProviderError(hostkit.Conflict, 409, "ConcurrentDeleteConflict", "item_delete exceeded maximum concurrent catalog retries")
 }
 
 func (h *Host) UpdateItem(ctx context.Context, table, pk, sk string, changes hostkit.Item) (hostkit.Item, error) {
-	cat, _, err := h.ensureActiveCatalog(ctx, table)
+	cat, catDoc, err := h.ensureActiveCatalog(ctx, table)
 	if err != nil {
 		return hostkit.Item{}, err
 	}
@@ -843,13 +920,14 @@ func (h *Host) UpdateItem(ctx context.Context, table, pk, sk string, changes hos
 
 	for attempt := 0; attempt < maxUpdateCASAttempts; attempt++ {
 		if attempt > 0 {
-			latestCat, _, cerr := h.ensureActiveCatalog(ctx, table)
+			latestCat, latestDoc, cerr := h.ensureActiveCatalog(ctx, table)
 			if cerr != nil {
 				return hostkit.Item{}, cerr
 			}
 			if latestCat.incarnation != cat.incarnation {
 				return hostkit.Item{}, hostkit.ProviderError(hostkit.Conflict, 409, "TableIncarnationChanged", "table incarnation changed concurrently during item_update")
 			}
+			cat, catDoc = latestCat, latestDoc
 		}
 
 		var curDoc fsDocument
@@ -920,9 +998,8 @@ func (h *Host) UpdateItem(ctx context.Context, table, pk, sk string, changes hos
 		sort.Strings(maskPaths)
 		maskPaths = append(maskPaths, tableVersionAttr)
 
-		var outDoc fsDocument
-		err = h.firestoreUnary(ctx, rpcUpdateDocument, false, &fsUpdateDocumentRequest{
-			Document: fsDocument{
+		_, err = h.commitCatalogFencedWrite(ctx, catDoc, cat, fsWrite{
+			Update: &fsDocument{
 				Name:   docPath,
 				Fields: patchFields,
 			},
@@ -930,7 +1007,7 @@ func (h *Host) UpdateItem(ctx context.Context, table, pk, sk string, changes hos
 				FieldPaths: maskPaths,
 			},
 			CurrentDocument: pre,
-		}, &outDoc)
+		})
 		if err != nil {
 			var ce *hostkit.CloudError
 			if errors.As(err, &ce) && (ce.Code == hostkit.PreconditionFailed || ce.Code == hostkit.Conflict || ce.Code == hostkit.NotFound) {
@@ -939,17 +1016,13 @@ func (h *Host) UpdateItem(ctx context.Context, table, pk, sk string, changes hos
 			return hostkit.Item{}, err
 		}
 
-		decoded, _, err := decodeFirestoreDoc(outDoc)
-		if err != nil {
-			decoded = mergedItem
-		}
 		hostkit.ReportTableOpMetrics(ctx, hostkit.TableOpMetrics{
 			PriorExists:   true,
 			PriorBytes:    priorBill,
 			NewBytes:      newBill,
 			Authoritative: false,
 		})
-		return decoded, nil
+		return mergedItem, nil
 	}
 
 	return hostkit.Item{}, hostkit.ProviderError(hostkit.Conflict, 409, "ConcurrentUpdateConflict", "item_update exceeded maximum concurrent modification retries")

@@ -75,6 +75,22 @@ JSON
     LMCLOUD_ENFORCE_DENIED_GCP_TOKEN=denied-token "$LMSCRIPT_BIN" "$LMCLOUD_DIR/tests/conformance/object-storage/12-auth-enforced-denial.lms" "$PWD/scripts/lmgcp-cloud-host.sh" "http://127.0.0.1:$EPORT" "enf-gcp-blob"
     LMCLOUD_ENFORCE_DENIED_GCP_TOKEN=denied-token "$LMSCRIPT_BIN" "$LMCLOUD_DIR/tests/conformance/queue/13-queue-auth-enforced-denial.lms" "$PWD/scripts/lmgcp-cloud-host.sh" "http://127.0.0.1:$EPORT" "enf-gcp-queue"
     LMCLOUD_ENFORCE_DENIED_GCP_TOKEN=denied-token "$LMSCRIPT_BIN" "$LMCLOUD_DIR/tests/conformance/tables/14-tables-auth-enforced-denial.lms" "$PWD/scripts/lmgcp-cloud-host.sh" "http://127.0.0.1:$EPORT" "enfgcptbl"
+    LMGCP_SIM_TOKEN=denied-token "$LMSCRIPT_BIN" -e '
+s = load_schema(schema="schema/lmcloud.dsl.json");
+p = _lmcode_ s;
+  cloud.set_endpoint("tables", "http://127.0.0.1:'"$EPORT"'");
+  cloud.set_abort_on_error(false);
+  let ex = cloud.table_exists("enfgcptbl2");
+  let ex_err = cloud.last_error().code() == ErrorCode.PERMISSION_DENIED;
+  let cr = cloud.table_create("enfgcptbl2");
+  let cr_err = cloud.last_error().code() == ErrorCode.PERMISSION_DENIED;
+  cloud.item_put("enfgcptbl2", cloud.item_new("probe").set_string("a", "1"));
+  let put_err = cloud.last_error().code() == ErrorCode.PERMISSION_DENIED;
+  lmcode_return_put("ok", !ex && !cr && ex_err && cr_err && put_err);
+end _lmcode_
+r = run_lmcode(p, {command:["./bin/lmgcp","cloud","--lmcode","$DSLFILE"]});
+assert(r.ok && r.result.ok, "tables enforce pass-2 PERMISSION_DENIED failed");
+'
     kill "$EPID" 2>/dev/null || true; wait "$EPID" 2>/dev/null || true
     rm -f "$AUTH_CFG"
     echo "Auth enforce scenarios 12, 13 & 14 PASS"
