@@ -8,6 +8,12 @@ import (
 	"testing"
 )
 
+func TestSyncDirIsPortable(t *testing.T) {
+	if err := syncDir(t.TempDir()); err != nil {
+		t.Fatalf("sync state directory: %v", err)
+	}
+}
+
 func TestJournalCrashBetweenIntentAndConfirm(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o700); err != nil {

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -313,6 +314,11 @@ func (j *Journal) Close() error {
 }
 
 func syncDir(dir string) error {
+	// Go cannot flush directory handles on Windows; the journal file itself is
+	// still synced before mutation, so keep the portable open path usable there.
+	if runtime.GOOS == "windows" {
+		return nil
+	}
 	f, err := os.Open(dir)
 	if err != nil {
 		return err
