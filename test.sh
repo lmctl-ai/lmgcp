@@ -28,6 +28,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 [ -x "$HOST" ] || fail "$HOST not executable"
 ok "binary exists and is executable ($HOST)"
 python3 tests/check-host-flags.py schema/lmgcp.dsl.json "$HOST" || fail "hard flag cutover"
+python3 scripts/test-hostkit-patch.py || fail "cloud integrity portability controls"
 python3 scripts/check-hostkit-patch.py || fail "cloud dependency integrity"
 go test github.com/lmctl-ai/lmcloud/hostkit github.com/lmctl-ai/lmcloud/hostkit/cloudhost github.com/lmctl-ai/lmcloud/hostkit/fakeadapter github.com/lmctl-ai/lmcloud/hostkit/httpguard github.com/lmctl-ai/lmcloud/hostkit/invoke || fail "cloud compatibility tests"
 ok "cloud compatibility integrity and unit tests"
