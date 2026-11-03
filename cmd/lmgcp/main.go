@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,7 +25,7 @@ var rawVersion string
 //go:embed THIRD_PARTY_NOTICES
 var embeddedNotices string
 
-const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | [--lmcode|--first|--last] FILE [FILE ...] | --sweep [--older-than-hours N] [--delete] [--run-id ID] [--ledger PATH]
+const usageText = `usage: lmgcp --version | --help | --notices | --lmcode-schema [--json] | --lmcode-signatures [--without-std] | --lmcode FILE [--lmcode FILE ...] | --sweep [--older-than-hours N] [--delete] [--run-id ID] [--ledger PATH]
 
 Google Cloud Go SDK host for lmscript (Apache-2.0 SDK on lmcode-go).
 
@@ -36,7 +35,7 @@ Options:
   --notices                  Print embedded third-party license notices
   --lmcode-schema [--json]      Print human-readable schema summary or raw JSON schema
   --lmcode-signatures           Print sorted canonical DSL signatures
-  --lmcode|--first|--last FILE...  Load, verify, and execute compiled .dslb files
+  --lmcode FILE               Load, verify, and execute a compiled .dslb file
   --sweep                    List (dry-run default) or delete (--delete) run-owned leftovers
                              --run-id ID / --ledger PATH reload a durable recovery journal
 
@@ -91,6 +90,11 @@ func main() {
 
 func realMain(args []string) int {
 	if len(args) >= 2 && args[1] == "cloud" {
+		for _, arg := range args[2:] {
+			if arg == "--first" || arg == "--last" {
+				return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
+			}
+		}
 		return cloudRealMain(args[2:])
 	}
 	if _, err := membudget.InitFromEnv(); err != nil {
@@ -118,7 +122,7 @@ func realMain(args []string) int {
 	}
 
 	// Reject unrecognized operations before starting the fake or live transport.
-	invocation := len(args) >= 2 && (args[1] == "--lmcode" || args[1] == "--first" || args[1] == "--last")
+	invocation := len(args) >= 2 && args[1] == "--lmcode"
 	if len(args) < 2 || (args[1] != "--lmcode-schema" && args[1] != "--lmcode-signatures" && !invocation && args[1] != "--sweep") {
 		fmt.Fprint(os.Stderr, usageText)
 		return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
@@ -128,38 +132,25 @@ func realMain(args []string) int {
 	var order []int
 	builderInvocation := false
 	if invocation {
-		type part struct {
-			file     string
-			priority int
-			index    int
-		}
-		parts := make([]part, 0, len(args)/2)
+		parts := make([]string, 0, len(args)/2)
 		files := make([]string, 0, len(args)/2)
-		add := func(file string, priority int) bool {
+		add := func(file string) bool {
 			if file == "" || strings.HasPrefix(file, "--") {
 				return false
 			}
-			parts = append(parts, part{file: file, priority: priority, index: len(parts)})
+			parts = append(parts, file)
 			files = append(files, file)
 			return true
 		}
 		for i := 1; i < len(args); i++ {
 			switch args[i] {
-			case "--lmcode", "--first", "--last":
-				priority := 1
-				if args[i] == "--first" {
-					priority = 0
-				} else if args[i] == "--last" {
-					priority = 2
-				}
-				if i+1 >= len(args) || !add(args[i+1], priority) {
+			case "--lmcode":
+				if i+1 >= len(args) || !add(args[i+1]) {
 					return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 				}
 				i++
 			default:
-				if !add(args[i], 1) {
-					return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
-				}
+				return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, usageText))
 			}
 		}
 		if len(parts) == 0 {
@@ -176,20 +167,15 @@ func realMain(args []string) int {
 			var meta struct {
 				Mode string `json:"mode"`
 			}
-			if raw, err := os.ReadFile(manifest); err == nil && json.Unmarshal(raw, &meta) == nil {
-				builderInvocation = meta.Mode == "builder"
+			raw, err := os.ReadFile(manifest)
+			if err != nil || json.Unmarshal(raw, &meta) != nil || (meta.Mode != "single" && meta.Mode != "builder") {
+				return invoke.Failure("cli", lmcode.NewError(lmcode.CLI_USAGE, "invalid validated invocation manifest"))
 			}
+			builderInvocation = meta.Mode == "builder"
 		}
 		for i := range parts {
 			order[i] = i
 		}
-		sort.SliceStable(order, func(i, j int) bool {
-			a, b := parts[order[i]], parts[order[j]]
-			if a.priority != b.priority {
-				return a.priority < b.priority
-			}
-			return a.index < b.index
-		})
 	}
 	dryInvocation := results != nil && results.Dry()
 

@@ -46,10 +46,10 @@ those, not the whole provider host.
   `Cleanup`, and exits; a stdout write failure exits 4. The hard-abort message
   includes the durable recovery run ID/path. Normal auth failures still call
   `CleanupLedger`. `Host.fail/clearErr/LastError/AuthError` are mutex-guarded.
-- CLI `--lmcode` accepts repeated selectors exactly as lmscript's default
-  builder emits them (`--lmcode f0 --lmcode f1`) and the sample's
-  `--first/--last FILE` pairs. Slots keep add order; execution order is stable
-  by priority. `InvocationResultsFromCommand` still runs only in this branch.
+- CLI `--lmcode` accepts only repeated file selectors as lmscript emits them
+  (`--lmcode f0 --lmcode f1`). Invocation order follows builder part order;
+  retired priority selectors are refused. `InvocationResultsFromCommand` runs
+  only in this branch and rejects malformed manifests before host setup.
 - Shell flake: never pipe a large captured string into `grep -q` under
   `set -o pipefail` (grep's early exit can SIGPIPE the producer). Use
   `grep -Fq PATTERN <<<"$var"` in test.sh/select-compiler.sh.

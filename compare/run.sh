@@ -23,6 +23,17 @@ fi
 export PATH="$ROOT_DIR/bin:$PATH"
 LMSCRIPT="${LMSCRIPT_BIN:-lmscript}"
 
+# The OpenTofu comparison host is separate from lmgcp. Its retired discovery
+# CLI cannot run these examples through the current compiler.
+if ! command -v lmcloud >/dev/null 2>&1; then
+  echo "SKIP compare: lmcloud OpenTofu host is not installed"
+  exit 0
+fi
+if ! lmcloud --lmcode-schema --json >/dev/null 2>&1; then
+  echo "SKIP compare: installed lmcloud OpenTofu host lacks current lmcode schema discovery"
+  exit 0
+fi
+
 if [[ ! -x "$ROOT_DIR/bin/lmgcp" ]]; then
   mkdir -p "$ROOT_DIR/bin"
   go build -o "$ROOT_DIR/bin/lmgcp" ./cmd/lmgcp

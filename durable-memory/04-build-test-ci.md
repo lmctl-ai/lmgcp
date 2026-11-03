@@ -49,4 +49,4 @@ CGO_ENABLED=0 go build -o bin/lmgcp ./cmd/lmgcp
 
 ## Host flag cutover
 
-Only the lmcode host option family is accepted; retired spellings are refused before initializing fake or live transports. The full gate checks exact schema bytes, signatures, new loader dispatch and retired-option refusal in a scratch HOME. SDK pin 65f0ef2 supports source-compiler v6; compiler selection checks emitted capability. DSLB and .dslb names are unchanged. Cross-tool comparison uses explicit caller PATH rather than a shared checkout.
+Only `--lmcode FILE` is accepted for program invocation; retired flag spellings, including priority selectors, are refused before opening a file. The full gate checks exact schema bytes, signatures, strict invocation manifest validation, result framing, and retired-option refusal in a scratch HOME. SDK pin `06cd9ae991d90fea9ad38f3b071da646c76832f4` is recorded in `sdk.lock`; compiler selection checks emitted capability. The comparison recipes use `run_lmcode` and no longer save bytecode artifacts. OpenTofu comparisons are explicitly skipped when the separate `lmcloud` host lacks current schema discovery.

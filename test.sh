@@ -191,15 +191,15 @@ r = run_lmcode(b);
 assert(r.ok, "default builder failed");
 assert(r.parts == 2, "default builder parts");
 b2 = lmcode_build("$HOST");
-b2.add(p1, ["--last", "\$DSLFILE"]);
-b2.add(p2, ["--first", "\$DSLFILE"]);
+b2.add(p1);
+b2.add(p2);
 r2 = run_lmcode(b2);
-assert(r2.ok, "selector builder failed");
-assert(r2.parts == 2, "selector builder parts");
+assert(r2.ok, "repeated --lmcode builder failed");
+assert(r2.parts == 2, "repeated --lmcode builder parts");
 LMS
 builder_out="$("$LMSCRIPT" "$builder_dir/builder.lms" 2>&1)" || { rm -rf "$builder_dir"; fail "builder invocation failed: $builder_out"; }
 rm -rf "$builder_dir"
-ok "repeated --lmcode and --first/--last builder forms share one host"
+ok "single and builder invocations use only repeated --lmcode FILE selectors"
 
 # 8d. Dry memory-limit watchdog keeps dry metadata and a valid envelope
 watchdog_dir="$(mktemp -d build/watchdog.XXXXXX)"
@@ -336,7 +336,11 @@ for d in "${compare_dirs[@]}"; do
   [ -s "$d/${ex}.lms" ] || fail "missing $d/${ex}.lms"
   grep -q 'source  = "hashicorp/google"' "$d/main.tf" || fail "$d/main.tf missing hashicorp/google provider"
 done
-./compare/run.sh 04_gcs_bucket_lifecycle_ephemeral >/dev/null || fail "compare/run.sh 04_gcs_bucket_lifecycle_ephemeral failed"
-ok "verified ${#compare_dirs[@]} lmcloud equivalents under compare/, compare/RESULTS.md, and compare/run.sh"
+compare_out="$(./compare/run.sh 04_gcs_bucket_lifecycle_ephemeral 2>&1)" || { echo "$compare_out" >&2; fail "compare/run.sh 04_gcs_bucket_lifecycle_ephemeral failed"; }
+if grep -q '^SKIP compare:' <<<"$compare_out"; then
+  skip "lmcloud OpenTofu execution unavailable; current lmcode schema discovery is required"
+else
+  ok "verified ${#compare_dirs[@]} lmcloud equivalents under compare/, compare/RESULTS.md, and compare/run.sh"
+fi
 
 echo "all $pass checks passed"

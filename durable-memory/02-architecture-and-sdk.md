@@ -13,7 +13,7 @@
 ## Pinned SDK & Dependencies
 
 - **Go toolchain**: `go 1.26` ([`go.mod`](../go.mod))
-- **`lmcode-go` SDK**: `github.com/lmctl-ai/lmcode-go` pinned in [`sdk.lock`](../sdk.lock) (`9b9a03559f50c5e48a3cfe0de98d7eda3a8891d8`) and [`go.mod`](../go.mod) (`v0.0.0-20261025030137-9b9a03559f50`)
+- **`lmcode-go` SDK**: `github.com/lmctl-ai/lmcode-go` pinned to reviewed full SHA `06cd9ae991d90fea9ad38f3b071da646c76832f4` in [`sdk.lock`](../sdk.lock) and `go.mod` (`v0.6.39-0.20261102140952-06cd9ae991d9`). The SDK validates invocation manifests, including required boolean `dry`, before host dispatch.
 - **Google Cloud Go SDK modules**:
   - `cloud.google.com/go/auth v0.23.0`
   - `cloud.google.com/go/compute/metadata v0.9.0`
