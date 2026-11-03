@@ -9,6 +9,12 @@ unset LMGCP_LIVE
 
 BUILD_DIR="${BUILD_DIR:-bin}"
 mkdir -p "$BUILD_DIR"
+REPO_FOR_COMPILER="$PWD"
+if command -v cygpath >/dev/null 2>&1; then
+  # Paths embedded in lmscript source are opened by Node, outside MSYS path
+  # translation. Use native Windows form for compiler-visible paths.
+  REPO_FOR_COMPILER="$(cygpath -m "$PWD")"
+fi
 ext=""
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ext=".exe" ;; esac
 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "$BUILD_DIR/lmgcp$ext" ./cmd/lmgcp
@@ -151,7 +157,7 @@ ok "memory budget limit enforced with RUN_HOST envelope and stderr message"
 # 8b. Dry invocation: real reads, dummy mutators, zero ledger writes, asserts run
 dry_dir="$(mktemp -d build/dry.XXXXXX)"
 cat > "$dry_dir/dry.lms" <<LMS
-s = load_schema(schema="$PWD/schema/lmgcp.dsl.json");
+s = load_schema(schema="$REPO_FOR_COMPILER/schema/lmgcp.dsl.json");
 p = _lmcode_ s;
   let before = gcp.ledger_count();
   let dummy = gcp.compute_create_instance("us-central1-a", "lmgcp-dry-vm", "e2-micro", "debian-12");
@@ -177,7 +183,7 @@ ok "dry invocation executes reads/asserts with zero ledger writes"
 # 8c. Repeated --lmcode: lmscript builder default fragment and selector pairs
 builder_dir="$(mktemp -d build/builder.XXXXXX)"
 cat > "$builder_dir/builder.lms" <<LMS
-s = load_schema(schema="$PWD/schema/lmgcp.dsl.json");
+s = load_schema(schema="$REPO_FOR_COMPILER/schema/lmgcp.dsl.json");
 p1 = _lmcode_ s;
   let a = 1;
 end _lmcode_
@@ -204,7 +210,7 @@ ok "single and builder invocations use only repeated --lmcode FILE selectors"
 # 8d. Dry memory-limit watchdog keeps dry metadata and a valid envelope
 watchdog_dir="$(mktemp -d build/watchdog.XXXXXX)"
 cat > "$watchdog_dir/watchdog.lms" <<LMS
-s = load_schema(schema="$PWD/schema/lmgcp.dsl.json");
+s = load_schema(schema="$REPO_FOR_COMPILER/schema/lmgcp.dsl.json");
 p = _lmcode_ s;
   let x = "x";
   while (str_len(x) < 1000000000) { x = x + x; }
@@ -224,7 +230,7 @@ ok "dry memory-limit watchdog emits a lmscript-accepted dry frame"
 # 8e. One-slot builder abort retains part:0 and dry:true
 builder_wd_dir="$(mktemp -d build/builder-wd.XXXXXX)"
 cat > "$builder_wd_dir/wd.lms" <<LMS
-s = load_schema(schema="$PWD/schema/lmgcp.dsl.json");
+s = load_schema(schema="$REPO_FOR_COMPILER/schema/lmgcp.dsl.json");
 p = _lmcode_ s;
   let x = "x";
   while (str_len(x) < 1000000000) { x = x + x; }
@@ -247,7 +253,7 @@ ok "one-slot builder abort retains part:0 and dry:true"
 abort_dir="$(mktemp -d build/abort.XXXXXX)"
 abort_state="$(mktemp -d build/abort-state.XXXXXX)"
 cat > "$abort_dir/abort.lms" <<LMS
-s = load_schema(schema="$PWD/schema/lmgcp.dsl.json");
+s = load_schema(schema="$REPO_FOR_COMPILER/schema/lmgcp.dsl.json");
 p = _lmcode_ s;
   let x = "x";
   while (str_len(x) < 1000000000) { x = x + x; }
