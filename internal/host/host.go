@@ -120,7 +120,7 @@ func newHost(dry, journalEnabled bool, sharedFake *fakegcp.Server) (*Host, error
 		if strings.ContainsAny(token, "\r\n") {
 			return nil, fmt.Errorf("invalid LMGCP_ACCESS_TOKEN")
 		}
-		client := &http.Client{Timeout: 30 * time.Second, Transport: emulatorTransport{origin: u.Host, token: token}, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+		client := &http.Client{Transport: emulatorTransport{origin: u.Host, token: token}, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
 		h.autoCleanup = false
 		if err := h.initClients(ctx, func(svc string) []option.ClientOption {
 			path := "/"
@@ -1589,13 +1589,9 @@ func (h *Host) StorageReadObject(bucket, objName string) string {
 		return ""
 	}
 	defer response.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(response.Body, 16*1024*1024+1))
+	data, err := io.ReadAll(response.Body)
 	if err != nil {
 		h.fail(err)
-		return ""
-	}
-	if len(data) > 16*1024*1024 {
-		h.fail(fmt.Errorf("object exceeds 16 MiB read limit"))
 		return ""
 	}
 	h.clearErr()
