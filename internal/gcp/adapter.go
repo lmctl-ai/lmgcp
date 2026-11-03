@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/lmctl-ai/lmcloud/hostkit"
 	"github.com/lmctl-ai/lmcloud/hostkit/fakeadapter"
@@ -21,7 +20,7 @@ type Adapter struct {
 }
 
 func NewAdapter() *Adapter {
-	return &Adapter{fake: fakeadapter.New(fakeadapter.Options{}), client: hostkit.NewHTTPClient(60 * time.Second)}
+	return &Adapter{fake: fakeadapter.New(fakeadapter.Options{}), client: hostkit.NewHTTPClient(0)}
 }
 
 func Endpoints() *hostkit.EndpointResolver {
@@ -152,7 +151,7 @@ func (a *Adapter) GetObject(ctx context.Context, b, k string, limit int64) ([]by
 	if e != nil {
 		return nil, cerr(e)
 	}
-	if int64(len(v)) > limit {
+	if limit > 0 && int64(len(v)) > limit {
 		return nil, hostkit.ProviderError(hostkit.Internal, 0, "", "object exceeds read limit")
 	}
 	return []byte(v), nil

@@ -230,6 +230,12 @@ The endpoint must be a loopback HTTP origin and cannot be combined with
 `LMGCP_LIVE=1`. All SDK requests stay on that origin; redirects and proxies are
 not followed. No ADC lookup occurs. The default remains the in-process fake.
 GCS upload/download use the SDK when an external endpoint is selected; reads
-are limited to 16 MiB. Authentication/permission failures (401/403) are retained
-across subsequent operations and make DSL execution fail with an application
+are returned complete, without an implicit byte limit or request deadline.
+Authentication/permission failures (401/403) are retained
+across subsequent operations and make lmcode execution fail with an application
 error. Configured dummy tokens are redacted from provider errors.
+
+The shared `cloud` route uses the pinned compatibility patch documented in
+[`third_party/lmcloud/PATCHES.md`](third_party/lmcloud/PATCHES.md): reads and
+exhaustive lists have no implicit byte, page or total-duration bound. Explicit
+caller cancellation and limits remain effective.

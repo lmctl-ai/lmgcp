@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lmctl-ai/lmcloud/hostkit"
 )
@@ -46,7 +45,7 @@ func NewHost() *Host {
 		project = "gcpsim-local"
 	}
 	return &Host{abortOnError: true, lastError: okError(), endpoints: map[string]string{}, defaultEP: strings.TrimRight(def, "/"), project: project,
-		ctx: context.Background(), client: hostkit.NewHTTPClient(60 * time.Second), retry: hostkit.DefaultRetryPolicy()}
+		ctx: context.Background(), client: hostkit.NewHTTPClient(0), retry: hostkit.DefaultRetryPolicy()}
 }
 
 func (h *Host) Provider() string   { return "gcp" }

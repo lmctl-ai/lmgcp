@@ -1,0 +1,172 @@
+{
+  "repo": "https://github.com/lmctl-ai/lmcloud",
+  "commit": "2b8e50055e20cee93f51a3f96c552a964a968b12",
+  "version": "v0.1.0",
+  "module_sum": "h1:WCYsVhdLwYJMFKZUEhTv7YM/HEjqMhQOrj2GMJOilro=",
+  "files": {
+    "sdk.lock": {
+      "upstream_sha256": "f9fc65f2b4132da0ca0264b0d4c9396ac4f14fa915b38513fd0deabc56d73e9c",
+      "sha256": "f9fc65f2b4132da0ca0264b0d4c9396ac4f14fa915b38513fd0deabc56d73e9c"
+    },
+    "LICENSE": {
+      "upstream_sha256": "e25615ca259eca3930ca632e9c5b959692b164b31c4e66ba453b8aa8e81705d7",
+      "sha256": "e25615ca259eca3930ca632e9c5b959692b164b31c4e66ba453b8aa8e81705d7"
+    },
+    "go.sum": {
+      "upstream_sha256": "d2ec5d711a745cd75c6ac5ec2d7552e961c19fbf6671e9d212bcb4cde9c55e41",
+      "sha256": "d2ec5d711a745cd75c6ac5ec2d7552e961c19fbf6671e9d212bcb4cde9c55e41"
+    },
+    "PATCHES.md": {
+      "upstream_sha256": null,
+      "sha256": "69794e507eb4b555b0472e88e2fa8a1f263ea406893191dedceb6f4ebf8b2d1f"
+    },
+    "go.mod": {
+      "upstream_sha256": "e75fb2ea0695125382699e1e129ac054ffba06b20da21263391b071dac8b92fe",
+      "sha256": "e75fb2ea0695125382699e1e129ac054ffba06b20da21263391b071dac8b92fe"
+    },
+    "schema/lmcloud.dsl.json": {
+      "upstream_sha256": "f1cd7471c042f13f4263054ff925638e20ac564626bc56ab3be1d2d1a7f5ca42",
+      "sha256": "f1cd7471c042f13f4263054ff925638e20ac564626bc56ab3be1d2d1a7f5ca42"
+    },
+    "schema/schema.go": {
+      "upstream_sha256": "33852ea07226bfa7a04dc6e8718ce3b5b1fbb2351bd778da065fcec0e1a6ad0d",
+      "sha256": "33852ea07226bfa7a04dc6e8718ce3b5b1fbb2351bd778da065fcec0e1a6ad0d"
+    },
+    "hostkit/paginate.go": {
+      "upstream_sha256": "c94da1f35f6422007d7d6521d76e10ee80eba7e208afbb815934600d7fbec394",
+      "sha256": "e6f063e316861f3823c5c8ca058b5ab270b0c9870a86a510140f22afc9d3375a"
+    },
+    "hostkit/endpoint.go": {
+      "upstream_sha256": "d6724d2efa1f44919949776391ba14daa20829e43f25f59916c06c216324e99b",
+      "sha256": "52cd1a103943dab2392eb7471c07e9f5edb2376a2238f42f6d7b9ea5505bb4fd"
+    },
+    "hostkit/v4_test.go": {
+      "upstream_sha256": "3d06090417f1f5333548e5a90d3e20f60cd7f168f7f8705294b9aa777cb8d964",
+      "sha256": "3d06090417f1f5333548e5a90d3e20f60cd7f168f7f8705294b9aa777cb8d964"
+    },
+    "hostkit/validate_test.go": {
+      "upstream_sha256": "9598c3de1a1584637ef2e0b8cb751c45ea64573deaf6c6351e5ec64880b1afc9",
+      "sha256": "9598c3de1a1584637ef2e0b8cb751c45ea64573deaf6c6351e5ec64880b1afc9"
+    },
+    "hostkit/redact.go": {
+      "upstream_sha256": "fd7db82f986f536e714ea3fda04bffd725876ab871c95f6e2537589f073a9e06",
+      "sha256": "fd7db82f986f536e714ea3fda04bffd725876ab871c95f6e2537589f073a9e06"
+    },
+    "hostkit/retry.go": {
+      "upstream_sha256": "19e101d2ab7dd01333f628289ae91873d807f5e53df20b446690bbb18e677201",
+      "sha256": "19e101d2ab7dd01333f628289ae91873d807f5e53df20b446690bbb18e677201"
+    },
+    "hostkit/queue.go": {
+      "upstream_sha256": "6d1e01ebfb2db9840990ffb8bb0a10d55ceda85b8253892898e271bcd84b55cf",
+      "sha256": "6d1e01ebfb2db9840990ffb8bb0a10d55ceda85b8253892898e271bcd84b55cf"
+    },
+    "hostkit/v3_test.go": {
+      "upstream_sha256": "967520ded3cd3b2b06d743931c9cd49bb3210d784db6c39521c91bcc9fdcc366",
+      "sha256": "967520ded3cd3b2b06d743931c9cd49bb3210d784db6c39521c91bcc9fdcc366"
+    },
+    "hostkit/validate.go": {
+      "upstream_sha256": "f5cc7194439adcb05097fe77ac4bd3840a9b073ea376af7b283eb1a6b6e7da7b",
+      "sha256": "ed3024c269a975749b857c05b414a98d3e80828648dca90c79d189f3a2d0d8fa"
+    },
+    "hostkit/errors.go": {
+      "upstream_sha256": "2c259e96ce4e5428ac78aff09657c8d453570027cf56dd93f14369dc5304dd96",
+      "sha256": "2c259e96ce4e5428ac78aff09657c8d453570027cf56dd93f14369dc5304dd96"
+    },
+    "hostkit/errors_test.go": {
+      "upstream_sha256": "1999b99171a0d83b6abf3e53aa59a3facfff332ff950366f8b303e8d93c40655",
+      "sha256": "1999b99171a0d83b6abf3e53aa59a3facfff332ff950366f8b303e8d93c40655"
+    },
+    "hostkit/retry_test.go": {
+      "upstream_sha256": "2d98c04184378f698d5d147df55ea438ea5c13f4b15c5e70ac414e0cf6417f11",
+      "sha256": "2d98c04184378f698d5d147df55ea438ea5c13f4b15c5e70ac414e0cf6417f11"
+    },
+    "hostkit/v2_test.go": {
+      "upstream_sha256": "4700dd0523cfbb99a84db4d4b6b054a06dbae345a8e0bfe65dc36e6259fa0abe",
+      "sha256": "4700dd0523cfbb99a84db4d4b6b054a06dbae345a8e0bfe65dc36e6259fa0abe"
+    },
+    "hostkit/codec.go": {
+      "upstream_sha256": "b8e9b99b4f8457e6c7a057a6daccf1cc0a7fcd0a5094847d858dc703461fe395",
+      "sha256": "b8e9b99b4f8457e6c7a057a6daccf1cc0a7fcd0a5094847d858dc703461fe395"
+    },
+    "hostkit/codec_paginate_queue_test.go": {
+      "upstream_sha256": "b9e6715c897a0d1237f0552149819bd1d394644751edc337d4e9a5e3c413b9d0",
+      "sha256": "b9e6715c897a0d1237f0552149819bd1d394644751edc337d4e9a5e3c413b9d0"
+    },
+    "hostkit/router.go": {
+      "upstream_sha256": "220a96bf44dd727a7c8062a188868668ff2a25b3831be2dd10a02790e3438f59",
+      "sha256": "220a96bf44dd727a7c8062a188868668ff2a25b3831be2dd10a02790e3438f59"
+    },
+    "hostkit/endpoint_test.go": {
+      "upstream_sha256": "3e6ac0c421b8081f4f1666303ec3820c21272db62ed570a0490a4aa1b366a0b8",
+      "sha256": "3e6ac0c421b8081f4f1666303ec3820c21272db62ed570a0490a4aa1b366a0b8"
+    },
+    "hostkit/adapter.go": {
+      "upstream_sha256": "cafc029bbec2a7081035d266785be06ad8d5ef0077dc16c37106eba37bcba2be",
+      "sha256": "e807c0f7c3675ded8a67e8d9c80d06186887e4f2ffbb2d61dd45949785c30713"
+    },
+    "hostkit/invoke/invoke_test.go": {
+      "upstream_sha256": "7b261f9073fc1ef3e6b18b1fc46eafc793536ae1f382b8ff719521bcc3de572c",
+      "sha256": "7b261f9073fc1ef3e6b18b1fc46eafc793536ae1f382b8ff719521bcc3de572c"
+    },
+    "hostkit/invoke/invoke.go": {
+      "upstream_sha256": "4cb8cbf0c3974de8f36f7f7c4cd1111604ae9c5c55dd829814ea64a7babdf3e1",
+      "sha256": "4cb8cbf0c3974de8f36f7f7c4cd1111604ae9c5c55dd829814ea64a7babdf3e1"
+    },
+    "hostkit/fakeadapter/fake_test.go": {
+      "upstream_sha256": "2dd5fa0b48a65bcb1f64ef0d64cda6a198cb0f7bb0faa3323d509689b1d48094",
+      "sha256": "2dd5fa0b48a65bcb1f64ef0d64cda6a198cb0f7bb0faa3323d509689b1d48094"
+    },
+    "hostkit/fakeadapter/fake.go": {
+      "upstream_sha256": "562140da25e9296a21c091d504e06e8c3d247ee461cee1b2c1f462bebba02b12",
+      "sha256": "d27191a8cac297a76d17dc51706d5b730ad1d180455b2eb545a49f4cb57c4ee5"
+    },
+    "hostkit/fakeadapter/lock_unix.go": {
+      "upstream_sha256": "aa734913306db2efce6f424505d4408dc8e1d36384d215b89c7586d73388d180",
+      "sha256": "aa734913306db2efce6f424505d4408dc8e1d36384d215b89c7586d73388d180"
+    },
+    "hostkit/fakeadapter/lock_windows.go": {
+      "upstream_sha256": "cf27912bc0d6b4413c53258f193b9e0233a41136a08dbd6ffb902de68d9aa736",
+      "sha256": "cf27912bc0d6b4413c53258f193b9e0233a41136a08dbd6ffb902de68d9aa736"
+    },
+    "hostkit/cloudhost/host_test.go": {
+      "upstream_sha256": "c80d82fc0d1b17b8c40270e4a8e90dffffb22c0e486edbc3021ed20033f2475b",
+      "sha256": "8a133fcff8f6b68c0015ed3e84d4a4d536920a340f58295629d58479afd9087f"
+    },
+    "hostkit/cloudhost/v4_test.go": {
+      "upstream_sha256": "8cad20609a26f24d051b55d64f2159150b7f806469236e2bbb97b97de2c18055",
+      "sha256": "8cad20609a26f24d051b55d64f2159150b7f806469236e2bbb97b97de2c18055"
+    },
+    "hostkit/cloudhost/guard.go": {
+      "upstream_sha256": "1b88d96a8e72f4a4b7f6fbd8404ebd0d0340756f42fb6654b239714acd465309",
+      "sha256": "1b88d96a8e72f4a4b7f6fbd8404ebd0d0340756f42fb6654b239714acd465309"
+    },
+    "hostkit/cloudhost/main.go": {
+      "upstream_sha256": "bb37f74e833db09b796fba1a9a816fb83f0281d773cbdbc3a2733ab07153cbe2",
+      "sha256": "bb37f74e833db09b796fba1a9a816fb83f0281d773cbdbc3a2733ab07153cbe2"
+    },
+    "hostkit/cloudhost/v3_test.go": {
+      "upstream_sha256": "00cbd828d9294fdfe11706e73dc2e0b00815e92bfab5d9cd4ba72f13f30ccf28",
+      "sha256": "00cbd828d9294fdfe11706e73dc2e0b00815e92bfab5d9cd4ba72f13f30ccf28"
+    },
+    "hostkit/cloudhost/host.go": {
+      "upstream_sha256": "daad9ddc8e0b5f2e998cf2682856ece652d6ec4415529b35826f80737cd3e924",
+      "sha256": "eca3e685f0512fb32de33d357d1ced0485bb48098cc4d4c55aa9ce7f04a79793"
+    },
+    "hostkit/cloudhost/v2_test.go": {
+      "upstream_sha256": "a30df9de579b4c2c37cc629cb4051200dc7751e23139650db78c8cebd0d2c0e8",
+      "sha256": "a30df9de579b4c2c37cc629cb4051200dc7751e23139650db78c8cebd0d2c0e8"
+    },
+    "hostkit/cloudhost/register.go": {
+      "upstream_sha256": "b7d72ad448e969d0e584a706abb7a4de0f634e816dd860bbf7684ef83cf5afd5",
+      "sha256": "b7d72ad448e969d0e584a706abb7a4de0f634e816dd860bbf7684ef83cf5afd5"
+    },
+    "hostkit/httpguard/httpguard_test.go": {
+      "upstream_sha256": "7f4f3292536bbbfc3b55c642b7ddfc493b0d02c165b99679798736e71d86de0f",
+      "sha256": "7f4f3292536bbbfc3b55c642b7ddfc493b0d02c165b99679798736e71d86de0f"
+    },
+    "hostkit/httpguard/httpguard.go": {
+      "upstream_sha256": "75501b320516d9e3535bfb5dab046226db43ebe94106b51c6f8dd63e9f8d86a2",
+      "sha256": "75501b320516d9e3535bfb5dab046226db43ebe94106b51c6f8dd63e9f8d86a2"
+    }
+  }
+}

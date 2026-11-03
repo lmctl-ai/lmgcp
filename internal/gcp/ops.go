@@ -77,7 +77,7 @@ func (h *Host) request(ctx context.Context, method, urlStr string, body []byte, 
 func (h *Host) requestIdem(ctx context.Context, method, urlStr string, body []byte, contentType string, idempotent bool) (int, []byte, error) {
 	client := h.client
 	if client == nil {
-		client = hostkit.NewHTTPClient(60 * time.Second)
+		client = hostkit.NewHTTPClient(0)
 	}
 	resp, _, err := h.retry.DoHTTP(ctx, client, idempotent, func(ctx context.Context) (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, method, urlStr, bytes.NewReader(body))
@@ -97,7 +97,7 @@ func (h *Host) requestIdem(ctx context.Context, method, urlStr string, body []by
 		return 0, nil, err
 	}
 	defer resp.Body.Close()
-	data, cerr := hostkit.ReadBoundedResponse(resp, 16*1024*1024)
+	data, cerr := hostkit.ReadBoundedResponse(resp, 0)
 	if cerr != nil {
 		return resp.StatusCode, nil, cerr
 	}

@@ -34,15 +34,15 @@ Branch `hostkit-port` from `635a665`.
 - All GCP HTTP now goes through `hostkit.NewHTTPClient` + `RetryPolicy.DoHTTP`
   with the caller context; 503 retries three times, 429 is retried, non-idempotent
   POSTs are not retried after a possible send, and cross-origin redirects are not
-  followed. Bodies use `ReadBoundedResponse` (16 MiB), so oversize responses fail
-  without buffering past the limit.
+  followed. Bodies use `ReadBoundedResponse` with limit=0, so responses are read completely
+  and explicit caller cancellation remains effective.
 - GCP-only neutral validation was removed (hostkit owns rules); aws-/amz-/azure-
   queue names, 255-segment keys, and long prefixes now behave like other hosts.
 - Queue receive returns `message.messageId`, not the ackId.
 - `LMGCP_LIVE=1` with no loopback endpoint returns UNAUTHENTICATED
   `LiveCredentialsNotImplemented`; non-loopback HTTPS does the same.
 - Dead `internal/gcp/register.go` and unused `schema/lmcloud.go` were deleted.
-- Transport regressions: 503 attempt count, 10 ms caller deadline, 16 MiB+1
+- Transport regressions: 503 attempt count, 10 ms caller deadline, 16 MiB+1 complete-body
   oversize read, cross-origin redirect not followed.
 
 ## Hostkit v3 adoption
@@ -114,3 +114,9 @@ Branch `hostkit-port` from `635a665`.
   `AbsentBucket`/`AbsentObject` qualifier.
 - Pub/Sub `:acknowledge` returns success for a missing subscription upstream;
   the adapter probes the queue first so missing queue still yields NOT_FOUND.
+
+WP230 pins cloud compatibility code under third_party/lmcloud to v0.1.0 plus
+the documented no-default-bounds patch. Operation/list and HTTP deadlines,
+exhaustive page ceilings and response byte caps default to off. Cancellation
+and explicit positive caller bounds still apply. Main GCP endpoint reads also
+have no implicit byte cap or client timeout; its 31-second fixture is test-only.
