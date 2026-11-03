@@ -20,3 +20,6 @@ Verify with `python3 scripts/check-hostkit-patch.py` from the lmgcp root and the
 hostkit package tests in test.sh. Review this patch with future dependency
 updates so an upstream replacement cannot silently restore the retired limits.
 The reviewed Go SDK pin and Windows journal files are unchanged.
+
+The copied invocation test fixture JSON-encodes native filenames; its Windows
+path and quoted-name controls verify valid JSON without weakening validation.

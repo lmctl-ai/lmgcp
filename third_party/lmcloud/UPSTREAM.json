@@ -18,7 +18,7 @@
     },
     "PATCHES.md": {
       "upstream_sha256": null,
-      "sha256": "69794e507eb4b555b0472e88e2fa8a1f263ea406893191dedceb6f4ebf8b2d1f"
+      "sha256": "e2696e5a7f543343988e6ec61396b632b95fafff5524a3e3f382b97cffdb09d5"
     },
     "go.mod": {
       "upstream_sha256": "e75fb2ea0695125382699e1e129ac054ffba06b20da21263391b071dac8b92fe",
@@ -106,7 +106,7 @@
     },
     "hostkit/invoke/invoke_test.go": {
       "upstream_sha256": "7b261f9073fc1ef3e6b18b1fc46eafc793536ae1f382b8ff719521bcc3de572c",
-      "sha256": "7b261f9073fc1ef3e6b18b1fc46eafc793536ae1f382b8ff719521bcc3de572c"
+      "sha256": "64096dc2cbf2bef94b9d4643be8fce13ff48e196a9e1d3c4589fb698f8a1714d"
     },
     "hostkit/invoke/invoke.go": {
       "upstream_sha256": "4cb8cbf0c3974de8f36f7f7c4cd1111604ae9c5c55dd829814ea64a7babdf3e1",

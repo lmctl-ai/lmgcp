@@ -3,6 +3,7 @@
 package invoke
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -43,7 +44,7 @@ func TestParseArgsOrderAndDefaults(t *testing.T) {
 // Sol finding 1: the standard manifest decides dry mode; no bespoke flag needed.
 func TestParseArgsReadsStandardManifest(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "p.dslb")
-	writeManifest(t, `{"version":1,"mode":"builder","dry":true,"parts":[{"index":0,"file":"`+file+`"}]}`)
+	writeManifest(t, `{"version":1,"mode":"builder","dry":true,"parts":[{"index":0,"file":`+quotedFile(t, file)+`}]}`)
 	inv, err := ParseArgs([]string{"--lmcode", file})
 	if err != nil {
 		t.Fatal(err)
@@ -51,13 +52,31 @@ func TestParseArgsReadsStandardManifest(t *testing.T) {
 	if !inv.Dry || !inv.Builder {
 		t.Fatalf("manifest dry/builder not honoured: %+v", inv)
 	}
-	writeManifest(t, `{"version":1,"mode":"single","dry":false,"parts":[{"index":0,"file":"`+file+`"}]}`)
+	writeManifest(t, `{"version":1,"mode":"single","dry":false,"parts":[{"index":0,"file":`+quotedFile(t, file)+`}]}`)
 	inv, err = ParseArgs([]string{"--lmcode", file})
 	if err != nil || inv.Dry || inv.Builder {
 		t.Fatalf("real single: %+v %v", inv, err)
 	}
-	writeManifest(t, `{"version":1,"mode":"single","parts":[{"index":0,"file":"`+file+`"}]}`)
+	writeManifest(t, `{"version":1,"mode":"single","parts":[{"index":0,"file":`+quotedFile(t, file)+`}]}`)
 	if _, err := ParseArgs([]string{"--lmcode", file}); err == nil {
 		t.Fatal("manifest without dry must be rejected, never treated as real")
+	}
+}
+
+// Keep the fixture valid JSON for native Windows paths and quoted names.
+func quotedFile(t *testing.T, file string) string {
+	t.Helper()
+	raw, err := json.Marshal(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+func TestManifestFixtureQuotesPortablePaths(t *testing.T) {
+	for _, file := range []string{`/tmp/manifest file`, `D:\a\work\file.bin`, `/tmp/quoted"name`} {
+		var got string
+		if err := json.Unmarshal([]byte(quotedFile(t, file)), &got); err != nil || got != file {
+			t.Errorf("fixture path did not round-trip: %q %v", got, err)
+		}
 	}
 }
