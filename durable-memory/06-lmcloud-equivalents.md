@@ -22,6 +22,6 @@ Every `lmgcp` example (`01` .. `40`) has a 1-to-1 [`lmcloud`](https://github.com
 ## Known `lmcloud` Limitations & Findings (Reported Read-Only)
 
 Per workspace rules, `/home/mma/repos/dsl/lmcloud` was never edited. Three findings were documented in [`compare/RESULTS.md`](../compare/RESULTS.md):
-1. **Missing `lmcode.RegisterTesting(reg, nil)` in `lmcloud/internal/lmhost/host.go`**: `assert_close` and `print` are not registered inside `_dsl_ cli="lmcloud"` blocks; `compare/*/*.lms` scripts write evidence via `file_write(...)` inside `_dsl_` and assert/print in outer `lmscript`.
+1. **Missing `lmcode.RegisterTesting(reg, nil)` in `lmcloud/internal/lmhost/host.go`**: `assert_close` and `print` are not registered inside `_dsl_ cli="lmcloud"` blocks; `compare/*/*.lms` scripts write evidence via `file_write(...)` inside `_lmcode_` and assert/print in outer `lmscript`.
 2. **`tofu.output(dir, name)` writes errors to `os.Stderr`**: Querying a missing output or querying after `tofu.destroy` prints `tofu output error: ...` directly to `stderr` in addition to setting `tofu.last_error()`.
 3. **External `hashicorp/google` provider resolution**: `lmcloud` embeds 6 utility providers (`random`, `null`, `local`, `time`, `archive`, `tls`) in-memory via `bufconn`, whereas `hashicorp/google` requires external registry download and live GCP credentials on `tofu.init`. Offline execution therefore validates `compare/<example>/main.tf` via `tofu.fmt` + `tofu.fmt_check` and runs the in-process OpenTofu state lifecycle against an isomorphic `terraform_data` workspace mirror.

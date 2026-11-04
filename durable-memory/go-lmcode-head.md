@@ -56,7 +56,7 @@ those, not the whole provider host.
 
 ## lmscript example migration
 
-- Removed forms: `_dsl_`, `savedsl`, `dsl_cli`. Use
+- Removed forms: `_lmcode_`, `savedsl`, `dsl_cli`. Use
   `s = load_schema(cli="lmgcp" install="github:lmctl-ai/lmgcp@latest")`, then
   `p = _lmcode_ s;` ... `end _lmcode_`, then `r = run_lmcode(p)`.
 - `load_schema` clauses are space-separated, not comma-separated:
