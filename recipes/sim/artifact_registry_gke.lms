@@ -1,0 +1,48 @@
+# Access: Write to lmgcp's in-process fake GCP server (Artifact Registry and GKE are not served by gcpsim 0.2.x)
+# What: Container platform review for a site: create an immutable-tag Docker repository, read it back, list repositories, inspect every GKE cluster's hardening posture (private nodes, workload identity, binary authorization, release channel), teardown
+# When: Choosing where a containerised site's images live and which cluster may run them
+# Emulator: lmgcp in-process fake (default --endpoint fake)
+# Run: lmscript recipes/sim/artifact_registry_gke.lms
+# Arguments: --endpoint fake|URL --host PATH --run ID --out DIR
+# Cleanup: gcp.cleanup_ledger() deletes the repository
+import "./lib/common.lms";
+
+o = sim_options("artifact_registry_gke", {endpoint: {type: "string", default: getenv("LMGCP_FAKE_ENDPOINT", "fake"), description: "'fake' (in-process GCP server) or a gcpsim origin"}}, "usage: artifact_registry_gke.lms [--endpoint fake|URL] [--host PATH]");
+repo = "lmgcp-sim-images-" + o.run;
+
+program = _lmcode_ cli="lmgcp";
+  let created = gcp.ar_create_repository("us-central1", ${repo}, "DOCKER", true);
+  let got = gcp.ar_get_repository("us-central1", ${repo});
+  let repos = gcp.ar_list_repositories("us-central1");
+  let clusters = gcp.gke_list_clusters("us-central1");
+  let rows = str_list();
+  let hardened = 0;
+  for (name in clusters) {
+    let c = gcp.gke_get_cluster("us-central1", name);
+    let ok = c.private_nodes() && c.workload_identity() && c.binary_auth();
+    if (ok) { hardened = hardened + 1; }
+    rows.add(c.name() + " k8s=" + c.k8s_version() + " channel=" + c.release_channel() + " nodes=" + str(c.total_nodes()) + " private=" + str(c.private_nodes()) + " wi=" + str(c.workload_identity()) + " binauthz=" + str(c.binary_auth()) + " autopilot=" + str(c.autopilot()));
+  }
+  let cleaned = gcp.cleanup_ledger();
+  lmcode_return_put("repo", created.name());
+  lmcode_return_put("format", got.format());
+  lmcode_return_put("immutable", got.immutable_tags());
+  lmcode_return_put("scanning", got.vulnerability_scanning());
+  lmcode_return_put("repos_seen", repos.contains(${repo}));
+  lmcode_return_put("clusters", clusters.len());
+  lmcode_return_put("hardened", hardened);
+  lmcode_return_put("rows", rows.join("\n"));
+  lmcode_return_put("cleaned", cleaned);
+  lmcode_return_put("error", gcp.last_error());
+  lmcode_return_put("cost", gcp.cost_report());
+end _lmcode_
+
+r = sim_run(program, gcp_native_command(o)).result;
+println(r.cost);
+assert(r.error == "" && r.format == "DOCKER" && r.immutable && r.repos_seen, "the Docker repository must be created with immutable tags: " + r.error);
+if (o.endpoint == "fake") { assert(r.clusters > 0, "the fake project must expose GKE clusters"); }
+assert(r.cleaned == 1, "cleanup must remove the repository");
+println(r.repo + " (" + r.format + ", immutable tags, vulnerability scanning=" + str(r.scanning) + ") created and removed; " + str(r.hardened) + "/" + str(r.clusters) + " clusters fully hardened:");
+if (r.rows != "") { println(r.rows); }
+sim_report(o, {target: o.target, host: "lmgcp", review: r});
+sim_pass(o);

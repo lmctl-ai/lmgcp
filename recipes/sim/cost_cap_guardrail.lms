@@ -1,0 +1,47 @@
+# Access: Write to lmgcp's in-process fake GCP server
+# What: Cost guardrail: a tiny per-run cap makes the ledger refuse a VM before any request is made (no ledger entry, explanatory error), raising the cap lets the same creation through, and the hard $0.25 ceiling cannot be exceeded
+# When: Making sure a runaway test or deploy script cannot spend past its budget
+# Emulator: lmgcp in-process fake (default --endpoint fake); the cap logic is host-side and identical on gcpsim
+# Run: lmscript recipes/sim/cost_cap_guardrail.lms
+# Arguments: --endpoint fake|URL --host PATH --run ID --out DIR
+# Cleanup: gcp.cleanup_ledger() deletes the instance created under the raised cap
+import "./lib/common.lms";
+
+o = sim_options("cost_cap_guardrail", {endpoint: {type: "string", default: getenv("LMGCP_FAKE_ENDPOINT", "fake"), description: "'fake' (in-process GCP server) or a gcpsim origin"}}, "usage: cost_cap_guardrail.lms [--endpoint fake|URL] [--host PATH]");
+vm = "lmgcp-sim-capped-" + o.run;
+
+program = _lmcode_ cli="lmgcp";
+  let default_cap = gcp.cost_cap_usd();
+  let tiny = gcp.set_cost_cap_usd(0.0001);
+  let refused = gcp.compute_create_instance("us-central1-a", ${vm}, "e2-micro", "debian-12");
+  let refusal = gcp.last_error();
+  let ledger_after_refusal = gcp.ledger_count();
+  let too_high = gcp.set_cost_cap_usd(5.0);
+  let raised = gcp.set_cost_cap_usd(0.25);
+  let created = gcp.compute_create_instance("us-central1-a", ${vm}, "e2-micro", "debian-12");
+  let create_error = gcp.last_error();
+  let estimate = gcp.estimated_cost_usd();
+  let cleaned = gcp.cleanup_ledger();
+  lmcode_return_put("default_cap", default_cap);
+  lmcode_return_put("tiny_accepted", tiny);
+  lmcode_return_put("refused_status", refused.status());
+  lmcode_return_put("refusal", refusal);
+  lmcode_return_put("ledger_after_refusal", ledger_after_refusal);
+  lmcode_return_put("too_high_accepted", too_high);
+  lmcode_return_put("raised_accepted", raised);
+  lmcode_return_put("created_status", created.status());
+  lmcode_return_put("create_error", create_error);
+  lmcode_return_put("estimate", estimate);
+  lmcode_return_put("cleaned", cleaned);
+  lmcode_return_put("cost", gcp.cost_report());
+end _lmcode_
+
+r = sim_run(program, gcp_native_command(o)).result;
+println(r.cost);
+assert(r.tiny_accepted && r.refusal != "" && r.ledger_after_refusal == 0 && r.refused_status != "RUNNING", "a tiny cap must refuse the VM before it is created: " + json_stringify(r));
+assert(!r.too_high_accepted && r.raised_accepted, "caps above the $0.25 ceiling must be rejected and $0.25 accepted");
+assert(r.create_error == "" && r.created_status == "RUNNING" && r.cleaned == 1, "under the raised cap the VM must be created and cleaned up");
+println("default cap $" + str(r.default_cap) + "; cap $0.0001 refused " + vm + ": " + r.refusal);
+println("cap $5 rejected (ceiling $0.25); cap $0.25 created the VM, estimate $" + str(r.estimate) + ", cleaned up");
+sim_report(o, {target: o.target, host: "lmgcp", guardrail: r});
+sim_pass(o);

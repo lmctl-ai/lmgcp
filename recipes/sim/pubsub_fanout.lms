@@ -1,0 +1,49 @@
+# Access: Write to gcpsim with the native lmgcp host (run ledger, cost cap)
+# What: Pub/Sub fan-out: one order topic, three independent subscriptions (email, analytics, audit), every published event reaches every subscriber exactly once, ledger cleanup
+# When: Letting several site features react to one event without coupling them
+# Emulator: gcpsim (Pub/Sub) on http://127.0.0.1:4588
+# Run: lmscript recipes/sim/pubsub_fanout.lms
+# Arguments: --endpoint URL --host PATH --run ID --out DIR
+# Cleanup: gcp.cleanup_ledger() deletes the subscriptions and the topic
+import "./lib/common.lms";
+
+o = sim_options("pubsub_fanout", {}, "usage: pubsub_fanout.lms [--endpoint URL|fake] [--host PATH]");
+topic = "lmgcp-sim-events-" + o.run;
+
+program = _lmcode_ cli="lmgcp";
+  let t = gcp.pubsub_create_topic(${topic});
+  let subs = str_list().add("lmgcp-sim-email-" + ${o.run}).add("lmgcp-sim-analytics-" + ${o.run}).add("lmgcp-sim-audit-" + ${o.run});
+  for (s in subs) { gcp.pubsub_create_subscription(s, ${topic}, 30, ""); }
+  let events = str_list().add("order-created").add("payment-captured").add("order-shipped");
+  for (e in events) { gcp.pubsub_publish(${topic}, "{\"event\":\"" + e + "\"}", str_map().set("event", e)); }
+  let counts = str_list();
+  let complete = 0;
+  for (s in subs) {
+    let got = str_list();
+    let polls = 0;
+    while (got.len() < events.len() && polls < 15) {
+      polls = polls + 1;
+      for (m in gcp.pubsub_pull(s, 10)) { got.add(m); }
+    }
+    counts.add(str(got.len()));
+    if (got.len() == events.len()) { complete = complete + 1; }
+  }
+  let cleaned = gcp.cleanup_ledger();
+  lmcode_return_put("topic", t.name());
+  lmcode_return_put("subscriptions", subs.join(","));
+  lmcode_return_put("events", events.len());
+  lmcode_return_put("counts", counts.join(","));
+  lmcode_return_put("complete", complete);
+  lmcode_return_put("cleaned", cleaned);
+  lmcode_return_put("ledger_after", gcp.ledger_count());
+  lmcode_return_put("error", gcp.last_error());
+  lmcode_return_put("cost", gcp.cost_report());
+end _lmcode_
+
+r = sim_run(program, gcp_native_command(o)).result;
+println(r.cost);
+assert(r.error == "" && r.complete == 3, "every subscription must receive all " + str(r.events) + " events (counts " + r.counts + "): " + r.error);
+assert(r.cleaned == 4 && r.ledger_after == 0, "cleanup must remove three subscriptions and the topic");
+println(r.topic + " -> " + r.subscriptions + ": " + str(r.events) + " events each (" + r.counts + "); everything removed");
+sim_report(o, {target: o.target, host: "lmgcp", fanout: r});
+sim_pass(o);

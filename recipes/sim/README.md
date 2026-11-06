@@ -67,6 +67,18 @@ ports, runs every recipe in a temporary directory (fake-backed ones with
 | `bigquery_analytics.lms` | lmgcp | in-process fake | Dataset with a time-partitioned page-view table and an orders table, schema read-back, table drop |
 | `dns_and_observability.lms` | lmgcp | in-process fake | Public DNSSEC zone with A/CNAME/TXT records, error log sink to a bucket, structured log entries, latency alert policy |
 | `iam_posture_review.lms` | lmgcp | in-process fake | Read-only: service accounts with key ages, role bindings, label compliance, resource graph edges |
+| `smoke_test.lms` | lmgcp cloud | gcpsim GCS, Pub/Sub | CI smoke test: emulator answers, bucket/object/queue/message round trips, timed |
+| `error_handling.lms` | lmgcp cloud | gcpsim GCS, Pub/Sub | Error contract: idempotent creates and deletes, false-not-fail probes, NOT_FOUND/CONFLICT with HTTP status, pre-flight INVALID_ARGUMENT guards |
+| `object_listing_pagination.lms` | lmgcp cloud | gcpsim GCS | 120 objects, continuation-token paging in pages of 50, ascending order, prefix counts, exhaustive list |
+| `binary_object_roundtrip.lms` | lmgcp cloud | gcpsim GCS | PNG header, all 256 byte values, empty object, UTF-8 text, 64 KiB file byte-exact with content types and ETags |
+| `queue_visibility_timeout.lms` | lmgcp cloud | gcpsim Pub/Sub | In-flight messages invisible; redelivery after the ack deadline is forced with nack(0) because gcpsim does not expire deadlines; drained |
+| `upload_thumbnail_pipeline.lms` | lmgcp cloud | gcpsim GCS, Pub/Sub | Uploads enqueue jobs, a worker writes thumbnails with provenance metadata, every upload gets exactly one |
+| `blue_green_release.lms` | lmgcp cloud | gcpsim GCS | Two release trees, a current.json pointer, instant switch, verified rollback, prune of the retired release |
+| `concurrent_uploaders.lms` | lmgcp cloud | gcpsim GCS | Four host processes upload disjoint prefixes at once (parallel_map), one listing proves nothing lost |
+| `persistence_restart.lms` | lmgcp cloud | gcpsim GCS, Pub/Sub | Write phase, emulator restart with --data-dir, verify phase: objects intact, queue present (runner shows it as persistence_restart*) |
+| `pubsub_fanout.lms` | lmgcp | gcpsim Pub/Sub | One topic, three subscriptions, every event reaches every subscriber exactly once |
+| `cost_cap_guardrail.lms` | lmgcp | in-process fake | A tiny cap refuses a VM before any request, caps above $0.25 are rejected, the raised cap lets the same VM through |
+| `artifact_registry_gke.lms` | lmgcp | in-process fake | Immutable-tag Docker repository plus a GKE hardening review (private nodes, workload identity, binary authorization) |
 
 ## Emulator findings
 
@@ -85,3 +97,4 @@ Recorded while verifying against gcpsim v0.2.23 (floci-gcp 0.11.0):
   sweep recipe simply exits without `cleanup_ledger()`.
 - `--sweep` verifies ownership labels only for buckets; other kinds are retained with
   "ownership check unsupported for resource kind".
+- Pub/Sub on gcpsim never redelivers a pulled message when its ack deadline expires; only `modifyAckDeadline(0)` (lmcloud `queue_nack(..., 0)`) hands it back. `queue_visibility_timeout.lms` records whether redelivery was natural or forced.
