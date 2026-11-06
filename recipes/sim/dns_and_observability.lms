@@ -1,0 +1,66 @@
+# Access: Write to lmgcp's in-process fake GCP server (Cloud DNS, Logging sinks and Monitoring are not served by gcpsim 0.2.x)
+# What: Site operations: a public DNS zone with A/CNAME/TXT records, a log sink routing errors to a bucket, structured log entries with severity counts, a latency alert policy, teardown
+# When: Preparing the DNS and observability side of a launch
+# Emulator: lmgcp in-process fake (default --endpoint fake)
+# Run: lmscript recipes/sim/dns_and_observability.lms
+# Arguments: --endpoint fake|URL --host PATH --run ID --out DIR --domain NAME
+# Cleanup: gcp.cleanup_ledger() deletes the alert policy, sink, records, zone and bucket
+import "./lib/common.lms";
+
+o = sim_options("dns_and_observability", {
+  endpoint: {type: "string", default: getenv("LMGCP_FAKE_ENDPOINT", "fake"), description: "'fake' (in-process GCP server) or a gcpsim origin"},
+  domain: {type: "string", default: "lmgcp-sim.example", description: "zone apex without trailing dot"}
+}, "usage: dns_and_observability.lms [--endpoint fake|URL] [--host PATH] [--domain NAME]");
+zone = "lmgcp-sim-zone-" + o.run;
+dns_name = o.domain + ".";
+bucket = "lmgcp-sim-logs-" + o.run;
+sink = "lmgcp-sim-errors-" + o.run;
+alert = "lmgcp-sim-latency-" + o.run;
+
+program = _lmcode_ cli="lmgcp";
+  let z = gcp.dns_create_zone(${zone}, ${dns_name}, "public", true);
+  let a = gcp.dns_add_record(${zone}, "www." + ${dns_name}, "A", 300, "203.0.113.20");
+  let cname = gcp.dns_add_record(${zone}, "blog." + ${dns_name}, "CNAME", 300, "www." + ${dns_name});
+  let txt = gcp.dns_add_record(${zone}, ${dns_name}, "TXT", 3600, "\"v=spf1 -all\"");
+  let records = gcp.dns_list_records(${zone});
+  let zone_info = gcp.dns_get_zone(${zone});
+  let logs_bucket = gcp.storage_create_bucket(${bucket}, "US-CENTRAL1", "STANDARD");
+  let s = gcp.logging_create_sink(${sink}, "storage.googleapis.com/" + ${bucket}, "severity>=ERROR");
+  let w1 = gcp.logging_write_entry("lmgcp-sim-web", "INFO", "GET / 200 12ms", str_map().set("site", "lmgcp-sim"));
+  let w2 = gcp.logging_write_entry("lmgcp-sim-web", "ERROR", "GET /checkout 500 upstream timeout", str_map().set("site", "lmgcp-sim"));
+  let w3 = gcp.logging_write_entry("lmgcp-sim-web", "WARNING", "GET /search 200 950ms slow", str_map().set("site", "lmgcp-sim"));
+  let counts = gcp.logging_severity_counts();
+  let ap = gcp.monitoring_create_alert_policy(${alert}, "run.googleapis.com/request_latencies", 500.0, 300);
+  let series = gcp.monitoring_query_series("run.googleapis.com/request_latencies", 6);
+  let err = gcp.last_error();
+  let cleaned = gcp.cleanup_ledger();
+  lmcode_return_put("zone", z.name());
+  lmcode_return_put("dns_name", z.dns_name());
+  lmcode_return_put("dnssec", z.dnssec());
+  lmcode_return_put("records_ok", a && cname && txt);
+  lmcode_return_put("record_count", zone_info.record_count());
+  lmcode_return_put("records", records.join(" | "));
+  lmcode_return_put("sink", s.name());
+  lmcode_return_put("sink_filter", s.filter());
+  lmcode_return_put("sink_destination", s.destination());
+  lmcode_return_put("writes_ok", w1 && w2 && w3);
+  lmcode_return_put("error_count", counts.get_or("ERROR", "0"));
+  lmcode_return_put("alert", ap.name());
+  lmcode_return_put("alert_threshold", ap.threshold());
+  lmcode_return_put("series_points", series.len());
+  lmcode_return_put("error", err);
+  lmcode_return_put("cleaned", cleaned);
+  lmcode_return_put("ledger_after", gcp.ledger_count());
+  lmcode_return_put("cost", gcp.cost_report());
+end _lmcode_
+
+r = sim_run(program, gcp_native_command(o)).result;
+println(r.cost);
+assert(r.error == "" && r.records_ok, "zone and records must be created: " + r.error);
+assert(r.record_count >= 3 && r.dnssec, "the zone must hold the three records with DNSSEC on");
+assert(r.writes_ok && r.sink_filter == "severity>=ERROR" && str(r.error_count) != "0", "log writes, sink filter and severity counts must agree");
+assert(r.alert_threshold == 500.0 && r.series_points > 0 && r.ledger_after == 0, "alert policy, metric series and cleanup must succeed: " + json_stringify({threshold: r.alert_threshold, points: r.series_points, ledger_after: r.ledger_after, cleaned: r.cleaned}));
+println(r.zone + " (" + r.dns_name + "): " + r.records);
+println("sink " + r.sink + " [" + r.sink_filter + "] -> " + r.sink_destination + "; ERROR entries: " + str(r.error_count) + "; alert " + r.alert + " at " + str(r.alert_threshold) + "ms p95; everything removed");
+sim_report(o, {target: o.target, host: "lmgcp", ops: r});
+sim_pass(o);

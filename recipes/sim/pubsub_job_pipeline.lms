@@ -1,0 +1,62 @@
+# Access: Write to gcpsim with the native lmgcp host (run ledger, cost cap)
+# What: Pub/Sub job pipeline for a web site: labelled topic, worker subscription with a dead-letter topic, attribute-tagged publishes, pulls, listings, ledger cleanup
+# When: Decoupling order processing or notifications from request handling
+# Emulator: gcpsim (Pub/Sub) on http://127.0.0.1:4588
+# Run: lmscript recipes/sim/pubsub_job_pipeline.lms
+# Arguments: --endpoint URL --host PATH --run ID --out DIR
+# Cleanup: gcp.cleanup_ledger() deletes the subscription and both topics
+import "./lib/common.lms";
+
+o = sim_options("pubsub_job_pipeline", {}, "usage: pubsub_job_pipeline.lms [--endpoint URL|fake] [--host PATH]");
+topic = "lmgcp-sim-orders-" + o.run;
+dlq = "lmgcp-sim-orders-dlq-" + o.run;
+sub = "lmgcp-sim-orders-worker-" + o.run;
+
+program = _lmcode_ cli="lmgcp";
+  let t = gcp.pubsub_create_topic(${topic});
+  let d = gcp.pubsub_create_topic(${dlq});
+  let labelled = gcp.pubsub_set_topic_labels(${topic}, str_map().set("site", "lmgcp-sim").set("stage", "orders"));
+  let s = gcp.pubsub_create_subscription(${sub}, ${topic}, 30, ${dlq});
+  let ids = str_list();
+  for (i in range(1, 4)) {
+    let attrs = str_map().set("kind", "order").set("priority", str(i)).set("run", ${o.run});
+    ids.add(gcp.pubsub_publish(${topic}, "{\"order\":" + str(i) + ",\"total\":" + str(i * 1250) + "}", attrs));
+  }
+  let pulled = str_list();
+  let polls = 0;
+  while (pulled.len() < 3 && polls < 20) {
+    polls = polls + 1;
+    for (m in gcp.pubsub_pull(${sub}, 10)) { pulled.add(m); }
+  }
+  let info = gcp.pubsub_get_subscription(${sub});
+  let topics = gcp.pubsub_list_topics();
+  let subs = gcp.pubsub_list_subscriptions();
+  let cleaned = gcp.cleanup_ledger();
+  lmcode_return_put("topic", t.name());
+  lmcode_return_put("dlq", d.name());
+  lmcode_return_put("labelled", labelled);
+  lmcode_return_put("subscription", s.name());
+  lmcode_return_put("ack_deadline", info.ack_deadline_sec());
+  lmcode_return_put("dead_letter_topic", info.dead_letter_topic());
+  lmcode_return_put("published", ids.len());
+  lmcode_return_put("pulled", pulled.len());
+  let first_message = "";
+  if (pulled.len() > 0) { first_message = pulled.at(0); }
+  lmcode_return_put("first_message", first_message);
+  lmcode_return_put("polls", polls);
+  lmcode_return_put("topics_seen", topics.contains(${topic}) && topics.contains(${dlq}));
+  lmcode_return_put("subs_seen", subs.contains(${sub}));
+  lmcode_return_put("cleaned", cleaned);
+  lmcode_return_put("ledger_after", gcp.ledger_count());
+  lmcode_return_put("last_error", gcp.last_error());
+  lmcode_return_put("cost", gcp.cost_report());
+end _lmcode_
+
+r = sim_run(program, gcp_native_command(o)).result;
+println(r.cost);
+assert(r.published == 3 && r.pulled == 3, "three publishes must be pulled by the worker (" + str(r.pulled) + " pulled): " + r.last_error);
+assert(r.labelled && r.topics_seen && r.subs_seen, "topic labels, topic and subscription listings must reflect the pipeline");
+assert(r.cleaned == 3 && r.ledger_after == 0, "cleanup must remove subscription and both topics");
+println(r.topic + " -> " + r.subscription + " (ack " + str(r.ack_deadline) + "s, dead letter " + r.dead_letter_topic + "); first message: " + r.first_message);
+sim_report(o, {target: o.target, host: "lmgcp", pipeline: r});
+sim_pass(o);

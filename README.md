@@ -17,6 +17,8 @@ lmctl autorun examples/01_project_inventory_overview.lms
 lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/01_project_inventory_overview.lms
 ```
 
+Recipes that run `lmgcp` against the local [gcpsim](https://github.com/lmctl-ai/gcpsim) emulator (GCS site hosting, Pub/Sub jobs, Cloud Run services, bearer-token permissions, leftover sweeps) and against the in-process fake for compute, SQL, secrets, BigQuery, DNS and observability live in [recipes/sim/README.md](recipes/sim/README.md).
+
 ## Visual Gallery (40 Self-Executing `.lms` Cloud Stories)
 
 Every image below is generated directly by its `.lms` script in [`examples/`](examples/) against the deterministic in-process GCP REST emulator and rendered via [`lmdraw`](https://github.com/lmctl-ai/lmdraw). Every example measures its own cost using the `RunLedger` price table, enforces a per-example cost cap (default **`$0.05`**, hard ceiling **`$0.25`** per run), and prints `estimated cost: $0.00xx` (or `estimated cost: $0.00` for cost-free read-only stories) at the end. See [Cost per Example & Ledger Price Table](#cost-per-example--ledger-price-table) for how estimates are computed (`us-central1` list pricing; prices vary by region and change over time).

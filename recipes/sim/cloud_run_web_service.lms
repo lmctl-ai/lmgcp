@@ -1,0 +1,48 @@
+# Access: Write to gcpsim with the native lmgcp host (run ledger, cost cap, sandbox shape limits)
+# What: Container web service on Cloud Run v2: deploy an image with cpu/memory/max-instance caps, read its URL, split traffic 90/10 for a canary, label it, list, delete through the ledger
+# When: Shipping a containerised site or API without managing VMs
+# Emulator: gcpsim (Cloud Run v2) on http://127.0.0.1:4588
+# Run: lmscript recipes/sim/cloud_run_web_service.lms
+# Arguments: --endpoint URL --host PATH --run ID --out DIR --image REF
+# Cleanup: gcp.cleanup_ledger() deletes the service
+import "./lib/common.lms";
+
+o = sim_options("cloud_run_web_service", {image: {type: "string", default: "us-docker.pkg.dev/cloudrun/container/hello", description: "container image reference"}}, "usage: cloud_run_web_service.lms [--endpoint URL|fake] [--host PATH] [--image REF]");
+service = "lmgcp-sim-web-" + o.run;
+
+program = _lmcode_ cli="lmgcp";
+  let svc = gcp.run_deploy_service("us-central1", ${service}, ${o.image}, 1000, 512, 3);
+  let deploy_error = gcp.last_error();
+  let got = gcp.run_get_service("us-central1", ${service});
+  let split = gcp.run_set_traffic_split("us-central1", ${service}, 90, 10);
+  let labelled = gcp.run_set_labels("us-central1", ${service}, str_map().set("site", "lmgcp-sim").set("tier", "web"));
+  let after = gcp.run_get_service("us-central1", ${service});
+  let listed = gcp.run_list_services("us-central1");
+  let cleaned = gcp.cleanup_ledger();
+  lmcode_return_put("service", svc.name());
+  lmcode_return_put("deploy_error", deploy_error);
+  lmcode_return_put("region", got.region());
+  lmcode_return_put("uri", got.uri());
+  lmcode_return_put("image", got.image());
+  lmcode_return_put("ingress", got.ingress());
+  lmcode_return_put("latest_revision", got.latest_revision());
+  lmcode_return_put("max_instances", got.max_instances());
+  lmcode_return_put("split", split);
+  lmcode_return_put("stable_pct", after.stable_traffic_pct());
+  lmcode_return_put("canary_pct", after.canary_traffic_pct());
+  lmcode_return_put("labelled", labelled);
+  lmcode_return_put("listed", listed.contains(${service}));
+  lmcode_return_put("cleaned", cleaned);
+  lmcode_return_put("ledger_after", gcp.ledger_count());
+  lmcode_return_put("cost", gcp.cost_report());
+end _lmcode_
+
+r = sim_run(program, gcp_native_command(o)).result;
+println(r.cost);
+assert(r.deploy_error == "", "deploy must succeed: " + r.deploy_error);
+assert(starts_with(r.uri, "https://") && r.latest_revision != "", "the service must expose a URL and a revision");
+assert(r.split && r.labelled && r.listed, "traffic split, labels and listing must succeed");
+assert(r.cleaned == 1 && r.ledger_after == 0, "cleanup must delete the service");
+println(r.service + " in " + r.region + " serving " + r.image + " at " + r.uri + " (ingress " + r.ingress + ", max " + str(r.max_instances) + " instances); traffic stable/canary " + str(r.stable_pct) + "/" + str(r.canary_pct) + "; service deleted");
+sim_report(o, {target: o.target, host: "lmgcp", service: r});
+sim_pass(o);

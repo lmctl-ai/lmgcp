@@ -1,0 +1,65 @@
+# Access: Write to gcpsim with the native lmgcp host (run ledger, cost cap)
+# What: Host a web site on Cloud Storage: labelled bucket with uniform access, versioning and lifecycle rules, HTML/CSS/JS objects, listing, reads, object sizes, ledger cleanup, cost report
+# When: Standing up a static front end on GCS before adding a load balancer or CDN
+# Emulator: gcpsim (Cloud Storage) on http://127.0.0.1:4588
+# Run: lmscript recipes/sim/gcs_website_hosting.lms
+# Arguments: --endpoint URL --host PATH --run ID --out DIR
+# Cleanup: gcp.cleanup_ledger() deletes the bucket and its objects
+import "./lib/common.lms";
+
+o = sim_options("gcs_website_hosting", {}, "usage: gcs_website_hosting.lms [--endpoint URL|fake] [--host PATH]");
+bucket = "lmgcp-sim-www-" + o.run;
+
+program = _lmcode_ cli="lmgcp";
+  let b = ${bucket};
+  let created = gcp.storage_create_bucket(b, "US-CENTRAL1", "STANDARD");
+  let labels = str_map().set("site", "lmgcp-sim").set("tier", "frontend").set("run", ${o.run});
+  let labelled = gcp.storage_set_bucket_labels(b, labels);
+  let uniform = gcp.storage_set_uniform_access(b, true);
+  let versioned = gcp.storage_set_bucket_versioning(b, true);
+  let lifecycle = gcp.storage_set_bucket_lifecycle(b, 365, 30);
+  let put_index = gcp.storage_put_object(b, "index.html", "<!doctype html><html><head><title>lmgcp</title><link rel=stylesheet href=assets/site.css></head><body><h1>Hello from Cloud Storage</h1></body></html>", "text/html; charset=utf-8");
+  let put_css = gcp.storage_put_object(b, "assets/site.css", "body{font-family:system-ui;margin:2rem}", "text/css");
+  let put_js = gcp.storage_put_object(b, "assets/app.js", "console.log('lmgcp site')", "application/javascript");
+  let put_404 = gcp.storage_put_object(b, "404.html", "<h1>Not found</h1>", "text/html; charset=utf-8");
+  let info = gcp.storage_get_bucket(b);
+  let assets = gcp.storage_list_objects(b, "assets/");
+  let all = gcp.storage_list_objects(b, "");
+  let index_html = gcp.storage_read_object(b, "index.html");
+  let css_size = gcp.storage_object_size(b, "assets/site.css");
+  let removed_js = gcp.storage_delete_object(b, "assets/app.js");
+  let after = gcp.storage_list_objects(b, "");
+  let cleaned = gcp.cleanup_ledger();
+  lmcode_return_put("bucket", created.name());
+  lmcode_return_put("location", created.location());
+  lmcode_return_put("storage_class", created.storage_class());
+  lmcode_return_put("labelled", labelled);
+  lmcode_return_put("uniform", uniform && info.uniform_access());
+  lmcode_return_put("versioned", versioned && info.versioning());
+  lmcode_return_put("lifecycle_ok", lifecycle);
+  lmcode_return_put("nearline_days", info.lifecycle_nearline_days());
+  lmcode_return_put("delete_days", info.lifecycle_delete_days());
+  lmcode_return_put("puts_ok", put_index && put_css && put_js && put_404);
+  lmcode_return_put("object_count", info.object_count());
+  lmcode_return_put("asset_count", assets.len());
+  lmcode_return_put("all_count", all.len());
+  lmcode_return_put("index_ok", str_contains(index_html, "Hello from Cloud Storage"));
+  lmcode_return_put("css_size", css_size);
+  lmcode_return_put("removed_js", removed_js);
+  lmcode_return_put("after_count", after.len());
+  lmcode_return_put("cleaned", cleaned);
+  lmcode_return_put("ledger_after", gcp.ledger_count());
+  lmcode_return_put("last_error", gcp.last_error());
+  lmcode_return_put("cost", gcp.cost_report());
+end _lmcode_
+
+r = sim_run(program, gcp_native_command(o)).result;
+println(r.cost);
+assert(r.puts_ok && r.index_ok, "the site files must upload and read back: " + r.last_error);
+assert(r.asset_count == 2 && r.all_count == 4 && r.after_count == 3 && r.removed_js, "listing must reflect uploads and the deleted script");
+if (r.css_size != 38) { println("note: object_size reported " + str(r.css_size) + " bytes for assets/site.css (38 written); gcpsim object metadata omits the size"); }
+assert(r.labelled && r.lifecycle_ok, "labels and lifecycle must be accepted");
+assert(r.cleaned == 1 && r.ledger_after == 0, "cleanup must remove the one ledger-owned bucket");
+println("gs://" + r.bucket + " (" + r.location + ", " + r.storage_class + "): uniform=" + str(r.uniform) + " versioning=" + str(r.versioned) + " nearline@" + str(r.nearline_days) + "d delete@" + str(r.delete_days) + "d, " + str(r.all_count) + " objects served; bucket removed");
+sim_report(o, {target: o.target, host: "lmgcp", site: r});
+sim_pass(o);

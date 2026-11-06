@@ -1,0 +1,80 @@
+# Access: Read-only helpers; importing this file changes no files, processes or environment.
+# What: Shared argument parsing, emulator defaults, host invocation and report helpers for recipes/sim.
+# When: Import from every recipes/sim/*.lms entry. See recipes/sim/README.md.
+# Emulator: gcpsim on http://127.0.0.1:4588 (GCS, Pub/Sub, Cloud Run v2, bearer-token policies); lmgcp's in-process fake GCP server for every other service.
+
+fn sim_run_id() {
+  let stamp = str(now());
+  return substr(stamp, len(stamp) - 9, 9);
+}
+
+fn sim_flags(extra) {
+  let base = {
+    endpoint: {type: "string", default: getenv("GCPSIM_ENDPOINT", "http://127.0.0.1:4588"), description: "gcpsim origin (plain http on a loopback address) or 'fake' for lmgcp's in-process GCP server"},
+    host: {type: "string", default: getenv("LMGCP_BIN", "lmgcp"), description: "lmgcp executable (the schema is read from the PATH binary named lmgcp; the same binary serves `lmgcp cloud`)"},
+    project: {type: "string", default: getenv("LMGCP_PROJECT", "gcpsim-local"), description: "project id (gcpsim serves gcpsim-local)"},
+    token: {type: "string", default: getenv("LMGCP_ACCESS_TOKEN", ""), description: "dummy bearer token for an --auth enforce gcpsim"},
+    out: {type: "string", default: "", description: "report directory (default data/sim/<recipe>)"},
+    run: {type: "string", default: "", description: "run id suffix; digits or lowercase letters, default from the clock"}
+  };
+  return merge(base, extra);
+}
+
+fn sim_options(name, extra, usage) {
+  let parsed = args_parse(ARGV, sim_flags(extra), usage);
+  if (parsed.help_requested) { println(parsed.help); exit(0); }
+  let o = parsed.values;
+  o.name = name;
+  if (o.out == "") { o.out = "data/sim/" + name; }
+  if (o.run == "") { o.run = sim_run_id(); }
+  assert(regex_test(o.run, "^[a-z0-9]{1,16}$"), "--run must be 1..16 lowercase letters or digits");
+  if (o.endpoint != "fake") {
+    assert(regex_test(o.endpoint, "^http://(127\\.0\\.0\\.1|localhost|\\[::1\\])(:[0-9]{1,5})?/?$"), "--endpoint must be 'fake' or a loopback http origin such as http://127.0.0.1:4588");
+    o.endpoint = regex_replace(o.endpoint, "/$", "");
+  }
+  o.target = o.endpoint == "fake" ? "lmgcp in-process fake GCP" : "gcpsim " + o.endpoint;
+  mkdir(o.out, true);
+  return o;
+}
+
+# Environment for the native lmgcp host. With --endpoint fake the host boots its in-process GCP server;
+# otherwise every SDK request goes to the gcpsim origin. Live mode is never enabled.
+fn gcp_native_command(o) {
+  set_env("LMGCP_LIVE", "");
+  set_env("LMGCP_ENDPOINT", o.endpoint == "fake" ? "" : o.endpoint);
+  set_env("LMGCP_ACCESS_TOKEN", o.token);
+  set_env("LMGCP_PROJECT", o.project);
+  set_env("LMGCP_REGION", "us-central1");
+  set_env("LMGCP_ZONE", "us-central1-a");
+  set_env("LMGCP_STATE_DIR", o.out + "/state");
+  return [o.host, "--lmcode", "$DSLFILE"];
+}
+
+# Command line for `lmgcp cloud`, the shared lmcloud schema (bucket/object/queue) on gcpsim.
+fn gcp_cloud_command(o) {
+  assert(o.endpoint != "fake", "the shared lmcloud schema recipes need a gcpsim endpoint");
+  set_env("LMGCP_LIVE", "");
+  set_env("LMCLOUD_ENDPOINT", o.endpoint);
+  set_env("LMGCP_ENDPOINT", o.endpoint);
+  set_env("LMGCP_PROJECT", o.project);
+  set_env("LMGCP_SIM_TOKEN", o.token);
+  return [o.host, "cloud", "--lmcode", "$DSLFILE"];
+}
+
+fn sim_run(program, command) {
+  let r = run_lmcode(program, {command: command});
+  if (!r.ok) {
+    println("host failed: " + json_stringify(r));
+    exit(1);
+  }
+  return r;
+}
+
+fn sim_report(o, data) {
+  let path = o.out + "/" + o.name + ".json";
+  write_json(path, data, 2);
+  println("report: " + path);
+  return path;
+}
+
+fn sim_pass(o) { println("PASS " + o.name); }

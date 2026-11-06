@@ -1,0 +1,68 @@
+# Access: Write to lmgcp's in-process fake GCP server (compute is not served by gcpsim 0.2.x)
+# What: VM-hosted web tier: custom VPC and subnet, firewall allowing 80/443 from one /32, an e2-micro instance, labels, stop/start, disk listing, ledger teardown
+# When: Rehearsing a VM launch for a site; the sandbox shape allowlist keeps it to free-tier machine types
+# Emulator: lmgcp in-process fake (default --endpoint fake); pass a gcpsim origin only once gcpsim serves Compute Engine
+# Run: lmscript recipes/sim/compute_web_vm.lms
+# Arguments: --endpoint fake|URL --host PATH --run ID --out DIR --cidr A.B.C.D/32
+# Cleanup: gcp.cleanup_ledger() deletes the instance, firewall, subnet and VPC in reverse order
+import "./lib/common.lms";
+
+o = sim_options("compute_web_vm", {
+  endpoint: {type: "string", default: getenv("LMGCP_FAKE_ENDPOINT", "fake"), description: "'fake' (in-process GCP server) or a gcpsim origin"},
+  cidr: {type: "string", default: "203.0.113.10/32", description: "the one IPv4 /32 allowed to reach the web ports"}
+}, "usage: compute_web_vm.lms [--endpoint fake|URL] [--host PATH] [--cidr A.B.C.D/32]");
+vpc = "lmgcp-sim-web-vpc-" + o.run;
+subnet = "lmgcp-sim-web-subnet-" + o.run;
+firewall = "lmgcp-sim-allow-web-" + o.run;
+vm = "lmgcp-sim-web-" + o.run;
+
+program = _lmcode_ cli="lmgcp";
+  gcp.set_cost_cap_usd(0.25);
+  let net = gcp.network_create_vpc(${vpc}, false);
+  let sn = gcp.network_create_subnet("us-central1", ${subnet}, ${vpc}, "10.42.0.0/24", true);
+  let fw = gcp.network_create_firewall(${firewall}, ${vpc}, "INGRESS", 1000, "tcp", "80,443", ${o.cidr});
+  let inst = gcp.compute_create_instance("us-central1-a", ${vm}, "e2-micro", "debian-12");
+  let create_error = gcp.last_error();
+  let labelled = gcp.compute_set_instance_labels("us-central1-a", ${vm}, str_map().set("site", "lmgcp-sim").set("tier", "web"));
+  let stopped = gcp.compute_stop_instance("us-central1-a", ${vm});
+  let after_stop = gcp.compute_get_instance("us-central1-a", ${vm});
+  let started = gcp.compute_start_instance("us-central1-a", ${vm});
+  let after_start = gcp.compute_get_instance("us-central1-a", ${vm});
+  let disks = gcp.compute_list_disks("us-central1-a");
+  let count = gcp.compute_instance_count("us-central1-a");
+  let firewalls = gcp.network_list_firewalls();
+  let cleaned = gcp.cleanup_ledger();
+  lmcode_return_put("vpc", net.name());
+  lmcode_return_put("subnet", sn.name());
+  lmcode_return_put("subnet_cidr", sn.cidr());
+  lmcode_return_put("firewall", fw.name());
+  lmcode_return_put("firewall_ports", fw.ports());
+  lmcode_return_put("firewall_source", fw.source_cidr());
+  lmcode_return_put("firewall_open_to_world", fw.is_open_to_world());
+  lmcode_return_put("vm", inst.name());
+  lmcode_return_put("create_error", create_error);
+  lmcode_return_put("machine_type", inst.machine_type());
+  lmcode_return_put("internal_ip", inst.internal_ip());
+  lmcode_return_put("status", inst.status());
+  lmcode_return_put("labelled", labelled);
+  lmcode_return_put("stopped", stopped && after_stop.status() == "TERMINATED");
+  lmcode_return_put("status_after_stop", after_stop.status());
+  lmcode_return_put("started", started && after_start.status() == "RUNNING");
+  lmcode_return_put("disk_count", disks.len());
+  lmcode_return_put("instance_count", count);
+  lmcode_return_put("firewalls_seen", firewalls.contains(${firewall}));
+  lmcode_return_put("cleaned", cleaned);
+  lmcode_return_put("ledger_after", gcp.ledger_count());
+  lmcode_return_put("cost", gcp.cost_report());
+end _lmcode_
+
+r = sim_run(program, gcp_native_command(o)).result;
+println(r.cost);
+assert(r.create_error == "", "instance creation must succeed: " + r.create_error);
+assert(r.status == "RUNNING" && r.machine_type == "e2-micro", "the VM must run on the allowed shape");
+assert(!r.firewall_open_to_world && r.firewall_source == o.cidr, "the firewall must only admit the given /32");
+assert(r.labelled && r.stopped && r.started, "labels, stop and start must round-trip (after stop: " + r.status_after_stop + ")");
+assert(r.cleaned == 4 && r.ledger_after == 0, "cleanup must remove instance, firewall, subnet and VPC");
+println(r.vm + " (" + r.machine_type + ", " + r.internal_ip + ") in " + r.vpc + "/" + r.subnet + " " + r.subnet_cidr + "; firewall " + r.firewall + " tcp " + r.firewall_ports + " from " + r.firewall_source + "; " + str(r.disk_count) + " disks; everything removed");
+sim_report(o, {target: o.target, host: "lmgcp", vm: r});
+sim_pass(o);

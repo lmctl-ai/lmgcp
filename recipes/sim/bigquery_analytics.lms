@@ -1,0 +1,43 @@
+# Access: Write to lmgcp's in-process fake GCP server (BigQuery is not served by gcpsim 0.2.x)
+# What: Site analytics warehouse: a dataset, a time-partitioned page-view table and an orders table, schema read-back, listings, teardown
+# When: Sketching the analytics side of a web property before loading real events
+# Emulator: lmgcp in-process fake (default --endpoint fake)
+# Run: lmscript recipes/sim/bigquery_analytics.lms
+# Arguments: --endpoint fake|URL --host PATH --run ID --out DIR
+# Cleanup: gcp.cleanup_ledger() deletes the tables and the dataset
+import "./lib/common.lms";
+
+o = sim_options("bigquery_analytics", {endpoint: {type: "string", default: getenv("LMGCP_FAKE_ENDPOINT", "fake"), description: "'fake' (in-process GCP server) or a gcpsim origin"}}, "usage: bigquery_analytics.lms [--endpoint fake|URL] [--host PATH]");
+dataset = "lmgcp_sim_analytics_" + o.run;
+
+program = _lmcode_ cli="lmgcp";
+  let ds = gcp.bq_create_dataset(${dataset}, "US");
+  let views = gcp.bq_create_table(${dataset}, "page_views", "ts:TIMESTAMP,path:STRING,visitor:STRING,ms:INTEGER", "ts");
+  let orders = gcp.bq_create_table(${dataset}, "orders", "ts:TIMESTAMP,order_id:STRING,total_cents:INTEGER", "ts");
+  let err = gcp.last_error();
+  let got = gcp.bq_get_table(${dataset}, "page_views");
+  let datasets = gcp.bq_list_datasets();
+  let dropped = gcp.bq_delete_table(${dataset}, "orders");
+  let cleaned = gcp.cleanup_ledger();
+  lmcode_return_put("dataset", ds.dataset_id());
+  lmcode_return_put("location", ds.location());
+  lmcode_return_put("error", err);
+  lmcode_return_put("views_table", views.table_id());
+  lmcode_return_put("orders_table", orders.table_id());
+  lmcode_return_put("partition_field", got.partition_field());
+  lmcode_return_put("schema", got.schema_spec());
+  lmcode_return_put("datasets_seen", datasets.contains(${dataset}));
+  lmcode_return_put("orders_dropped", dropped);
+  lmcode_return_put("cleaned", cleaned);
+  lmcode_return_put("ledger_after", gcp.ledger_count());
+  lmcode_return_put("cost", gcp.cost_report());
+end _lmcode_
+
+r = sim_run(program, gcp_native_command(o)).result;
+println(r.cost);
+assert(r.error == "" && r.views_table == "page_views" && r.orders_table == "orders", "both tables must be created: " + r.error);
+assert(r.partition_field == "ts" && contains(r.schema, "path:STRING"), "the page_views table must keep its partition field and schema");
+assert(r.datasets_seen && r.orders_dropped && r.ledger_after == 0, "listing, table drop and cleanup must succeed");
+println(r.dataset + " (" + r.location + "): page_views partitioned by " + r.partition_field + " [" + r.schema + "], orders dropped, dataset removed");
+sim_report(o, {target: o.target, host: "lmgcp", warehouse: r});
+sim_pass(o);

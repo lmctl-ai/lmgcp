@@ -1,0 +1,53 @@
+# Access: Read-only against lmgcp's in-process fake GCP server (IAM listings are empty on gcpsim 0.2.x)
+# What: Permission posture for a project hosting a web site: service accounts with key ages, project role bindings, label compliance of the inventory, resource graph edges, inventory summary
+# When: Reviewing who can touch the site's project before granting a deployer identity
+# Emulator: lmgcp in-process fake (default --endpoint fake); works against gcpsim too but reports empty IAM
+# Run: lmscript recipes/sim/iam_posture_review.lms
+# Arguments: --endpoint fake|URL --host PATH --out DIR
+# Cleanup: nothing is created
+import "./lib/common.lms";
+
+o = sim_options("iam_posture_review", {endpoint: {type: "string", default: getenv("LMGCP_FAKE_ENDPOINT", "fake"), description: "'fake' (in-process GCP server) or a gcpsim origin"}}, "usage: iam_posture_review.lms [--endpoint fake|URL] [--host PATH]");
+
+program = _lmcode_ cli="lmgcp";
+  let accounts = gcp.iam_list_service_accounts();
+  let details = str_list();
+  let risky = 0;
+  for (id in accounts) {
+    let sa = gcp.iam_get_service_account(id);
+    let flags = "";
+    if (sa.user_managed_keys() > 0) { flags = flags + " keys=" + str(sa.user_managed_keys()) + "(max " + str(sa.key_max_age_days()) + "d)"; }
+    if (sa.is_default_compute()) { flags = flags + " default-compute"; }
+    if (sa.disabled()) { flags = flags + " disabled"; }
+    if (sa.user_managed_keys() > 0 && sa.key_max_age_days() > 90) { risky = risky + 1; }
+    details.add(sa.email() + " roles=" + sa.roles().join(",") + flags);
+  }
+  let bindings = gcp.iam_list_bindings();
+  let compliance = gcp.audit_label_compliance(str_list().add("site").add("owner"));
+  let summary = gcp.inventory_summary();
+  let edges = gcp.resource_graph_edges();
+  lmcode_return_put("project", gcp.masked_project());
+  lmcode_return_put("auth_mode", gcp.auth_mode());
+  lmcode_return_put("accounts", accounts.len());
+  lmcode_return_put("details", details.join("\n"));
+  lmcode_return_put("risky_keys", risky);
+  lmcode_return_put("bindings", bindings.len());
+  let binding_sample = "";
+  if (bindings.len() > 0) { binding_sample = bindings.at(0); }
+  lmcode_return_put("binding_sample", binding_sample);
+  lmcode_return_put("compliance", compliance.keys().join(",") + " => " + compliance.values().join(","));
+  lmcode_return_put("inventory", summary.keys().join(",") + " => " + summary.values().join(","));
+  lmcode_return_put("edges", edges.len());
+  lmcode_return_put("error", gcp.last_error());
+  lmcode_return_put("cost", gcp.cost_report());
+end _lmcode_
+
+r = sim_run(program, gcp_native_command(o)).result;
+println(r.cost);
+assert(r.error == "", "read-only review must not error: " + r.error);
+if (o.endpoint == "fake") { assert(r.accounts > 0 && r.bindings > 0, "the fake project must expose service accounts and bindings"); }
+println("project " + r.project + " (" + r.auth_mode + "): " + str(r.accounts) + " service accounts, " + str(r.risky_keys) + " with user-managed keys older than 90 days, " + str(r.bindings) + " role bindings, " + str(r.edges) + " graph edges");
+if (r.details != "") { println(r.details); }
+println("label compliance: " + r.compliance);
+sim_report(o, {target: o.target, host: "lmgcp", review: r});
+sim_pass(o);

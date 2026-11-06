@@ -1,0 +1,135 @@
+# Access: Write to a gcpsim started with --auth enforce (shared lmcloud schema, `lmgcp cloud`)
+# What: Permissions on the emulator: author gcpsim's token/policy file with a _json_ template (an admin and a restricted site deployer), then prove the deployer's own buckets and queues work, writes and deletes on a protected bucket and publishes to a protected topic fail with PERMISSION_DENIED, and an unknown bearer token fails with UNAUTHENTICATED
+# When: Testing a web site's service-account policy locally before binding roles in a real project
+# Emulator: gcpsim serve --auth enforce --auth-config <out>/gcpsim-auth.json (default endpoint http://127.0.0.1:4589)
+# Run: lmscript recipes/sim/auth_enforced_denial.lms --prepare; gcpsim serve --port 4589 --auth enforce --auth-config data/sim/auth_enforced_denial/gcpsim-auth.json; lmscript recipes/sim/auth_enforced_denial.lms
+# Arguments: --endpoint URL --host PATH --run ID --out DIR --token TOKEN --admin-token TOKEN [--prepare]
+# Cleanup: the admin token removes the protected bucket and queue; the deployer removes its own
+import "./lib/common.lms";
+
+o = sim_options("auth_enforced_denial", {
+  endpoint: {type: "string", default: getenv("GCPSIM_ENFORCE_ENDPOINT", "http://127.0.0.1:4589"), description: "enforce-mode gcpsim origin"},
+  token: {type: "string", default: "site-deployer-token", description: "bearer token of the restricted site deployer"},
+  admin_token: {flag: "admin-token", type: "string", default: "site-admin-token", description: "bearer token of the unrestricted administrator"},
+  prepare: {type: "boolean", description: "only write the auth config and exit"}
+}, "usage: auth_enforced_denial.lms [--prepare] [--endpoint URL] [--host PATH]");
+deployer = "serviceAccount:site-deployer@" + o.project + ".iam.gserviceaccount.com";
+admin = "user:site-admin@example.test";
+own_bucket = "lmgcp-sim-deploy-" + o.run;
+own_queue = "lmgcp-sim-jobs-" + o.run;
+protected_bucket = "lmgcp-sim-protected-" + o.run;
+protected_queue = "lmgcp-sim-protected-audit-" + o.run;
+
+# gcpsim checks bucket creation against the project, so the deployer may create buckets and queues,
+# but objects and deletes on lmgcp-sim-protected* buckets and publishes to lmgcp-sim-protected* topics are denied.
+auth = _json_;
+{
+  "tokens": {"site-admin-token": ${admin}, "site-deployer-token": ${deployer}},
+  "Statement": [
+    {"Effect": "Allow", "ActionGlob": "*", "ResourceGlob": "*", "Principal": ${admin}},
+    {"Effect": "Allow", "ActionGlob": "storage.*", "ResourceGlob": "*", "Principal": ${deployer}},
+    {"Effect": "Allow", "ActionGlob": "pubsub.*", "ResourceGlob": "projects/${o.project}/*", "Principal": ${deployer}},
+    {"Effect": "Allow", "ActionGlob": "pubsub.*", "ResourceGlob": "projects/${o.project}", "Principal": ${deployer}},
+    {"Effect": "Deny", "ActionGlob": "storage.objects.*", "ResourceGlob": "projects/_/buckets/lmgcp-sim-protected*", "Principal": ${deployer}},
+    {"Effect": "Deny", "Action": "storage.buckets.delete", "ResourceGlob": "projects/_/buckets/lmgcp-sim-protected*", "Principal": ${deployer}},
+    {"Effect": "Deny", "Action": "pubsub.topics.publish", "ResourceGlob": "projects/${o.project}/topics/lmgcp-sim-protected*", "Principal": ${deployer}}
+  ]
+}
+end _json_
+auth_path = o.out + "/gcpsim-auth.json";
+config = auth.value();
+config.tokens = {};
+config.tokens[o.admin_token] = admin;
+config.tokens[o.token] = deployer;
+write_json(auth_path, config);
+println("auth config: " + auth_path);
+if (o.prepare) { println("start the emulator with: gcpsim serve --port 4589 --auth enforce --auth-config " + auth_path); exit(0); }
+
+setup = _lmcode_ schema="../../schema/lmcloud.dsl.json";
+  cloud.set_endpoint("all", ${o.endpoint});
+  cloud.bucket_create(${protected_bucket});
+  cloud.object_put(${protected_bucket}, "audit/2026.log", "immutable audit trail", "text/plain", str_map());
+  cloud.queue_create(${protected_queue});
+  lmcode_return_put("ok", true);
+end _lmcode_
+teardown = _lmcode_ schema="../../schema/lmcloud.dsl.json";
+  cloud.set_endpoint("all", ${o.endpoint});
+  cloud.set_abort_on_error(false);
+  cloud.object_delete(${protected_bucket}, "audit/2026.log");
+  cloud.object_delete(${protected_bucket}, "deploy.txt");
+  lmcode_return_put("bucket", cloud.bucket_delete(${protected_bucket}));
+  lmcode_return_put("queue", cloud.queue_delete(${protected_queue}));
+end _lmcode_
+deploy = _lmcode_ schema="../../schema/lmcloud.dsl.json";
+  cloud.set_endpoint("all", ${o.endpoint});
+  cloud.set_abort_on_error(false);
+  let created = cloud.bucket_create(${own_bucket});
+  let create_code = cloud.last_error().code();
+  cloud.object_put(${own_bucket}, "index.html", "<h1>deployed</h1>", "text/html", str_map());
+  let put_code = cloud.last_error().code();
+  let qcreated = cloud.queue_create(${own_queue});
+  let qcreate_code = cloud.last_error().code();
+  cloud.queue_send(${own_queue}, "{\"job\":1}");
+  let send_code = cloud.last_error().code();
+
+  cloud.object_put(${protected_bucket}, "deploy.txt", "tampered", "text/plain", str_map());
+  let protected_put_code = cloud.last_error().code();
+  let protected_put_status = cloud.last_error().http_status();
+  cloud.object_get(${protected_bucket}, "audit/2026.log");
+  let protected_get_code = cloud.last_error().code();
+  cloud.bucket_delete(${protected_bucket});
+  let protected_delete_code = cloud.last_error().code();
+  cloud.queue_send(${protected_queue}, "{\"forged\":true}");
+  let protected_send_code = cloud.last_error().code();
+
+  cloud.object_delete(${own_bucket}, "index.html");
+  let deleted = cloud.bucket_delete(${own_bucket});
+  let qdeleted = cloud.queue_delete(${own_queue});
+  lmcode_return_put("open_mode", protected_put_code == ErrorCode.OK);
+  lmcode_return_put("created", created);
+  lmcode_return_put("create_code", str(create_code));
+  lmcode_return_put("put_code", str(put_code));
+  lmcode_return_put("qcreate_code", str(qcreate_code));
+  lmcode_return_put("send_code", str(send_code));
+  lmcode_return_put("protected_put_code", str(protected_put_code));
+  lmcode_return_put("protected_put_status", protected_put_status);
+  lmcode_return_put("protected_get_code", str(protected_get_code));
+  lmcode_return_put("protected_delete_code", str(protected_delete_code));
+  lmcode_return_put("protected_send_code", str(protected_send_code));
+  lmcode_return_put("deleted", deleted);
+  lmcode_return_put("qdeleted", qdeleted);
+end _lmcode_
+unauth = _lmcode_ schema="../../schema/lmcloud.dsl.json";
+  cloud.set_endpoint("all", ${o.endpoint});
+  cloud.set_abort_on_error(false);
+  cloud.bucket_create(${own_bucket + "-x"});
+  let code = cloud.last_error().code();
+  if (code == ErrorCode.OK) { cloud.bucket_delete(${own_bucket + "-x"}); }
+  lmcode_return_put("code", str(code));
+  lmcode_return_put("status", cloud.last_error().http_status());
+end _lmcode_
+
+deployer_token = o.token;
+o.token = o.admin_token;
+sim_run(setup, gcp_cloud_command(o));
+o.token = deployer_token;
+r = sim_run(deploy, gcp_cloud_command(o)).result;
+o.token = "not-a-configured-token";
+u = sim_run(unauth, gcp_cloud_command(o)).result;
+o.token = o.admin_token;
+t = sim_run(teardown, gcp_cloud_command(o)).result;
+o.token = deployer_token;
+if (r.open_mode) {
+  println("SKIP: " + o.endpoint + " let the deployer write into the protected bucket, so it is running in open mode; restart it with --auth enforce --auth-config " + auth_path);
+  exit(0);
+}
+assert(r.created && r.create_code == "OK" && r.put_code == "OK" && r.qcreate_code == "OK" && r.send_code == "OK", "the deployer's own bucket, object and queue operations must succeed");
+assert(r.protected_put_code == "PERMISSION_DENIED" && r.protected_put_status == 403 && r.protected_get_code == "PERMISSION_DENIED", "objects in the protected bucket must be denied to the deployer, got " + r.protected_put_code + "/" + r.protected_get_code);
+assert(r.protected_delete_code == "PERMISSION_DENIED" && r.protected_send_code == "PERMISSION_DENIED", "deleting the protected bucket and publishing to the protected topic must be denied, got " + r.protected_delete_code + "/" + r.protected_send_code);
+assert(r.deleted && r.qdeleted && t.bucket && t.queue, "deployer and admin must clean up their resources");
+assert(u.code == "UNAUTHENTICATED" && u.status == 401, "an unknown token must fail with UNAUTHENTICATED/401, got " + u.code + "/" + str(u.status));
+println("deployer allowed: gs://" + own_bucket + " create/put/delete, queue " + own_queue + " create/send/delete");
+println("deployer denied:  gs://" + protected_bucket + " object put/get and bucket delete, publish to " + protected_queue + " (PERMISSION_DENIED 403)");
+println("unknown token: UNAUTHENTICATED 401; admin removed the protected resources");
+sim_report(o, {target: o.target, host: "lmgcp cloud", auth_config: auth_path, deployer: deployer, admin: admin, results: r, unauthenticated: u, teardown: t});
+sim_pass(o);

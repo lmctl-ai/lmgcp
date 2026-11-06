@@ -1,0 +1,51 @@
+# Access: Write to gcpsim with the native lmgcp host and its --sweep command
+# What: Leftover hygiene: a program creates two buckets (one non-empty), records its run id in the durable recovery journal and exits without cleanup, prefix discovery finds them, `lmgcp --sweep` lists and then deletes only that run's ledger-owned resources
+# When: Building the cleanup job that runs after failed deploys or crashed test runs
+# Emulator: gcpsim (Cloud Storage) on http://127.0.0.1:4588; the sweep verifies ownership labels, which the host supports for buckets only
+# Run: lmscript recipes/sim/leftover_sweep.lms
+# Arguments: --endpoint URL --host PATH --run ID --out DIR
+# Cleanup: the sweep is the cleanup; the recipe asserts both resources are gone and that a second sweep deletes nothing
+import "./lib/common.lms";
+
+o = sim_options("leftover_sweep", {}, "usage: leftover_sweep.lms [--endpoint URL|fake] [--host PATH]");
+assert(o.endpoint != "fake", "the sweep needs state that outlives one host process; run it against gcpsim");
+bucket = "lmgcp-sim-orphan-" + o.run;
+backups = "lmgcp-sim-orphan-backups-" + o.run;
+
+orphan = _lmcode_ cli="lmgcp";
+  let b = gcp.storage_create_bucket(${bucket}, "US-CENTRAL1", "STANDARD");
+  gcp.storage_put_object(${bucket}, "deploy.log", "crashed mid-deploy", "text/plain");
+  let b2 = gcp.storage_create_bucket(${backups}, "US-CENTRAL1", "STANDARD");
+  lmcode_return_put("bucket", b.name());
+  lmcode_return_put("backups", b2.name());
+  lmcode_return_put("run_id", gcp.run_id());
+  lmcode_return_put("ledger", gcp.ledger_count());
+  lmcode_return_put("error", gcp.last_error());
+end _lmcode_
+command = gcp_native_command(o);
+created = sim_run(orphan, command).result;
+run_id = created.run_id;
+assert(created.error == "" && created.ledger == 2, "the orphan program must leave two ledger-owned resources behind: " + created.error);
+
+look = _lmcode_ cli="lmgcp";
+  lmcode_return_put("found", gcp.find_prefix("lmgcp-sim-orphan-" + ${o.run}).join(" | "));
+  lmcode_return_put("bucket_exists", gcp.storage_list_buckets().contains(${bucket}));
+  lmcode_return_put("backups_exists", gcp.storage_list_buckets().contains(${backups}));
+end _lmcode_
+before = sim_run(look, command).result;
+assert(before.bucket_exists && before.backups_exists, "the orphans must survive the first host process");
+
+dry = system([o.host, "--sweep", "--run-id", run_id, "--older-than-hours", "0"]);
+assert(dry.code == 0, "sweep dry run failed: " + dry.stdout + dry.stderr);
+wet = system([o.host, "--sweep", "--run-id", run_id, "--older-than-hours", "0", "--delete"]);
+assert(wet.code == 0 && contains(wet.stdout, "deleted 2 resource(s)"), "the sweep must delete both resources: " + wet.stdout + wet.stderr);
+again = system([o.host, "--sweep", "--run-id", run_id, "--older-than-hours", "0", "--delete"]);
+assert(again.code == 0 && contains(again.stdout, "deleted 0 resource(s)"), "a second sweep must be idempotent: " + again.stdout + again.stderr);
+after = sim_run(look, command).result;
+assert(!after.bucket_exists && !after.backups_exists, "both orphans must be gone after the sweep");
+println("orphans: " + created.bucket + " (with deploy.log), " + created.backups + " (run " + run_id + ")");
+println("discovered: " + before.found);
+println(trim(dry.stdout));
+println(trim(wet.stdout));
+sim_report(o, {target: o.target, host: "lmgcp --sweep", run_id: run_id, created: created, before: before, dry_run: dry.stdout, deleted: wet.stdout, after: after});
+sim_pass(o);
