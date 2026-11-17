@@ -6,3 +6,4 @@
 *.test
 *.out
 data/
+__pycache__/
