@@ -5,24 +5,24 @@
   "module_sum": "h1:WCYsVhdLwYJMFKZUEhTv7YM/HEjqMhQOrj2GMJOilro=",
   "files": {
     "sdk.lock": {
-      "upstream_sha256": "f9fc65f2b4132da0ca0264b0d4c9396ac4f14fa915b38513fd0deabc56d73e9c",
-      "sha256": "f9fc65f2b4132da0ca0264b0d4c9396ac4f14fa915b38513fd0deabc56d73e9c"
+      "upstream_sha256": "eeb8fd138af6e1f08285b21b44a1707bad7d612a8f517531b49c5f7445315328",
+      "sha256": "eeb8fd138af6e1f08285b21b44a1707bad7d612a8f517531b49c5f7445315328"
     },
     "LICENSE": {
       "upstream_sha256": "e25615ca259eca3930ca632e9c5b959692b164b31c4e66ba453b8aa8e81705d7",
       "sha256": "e25615ca259eca3930ca632e9c5b959692b164b31c4e66ba453b8aa8e81705d7"
     },
     "go.sum": {
-      "upstream_sha256": "d2ec5d711a745cd75c6ac5ec2d7552e961c19fbf6671e9d212bcb4cde9c55e41",
-      "sha256": "d2ec5d711a745cd75c6ac5ec2d7552e961c19fbf6671e9d212bcb4cde9c55e41"
+      "upstream_sha256": "e30a394c55acad9383c411e75934e4c84908c94f15b422db9f1a377c7bc00d38",
+      "sha256": "e30a394c55acad9383c411e75934e4c84908c94f15b422db9f1a377c7bc00d38"
     },
     "PATCHES.md": {
       "upstream_sha256": null,
       "sha256": "e2696e5a7f543343988e6ec61396b632b95fafff5524a3e3f382b97cffdb09d5"
     },
     "go.mod": {
-      "upstream_sha256": "e75fb2ea0695125382699e1e129ac054ffba06b20da21263391b071dac8b92fe",
-      "sha256": "e75fb2ea0695125382699e1e129ac054ffba06b20da21263391b071dac8b92fe"
+      "upstream_sha256": "87d864d5382300bc14e371817158a688718b5af14a8f53f63cc6da3f0786aa5e",
+      "sha256": "87d864d5382300bc14e371817158a688718b5af14a8f53f63cc6da3f0786aa5e"
     },
     "schema/lmcloud.dsl.json": {
       "upstream_sha256": "f1cd7471c042f13f4263054ff925638e20ac564626bc56ab3be1d2d1a7f5ca42",

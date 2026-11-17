@@ -24,17 +24,18 @@ end _lmcode_
 r = run_lmcode(p, {command:["probe","--lmcode","\$DSLFILE"]});
 LMS
 
-# A v6 compiler carries the v3 std catalog; template_render is the stable
-# marker that also proves implicit std is bundled (no external --std file).
+# A v6 compiler carries the v3 std catalog (226 signatures including rest_cli);
+# template_render and rest_cli prove implicit std v3 is bundled.
 if [ -z "$candidate" ] ||
    ! grep -q '^fn template_render(string, Json) -> string$' <<<"$signatures" ||
+   ! grep -q '^fn rest_cli(StrList) -> string$' <<<"$signatures" ||
    ! "$candidate" --lmcode-schema "$WORK_FOR_COMPILER/probe.schema.json" --json >/dev/null 2>&1
 then
   if [ -n "${LMGCP_DEBUG:-}" ]; then
     echo "--- compiler probe diagnostics (candidate=$candidate)" >&2
     grep -Fm3 'template_render' <<<"$signatures" >&2
   fi
-  echo "error: no implicit-std lmcode v6 compiler found; install @lmctl-ai/lmctl@0.2.453 so lmscript is on PATH, or set LMSCRIPT_BIN" >&2
+  echo "error: no implicit-std lmcode v6 compiler found; install @lmctl-ai/lmctl@0.2.482 so lmscript is on PATH, or set LMSCRIPT_BIN" >&2
   exit 2
 fi
 
@@ -43,7 +44,7 @@ if ! "$candidate" --check "$WORK_FOR_COMPILER/check.lms" >/dev/null 2>&1; then
   if [ -n "${LMGCP_DEBUG:-}" ]; then
     "$candidate" --check "$WORK_FOR_COMPILER/check.lms" 2>&1 | head -10 >&2
   fi
-  echo "error: compiler lacks the current load_schema/_lmcode_/run_lmcode API; install @lmctl-ai/lmctl@0.2.453 or newer" >&2
+  echo "error: compiler lacks the current load_schema/_lmcode_/run_lmcode API; install @lmctl-ai/lmctl@0.2.482 or newer" >&2
   exit 2
 fi
 printf '%s\n' "$candidate"

@@ -85,7 +85,7 @@ jobs:
       - name: lmscript compiler (npm @lmctl-ai/lmctl)
         if: env.ONLY_OK == 'true'
         run: |
-          npm i -g @lmctl-ai/lmctl@0.2.453
+          npm i -g @lmctl-ai/lmctl@0.2.482
           lmscript --version
 
       - name: python3 shim (windows)

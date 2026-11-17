@@ -6,7 +6,8 @@ require (
 	cloud.google.com/go/auth v0.23.0
 	cloud.google.com/go/compute/metadata v0.9.0
 	github.com/lmctl-ai/lmcloud v0.1.0
-	github.com/lmctl-ai/lmcode-go v0.6.39-0.20261102140952-06cd9ae991d9
+	github.com/lmctl-ai/lmcode-go v0.6.39-0.20261117023936-2027887521b3
+	golang.org/x/sys v0.49.0
 	google.golang.org/api v0.293.0
 )
 
@@ -28,7 +29,6 @@ require (
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260807164820-c8921c73eeea // indirect
 	google.golang.org/grpc v1.83.2 // indirect

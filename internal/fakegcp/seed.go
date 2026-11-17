@@ -287,9 +287,9 @@ func (s *Server) seedBaseline() {
 	s.topicStats["security-audit-stream"] = 52400
 
 	s.subscriptions["order-worker-sub"] = &pubsub.Subscription{
-		Name:               "projects/gcp-proj-masked/subscriptions/order-worker-sub",
-		Topic:              "projects/gcp-proj-masked/topics/order-events-v1",
-		AckDeadlineSeconds: 30,
+		Name:                "projects/gcp-proj-masked/subscriptions/order-worker-sub",
+		Topic:               "projects/gcp-proj-masked/topics/order-events-v1",
+		AckDeadlineSeconds:  30,
 		RetainAckedMessages: false,
 		DeadLetterPolicy: &pubsub.DeadLetterPolicy{
 			DeadLetterTopic:     "projects/gcp-proj-masked/topics/order-events-dlq",
@@ -309,11 +309,11 @@ func (s *Server) seedBaseline() {
 	addRun := func(region, name, image, ingress string, cpuMilli, memMB, minInst, maxInst, conc, revCount, stablePct, canaryPct int64, labels map[string]string) {
 		key := region + "/" + name
 		s.runServices[key] = &run.GoogleCloudRunV2Service{
-			Name:           fmt.Sprintf("projects/gcp-proj-masked/locations/%s/services/%s", region, name),
-			Uri:            fmt.Sprintf("https://%s-masked-%s.a.run.app", name, region),
-			Ingress:        ingress,
+			Name:                fmt.Sprintf("projects/gcp-proj-masked/locations/%s/services/%s", region, name),
+			Uri:                 fmt.Sprintf("https://%s-masked-%s.a.run.app", name, region),
+			Ingress:             ingress,
 			LatestReadyRevision: fmt.Sprintf("%s-rev-%03d", name, revCount),
-			Labels:         labels,
+			Labels:              labels,
 			Template: &run.GoogleCloudRunV2RevisionTemplate{
 				MaxInstanceRequestConcurrency: conc,
 				Scaling: &run.GoogleCloudRunV2RevisionScaling{
@@ -556,18 +556,18 @@ func (s *Server) seedBaseline() {
 	addGKE := func(loc, name, k8sVer, channel string, autopilot, priv, wi, netPol, binAuth bool, pools, nodes int64, labels map[string]string) {
 		key := loc + "/" + name
 		s.gkeClusters[key] = &container.Cluster{
-			Name:                  name,
-			Location:              loc,
-			Status:                "RUNNING",
-			CurrentMasterVersion:  k8sVer,
-			CurrentNodeCount:      nodes,
-			ResourceLabels:        labels,
-			ReleaseChannel:        &container.ReleaseChannel{Channel: channel},
-			Autopilot:             &container.Autopilot{Enabled: autopilot},
-			PrivateClusterConfig:  &container.PrivateClusterConfig{EnablePrivateNodes: priv},
+			Name:                   name,
+			Location:               loc,
+			Status:                 "RUNNING",
+			CurrentMasterVersion:   k8sVer,
+			CurrentNodeCount:       nodes,
+			ResourceLabels:         labels,
+			ReleaseChannel:         &container.ReleaseChannel{Channel: channel},
+			Autopilot:              &container.Autopilot{Enabled: autopilot},
+			PrivateClusterConfig:   &container.PrivateClusterConfig{EnablePrivateNodes: priv},
 			WorkloadIdentityConfig: &container.WorkloadIdentityConfig{WorkloadPool: "gcp-proj-masked.svc.id.goog"},
-			NetworkPolicy:         &container.NetworkPolicy{Enabled: netPol},
-			BinaryAuthorization:   &container.BinaryAuthorization{EvaluationMode: "PROJECT_SINGLETON_POLICY_ENFORCE"},
+			NetworkPolicy:          &container.NetworkPolicy{Enabled: netPol},
+			BinaryAuthorization:    &container.BinaryAuthorization{EvaluationMode: "PROJECT_SINGLETON_POLICY_ENFORCE"},
 		}
 		s.gkeMeta[key] = gkeMetaInfo{
 			Autopilot:        autopilot,
@@ -667,9 +667,9 @@ func (s *Server) seedBaseline() {
 
 	// 16. Cloud Monitoring Alert Policies & Time-Series
 	s.alertPolicies["high-api-p95-latency"] = &monitoring.AlertPolicy{
-		Name:        "projects/gcp-proj-masked/alertPolicies/high-api-p95-latency",
-		DisplayName: "high-api-p95-latency",
-		Enabled:     true,
+		Name:                 "projects/gcp-proj-masked/alertPolicies/high-api-p95-latency",
+		DisplayName:          "high-api-p95-latency",
+		Enabled:              true,
 		NotificationChannels: []string{"projects/gcp-proj-masked/notificationChannels/pagerduty-oncall", "projects/gcp-proj-masked/notificationChannels/slack-sre"},
 	}
 	s.alertMeta["high-api-p95-latency"] = alertMetaInfo{
@@ -678,9 +678,9 @@ func (s *Server) seedBaseline() {
 		DurationSec: 300,
 	}
 	s.alertPolicies["pubsub-dlq-non-zero"] = &monitoring.AlertPolicy{
-		Name:        "projects/gcp-proj-masked/alertPolicies/pubsub-dlq-non-zero",
-		DisplayName: "pubsub-dlq-non-zero",
-		Enabled:     true,
+		Name:                 "projects/gcp-proj-masked/alertPolicies/pubsub-dlq-non-zero",
+		DisplayName:          "pubsub-dlq-non-zero",
+		Enabled:              true,
 		NotificationChannels: []string{"projects/gcp-proj-masked/notificationChannels/slack-sre"},
 	}
 	s.alertMeta["pubsub-dlq-non-zero"] = alertMetaInfo{
@@ -689,9 +689,9 @@ func (s *Server) seedBaseline() {
 		DurationSec: 120,
 	}
 	s.alertPolicies["sql-cpu-saturation"] = &monitoring.AlertPolicy{
-		Name:        "projects/gcp-proj-masked/alertPolicies/sql-cpu-saturation",
-		DisplayName: "sql-cpu-saturation",
-		Enabled:     true,
+		Name:                 "projects/gcp-proj-masked/alertPolicies/sql-cpu-saturation",
+		DisplayName:          "sql-cpu-saturation",
+		Enabled:              true,
 		NotificationChannels: []string{"projects/gcp-proj-masked/notificationChannels/pagerduty-oncall"},
 	}
 	s.alertMeta["sql-cpu-saturation"] = alertMetaInfo{

@@ -9,9 +9,9 @@ import (
 
 func TestRedactSecrets(t *testing.T) {
 	samples := []struct {
-		in      string
-		forbid  string
-		expect  string
+		in     string
+		forbid string
+		expect string
 	}{
 		{
 			in:     "Bearer ya29.a0AfH6SMBx9SecretTokenValue12345",
