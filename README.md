@@ -1,5 +1,7 @@
 # lmgcp — Google Cloud Platform Scripting Host for `lmscript`
 
+Documentation: [Quick reference](https://www.lmctl.com/tools/lmgcp/) · [LLM skill](https://www.lmctl.com/tools/lmgcp/skill.html) · [Guide](https://www.lmctl.com/tools/lmgcp/guide.html) · [Reference](https://www.lmctl.com/tools/lmgcp/reference.html)
+
 ![GCP Resource Dependency Graph & Multi-VPC Topology](docs/images/08_vpc_resource_topology_graph.png)
 *Run this story: `lmctl https://raw.githubusercontent.com/lmctl-ai/lmgcp/main/examples/08_vpc_resource_topology_graph.lms` — Running this example costs about **$0.00** (read-only discovery; estimated from price table, not yet measured live; prices vary by region).*
 
